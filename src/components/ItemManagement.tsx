@@ -1011,9 +1011,9 @@ const ItemManagement = () => {
               <div>
                 <h3 className="font-manrope font-bold text-xl">Xác nhận Dữ liệu Upload</h3>
                 <p className="text-sm text-on-surface-variant font-medium">
-                  Hệ thống đã đọc được <span className="text-on-surface font-bold">{totalRows.toLocaleString('en-US')}</span> dòng. 
-                  Tìm thấy <span className="text-primary font-bold">{parsedItems.length.toLocaleString('en-US')}</span> vật tư hợp lệ.
-                  {missingCount > 0 && <span className="text-error ml-1">(Bỏ qua {missingCount.toLocaleString('en-US')} dòng thiếu Mã ERP hoặc Tên)</span>}
+                  Hệ thống đã đọc được <span className="text-on-surface font-bold">{totalRows.toLocaleString('en-US')}</span> dòng.
+                  Tìm thấy <span className="text-primary font-bold">{(parsedItems.length - missingCount).toLocaleString('en-US')}</span> vật tư hợp lệ.
+                  {missingCount > 0 && <span className="text-amber-600 ml-1 font-semibold">(⚠️ {missingCount.toLocaleString('en-US')} dòng thiếu Mã ERP hoặc Tên → đưa vào <strong>Tab Chờ xử lý</strong>)</span>}
                 </p>
               </div>
             </div>
@@ -1099,7 +1099,7 @@ const ItemManagement = () => {
               ) : (
                 <>
                   <span className="material-symbols-outlined">cloud_upload</span>
-                  Xác nhận Upload {parsedItems.length} vật tư
+                  Xác nhận Upload {parsedItems.length - missingCount} vật tư{missingCount > 0 ? ` + ${missingCount} chờ xử lý` : ''}
                 </>
               )}
             </button>

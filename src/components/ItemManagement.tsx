@@ -619,25 +619,9 @@ const ItemManagement = () => {
     setUploadProgress(0);
     
     try {
-      // Create inbound records using EXACT parsedItems
+      // Create inbound records only for items that actually reach inventory (not pending)
+      // Items going to pending will create inbound_records when approved individually or via bulk approve
       const allInboundRecords: any[] = [];
-
-      parsedItems.forEach(item => {
-         // Only create inbound records when there is an actual Order ID
-         // Opening stock (tồn đầu kỳ) should NOT create inbound records
-         if (item._temp_qty > 0 && item._temp_order_id) {
-            allInboundRecords.push({
-              order_id: item._temp_order_id,
-              erp_code: item.erp,
-              qty: item._temp_qty,
-              unit: item.unit,
-              location: item.pos,
-              status: 'Stocked',
-              date: item._temp_date || bulkImportDate,
-              time: new Date().toLocaleTimeString()
-            });
-         }
-      });
 
       // === CORE LOGIC: Preserve ALL items, route anomalies to pending ===
       // 1. Collect unique ERPs from valid (non-incomplete) items
@@ -712,6 +696,19 @@ const ItemManagement = () => {
               created_at:   item.created_at,
               is_incomplete: false,
             });
+            // Only create inbound record for items confirmed into inventory
+            if (item._temp_qty > 0 && item._temp_order_id) {
+              allInboundRecords.push({
+                order_id: item._temp_order_id,
+                erp_code: item.erp,
+                qty:      item._temp_qty,
+                unit:     item.unit,
+                location: item.pos,
+                status:   'Stocked',
+                date:     item._temp_date || bulkImportDate,
+                time:     new Date().toLocaleTimeString(),
+              });
+            }
           }
         }
       });
@@ -816,8 +813,15 @@ const ItemManagement = () => {
     setBulkPendingLoading(true);
     try {
       const CHUNK = 500;
-      // Upsert inventory
-      const inventoryPayload = validItems.map(p => ({
+      // Pre-fetch which ERPs already exist to avoid overwriting their start_stock
+      const allErps = validItems.map(p => p.erp.trim());
+      const existingErpSet = new Set<string>();
+      for (let i = 0; i < allErps.length; i += CHUNK) {
+        const { data: ex } = await supabase.from('inventory').select('erp').in('erp', allErps.slice(i, i + CHUNK));
+        if (ex) ex.forEach((r: any) => existingErpSet.add(r.erp));
+      }
+      // New ERPs: full insert with start_stock from pending row
+      const newItems = validItems.filter(p => !existingErpSet.has(p.erp.trim())).map(p => ({
         erp: p.erp.trim(), name: p.name, name_zh: p.name_zh || '',
         category: p.category || '', unit: p.unit || 'Cái (PCS)',
         spec: p.spec || '', pos: p.pos || '',
@@ -826,8 +830,19 @@ const ItemManagement = () => {
         in_qty: 0, out_qty: 0, is_incomplete: false,
         created_at: new Date().toISOString(),
       }));
-      for (let i = 0; i < inventoryPayload.length; i += CHUNK) {
-        await supabase.from('inventory').upsert(inventoryPayload.slice(i, i + CHUNK), { onConflict: 'erp' });
+      for (let i = 0; i < newItems.length; i += CHUNK) {
+        await supabase.from('inventory').insert(newItems.slice(i, i + CHUNK));
+      }
+      // Existing ERPs: update metadata only — start_stock/end_stock/in_qty/out_qty untouched
+      const existingItems = validItems.filter(p => existingErpSet.has(p.erp.trim()));
+      for (let i = 0; i < existingItems.length; i += CHUNK) {
+        for (const p of existingItems.slice(i, i + CHUNK)) {
+          await supabase.from('inventory').update({
+            name: p.name, name_zh: p.name_zh || '', category: p.category || '',
+            unit: p.unit || 'Cái (PCS)', spec: p.spec || '', pos: p.pos || '',
+            price: p.price || 0, critical: p.critical || false, is_incomplete: false,
+          }).eq('erp', p.erp.trim());
+        }
       }
       // Insert inbound records for items with order_id + qty
       const inboundRecords = validItems

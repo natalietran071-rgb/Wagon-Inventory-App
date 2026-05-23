@@ -894,7 +894,8 @@ const ItemManagement = () => {
                       <th className="px-4 py-3">Tên vật tư</th>
                       <th className="px-4 py-3 hidden md:table-cell">Quy Cách</th>
                       <th className="px-4 py-3 hidden lg:table-cell">Order ID</th>
-                      <th className="px-4 py-3 hidden lg:table-cell">SL</th>
+                      <th className="px-4 py-3 hidden lg:table-cell text-right">SL Nhập</th>
+                      <th className="px-4 py-3 hidden lg:table-cell text-right">Tồn Đầu</th>
                       <th className="px-4 py-3">Lý do</th>
                       <th className="px-4 py-3 text-right">Thao tác</th>
                     </tr>
@@ -906,7 +907,8 @@ const ItemManagement = () => {
                         <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>
                         <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>
                         <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.order_id || '—'}</td>
-                        <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.qty || 0}</td>
+                        <td className="px-4 py-3 hidden lg:table-cell text-right text-xs font-semibold">{p.qty > 0 ? p.qty.toLocaleString('en-US') : <span className="text-on-surface-variant/40">0</span>}</td>
+                        <td className="px-4 py-3 hidden lg:table-cell text-right text-xs font-semibold">{p.start_stock > 0 ? <span className="text-secondary">{Number(p.start_stock).toLocaleString('en-US')}</span> : <span className="text-on-surface-variant/40">0</span>}</td>
                         <td className="px-4 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-semibold">{getPendingReasonLabel(p.reason)}</span></td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1 justify-end">

@@ -56,6 +56,7 @@ const ItemManagement = () => {
   const [deletePendingConfirm, setDeletePendingConfirm] = useState<any | null>(null);
   const [deletingPending, setDeletingPending] = useState(false);
   const [pendingSearch, setPendingSearch] = useState('');
+  const [bulkPendingLoading, setBulkPendingLoading] = useState(false);
 
   const handleSelectRow = (erp: string) => {
     setSelectedRows(prev => prev.includes(erp) ? prev.filter(r => r !== erp) : [...prev, erp]);
@@ -802,6 +803,76 @@ const ItemManagement = () => {
     setUploadProgress(0);
   };
 
+  const bulkApproveAllPending = async () => {
+    const validItems = pendingItems.filter(p => p.erp?.trim() && p.name?.trim());
+    const invalidCount = pendingItems.length - validItems.length;
+    if (validItems.length === 0) {
+      alert('Không có item nào hợp lệ để xác nhận (cần có cả Mã ERP và Tên vật tư).');
+      return;
+    }
+    const confirmMsg = `Xác nhận đưa ${validItems.length} item vào hệ thống?` +
+      (invalidCount > 0 ? `\n(${invalidCount} item thiếu ERP/Tên sẽ giữ lại trong tab chờ)` : '');
+    if (!window.confirm(confirmMsg)) return;
+    setBulkPendingLoading(true);
+    try {
+      const CHUNK = 500;
+      // Upsert inventory
+      const inventoryPayload = validItems.map(p => ({
+        erp: p.erp.trim(), name: p.name, name_zh: p.name_zh || '',
+        category: p.category || '', unit: p.unit || 'Cái (PCS)',
+        spec: p.spec || '', pos: p.pos || '',
+        start_stock: p.start_stock || 0, end_stock: p.start_stock || 0,
+        price: p.price || 0, critical: p.critical || false,
+        in_qty: 0, out_qty: 0, is_incomplete: false,
+        created_at: new Date().toISOString(),
+      }));
+      for (let i = 0; i < inventoryPayload.length; i += CHUNK) {
+        await supabase.from('inventory').upsert(inventoryPayload.slice(i, i + CHUNK), { onConflict: 'erp' });
+      }
+      // Insert inbound records for items with order_id + qty
+      const inboundRecords = validItems
+        .filter(p => p.order_id && p.qty > 0)
+        .map(p => ({
+          order_id: p.order_id, erp_code: p.erp.trim(), qty: p.qty,
+          unit: p.unit, location: p.pos, status: 'Stocked',
+          date: p.date || new Date().toISOString().split('T')[0],
+          time: new Date().toLocaleTimeString(),
+        }));
+      for (let i = 0; i < inboundRecords.length; i += CHUNK) {
+        await supabase.from('inbound_records').insert(inboundRecords.slice(i, i + CHUNK));
+      }
+      // Delete approved items from pending
+      const validIds = validItems.map(p => p.id);
+      for (let i = 0; i < validIds.length; i += CHUNK) {
+        await supabase.from('inbound_upload_pending').delete().in('id', validIds.slice(i, i + CHUNK));
+      }
+      alert(`✅ Đã xác nhận ${validItems.length} item!${inboundRecords.length > 0 ? ` (${inboundRecords.length} phiếu nhập)` : ''}`);
+      fetchPendingInbound();
+      fetchItemsByDate();
+    } catch (err: any) {
+      alert('Lỗi: ' + err.message);
+    } finally {
+      setBulkPendingLoading(false);
+    }
+  };
+
+  const bulkDeleteAllPending = async () => {
+    if (!window.confirm(`Xóa TẤT CẢ ${pendingItems.length} item đang chờ xử lý?\nHành động này không thể hoàn tác.`)) return;
+    setBulkPendingLoading(true);
+    try {
+      const CHUNK = 500;
+      const ids = pendingItems.map(p => p.id);
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        await supabase.from('inbound_upload_pending').delete().in('id', ids.slice(i, i + CHUNK));
+      }
+      fetchPendingInbound();
+    } catch (err: any) {
+      alert('Lỗi: ' + err.message);
+    } finally {
+      setBulkPendingLoading(false);
+    }
+  };
+
 
   const filteredPendingItems = React.useMemo(() => {
     if (!pendingSearch.trim()) return pendingItems;
@@ -849,12 +920,34 @@ const ItemManagement = () => {
       {/* Pending tab */}
       {activeMainTab === 'pending' && (
         <div>
-          <div className="flex items-center gap-3 mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
-            <span className="material-symbols-outlined text-amber-500 text-2xl">warning</span>
-            <div>
-              <p className="text-sm font-bold text-on-surface">Dữ liệu cần xem xét trước khi nhập kho</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">Bao gồm: thiếu ERP/Tên, trùng mã ERP trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
+            <div className="flex items-start gap-3 flex-1">
+              <span className="material-symbols-outlined text-amber-500 text-2xl shrink-0">warning</span>
+              <div>
+                <p className="text-sm font-bold text-on-surface">Dữ liệu cần xem xét trước khi nhập kho</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">Bao gồm: thiếu ERP/Tên, trùng mã ERP trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
+              </div>
             </div>
+            {pendingItems.length > 0 && (
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={bulkApproveAllPending}
+                  disabled={bulkPendingLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-sm">check_circle</span>
+                  Xác nhận tất cả ({pendingItems.filter(p => p.erp?.trim() && p.name?.trim()).length})
+                </button>
+                <button
+                  onClick={bulkDeleteAllPending}
+                  disabled={bulkPendingLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-error/10 text-error rounded-xl text-xs font-bold hover:bg-error/20 transition-colors disabled:opacity-50 border border-error/20"
+                >
+                  <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                  Xóa tất cả ({pendingItems.length})
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between mb-3 px-1">

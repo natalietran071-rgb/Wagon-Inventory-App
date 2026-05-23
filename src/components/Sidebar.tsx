@@ -18,6 +18,7 @@ const Sidebar = ({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }
     { name: t('inbound'), icon: 'input', path: '/inbound' },
     { name: t('outbound'), icon: 'output', path: '/outbound' },
     { name: t('audit'), icon: 'fact_check', path: '/audit' },
+    { name: 'Master ERP', icon: 'database', path: '/master-erp' },
     { name: t('users'), icon: 'manage_accounts', path: '/users', roles: ['admin'] },
   ];
 

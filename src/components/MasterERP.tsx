@@ -28,6 +28,7 @@ const MasterERP = () => {
   const [missingName, setMissingName] = useState(0);
   const [missingSpec, setMissingSpec] = useState(0);
   const [page, setPage] = useState(0);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'no_name' | 'no_spec'>('all');
 
   // Upload state
   const [parsedRows, setParsedRows] = useState<any[]>([]);
@@ -35,6 +36,7 @@ const MasterERP = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [dupCount, setDupCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Edit state
@@ -61,7 +63,7 @@ const MasterERP = () => {
     setMissingSpec(noSpec || 0);
   }, []);
 
-  const fetchItems = useCallback(async (search = searchQuery, pg = page) => {
+  const fetchItems = useCallback(async (search = searchQuery, pg = page, filter = activeFilter) => {
     setLoading(true);
     try {
       let query = supabase
@@ -75,27 +77,34 @@ const MasterERP = () => {
           `erp.ilike.%${search}%,name.ilike.%${search}%,name_zh.ilike.%${search}%,spec.ilike.%${search}%`
         );
       }
+      if (filter === 'no_name') query = query.is('name', null);
+      if (filter === 'no_spec') query = query.is('spec', null);
 
       const { data, error, count } = await query;
       if (error) throw error;
       setItems(data || []);
-      if (!search.trim()) setTotalCount(count || 0);
-      else setTotalCount(count || 0);
+      setTotalCount(count || 0);
     } catch (err: any) {
       showToast('Lỗi tải dữ liệu: ' + err.message, true);
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, page]);
+  }, [searchQuery, page, activeFilter]);
 
-  useEffect(() => { fetchItems(); }, [page]);
+  useEffect(() => { fetchItems(searchQuery, page, activeFilter); }, [page, activeFilter]);
 
   useEffect(() => { fetchStats(); }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(0);
-    fetchItems(searchQuery, 0);
+    fetchItems(searchQuery, 0, activeFilter);
+  };
+
+  const setFilter = (f: 'all' | 'no_name' | 'no_spec') => {
+    setActiveFilter(f);
+    setPage(0);
+    setSearchQuery('');
   };
 
   // ── Parse uploaded Excel file ─────────────────────────────
@@ -142,7 +151,7 @@ const MasterERP = () => {
       const getCell = (row: any, col: string | undefined) =>
         col ? String(row[col] ?? '').trim() : '';
 
-      const rows = raw
+      const rawRows = raw
         .map(row => ({
           erp:     getCell(row, erpCol),
           name:    getCell(row, nameCol),
@@ -152,10 +161,17 @@ const MasterERP = () => {
         }))
         .filter(r => r.erp && r.erp !== '#N/A' && r.erp !== 'N/A');
 
+      // Deduplicate by erp — keep last occurrence (latest data wins)
+      const rows = Array.from(
+        new Map(rawRows.map(r => [r.erp, r])).values()
+      );
+
       if (rows.length === 0) {
         showToast('Không có dòng hợp lệ (cột Mã ERP trống hoặc #N/A)', true);
         return;
       }
+      const dups = rawRows.length - rows.length;
+      setDupCount(dups);
       setParsedRows(rows);
       setShowPreview(true);
     } catch (err: any) {
@@ -192,6 +208,7 @@ const MasterERP = () => {
       showToast(`Đã cập nhật ${parsedRows.length.toLocaleString()} mã ERP`);
       setShowPreview(false);
       setParsedRows([]);
+      setDupCount(0);
       setPage(0);
       await Promise.all([fetchItems(searchQuery, 0), fetchStats()]);
     } catch (err: any) {
@@ -314,20 +331,32 @@ const MasterERP = () => {
         )}
       </div>
 
-      {/* Stats */}
+      {/* Stats / Quick Filters */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-surface-container rounded-2xl p-5">
+        <button
+          onClick={() => setFilter('all')}
+          className={`rounded-2xl p-5 text-left transition-all border-2 ${activeFilter === 'all' ? 'border-primary bg-primary/10' : 'border-transparent bg-surface-container hover:bg-surface-container-high'}`}
+        >
           <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Tổng mã ERP</p>
-          <p className="text-3xl font-extrabold text-primary">{totalCount.toLocaleString()}</p>
-        </div>
-        <div className="bg-surface-container rounded-2xl p-5">
+          <p className="text-3xl font-extrabold text-primary">{activeFilter === 'all' ? totalCount.toLocaleString() : <span className="text-on-surface">{totalCount.toLocaleString()}</span>}</p>
+          {activeFilter === 'all' && <p className="text-xs text-primary/70 mt-1 font-semibold">← Đang xem tất cả</p>}
+        </button>
+        <button
+          onClick={() => setFilter('no_name')}
+          className={`rounded-2xl p-5 text-left transition-all border-2 ${activeFilter === 'no_name' ? 'border-error bg-error/10' : 'border-transparent bg-surface-container hover:bg-surface-container-high'}`}
+        >
           <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Thiếu tên VN</p>
           <p className="text-3xl font-extrabold text-error">{missingName.toLocaleString()}</p>
-        </div>
-        <div className="bg-surface-container rounded-2xl p-5">
+          <p className="text-xs text-error/60 mt-1 font-semibold">{activeFilter === 'no_name' ? '← Đang lọc' : 'Nhấn để lọc →'}</p>
+        </button>
+        <button
+          onClick={() => setFilter('no_spec')}
+          className={`rounded-2xl p-5 text-left transition-all border-2 ${activeFilter === 'no_spec' ? 'border-tertiary bg-tertiary/10' : 'border-transparent bg-surface-container hover:bg-surface-container-high'}`}
+        >
           <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Thiếu quy cách</p>
           <p className="text-3xl font-extrabold text-tertiary">{missingSpec.toLocaleString()}</p>
-        </div>
+          <p className="text-xs text-tertiary/60 mt-1 font-semibold">{activeFilter === 'no_spec' ? '← Đang lọc' : 'Nhấn để lọc →'}</p>
+        </button>
       </div>
 
       {/* Search */}
@@ -544,10 +573,15 @@ const MasterERP = () => {
               <div>
                 <h2 className="text-lg font-extrabold text-on-surface">Xác nhận upload Master ERP</h2>
                 <p className="text-sm text-on-surface-variant mt-0.5">
-                  <span className="font-bold text-primary">{parsedRows.length.toLocaleString()}</span> mã ERP — mã đã có sẽ được cập nhật, mã mới sẽ được thêm
+                  <span className="font-bold text-primary">{parsedRows.length.toLocaleString()}</span> mã ERP hợp lệ sẽ được upload
+                  {dupCount > 0 && (
+                    <span className="ml-2 text-xs text-amber-600 font-semibold">
+                      (đã bỏ {dupCount} dòng trùng Mã ERP trong file)
+                    </span>
+                  )}
                 </p>
               </div>
-              <button onClick={() => { setShowPreview(false); setParsedRows([]); }} disabled={uploading} className="p-2 rounded-xl hover:bg-surface-container transition-colors disabled:opacity-40">
+              <button onClick={() => { setShowPreview(false); setParsedRows([]); setDupCount(0); }} disabled={uploading} className="p-2 rounded-xl hover:bg-surface-container transition-colors disabled:opacity-40">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
@@ -596,7 +630,7 @@ const MasterERP = () => {
             )}
 
             <div className="p-6 border-t border-outline-variant/20 flex gap-3 justify-end">
-              <button onClick={() => { setShowPreview(false); setParsedRows([]); }} disabled={uploading} className="px-5 py-2.5 rounded-xl border border-outline-variant/40 font-bold text-sm disabled:opacity-50">
+              <button onClick={() => { setShowPreview(false); setParsedRows([]); setDupCount(0); }} disabled={uploading} className="px-5 py-2.5 rounded-xl border border-outline-variant/40 font-bold text-sm disabled:opacity-50">
                 Hủy
               </button>
               <button onClick={confirmUpload} disabled={uploading} className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm disabled:opacity-50 flex items-center gap-2">

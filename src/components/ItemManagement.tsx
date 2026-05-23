@@ -110,20 +110,24 @@ const ItemManagement = () => {
   const fetchItemsByDate = async () => {
     setLoading(true);
     try {
-      let query = supabase.from('inventory').select('*').order('created_at', { ascending: false });
-      
-      if (fromDate) {
-        query = query.gte('created_at', new Date(fromDate).toISOString());
+      const CHUNK = 1000;
+      let all: any[] = [];
+      let from = 0;
+      while (true) {
+        let query = supabase.from('inventory').select('*').order('created_at', { ascending: false }).range(from, from + CHUNK - 1);
+        if (fromDate) query = query.gte('created_at', new Date(fromDate).toISOString());
+        if (toDate) {
+          const endToDate = new Date(toDate);
+          endToDate.setHours(23, 59, 59, 999);
+          query = query.lte('created_at', endToDate.toISOString());
+        }
+        const { data } = await query;
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < CHUNK) break;
+        from += CHUNK;
       }
-      if (toDate) {
-        const endToDate = new Date(toDate);
-        endToDate.setHours(23, 59, 59, 999);
-        query = query.lte('created_at', endToDate.toISOString());
-      }
-
-      // Add a limit to avoid fetching too many records if no filters are applied
-      const { data } = await query.limit(500);
-      if (data) setDbItems(data);
+      setDbItems(all);
     } catch (err) {
       console.error('Error fetching items:', err);
     } finally {

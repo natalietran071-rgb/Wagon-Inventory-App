@@ -142,6 +142,46 @@ const MasterERP = () => {
     fetchItems(searchQuery, 0, activeFilter);
   };
 
+  const exportToExcel = async () => {
+    setLoading(true);
+    showToast('Đang xuất dữ liệu...');
+    try {
+      const XLSX = await import('xlsx');
+      const CHUNK = 3000;
+      let all: any[] = [];
+      let from = 0;
+      while (true) {
+        let q = supabase.from('master_erp').select('erp,name,name_zh,spec,unit,updated_at').order('erp', { ascending: true }).range(from, from + CHUNK - 1);
+        if (activeFilter === 'no_name') q = q.is('name', null);
+        else if (activeFilter === 'no_spec') q = q.is('spec', null);
+        if (searchQuery) q = q.or(`erp.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%,name_zh.ilike.%${searchQuery}%,spec.ilike.%${searchQuery}%`);
+        const { data } = await q;
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < CHUNK) break;
+        from += CHUNK;
+      }
+      const rows = all.map((r, i) => ({
+        'STT': i + 1,
+        'Mã ERP': r.erp,
+        'Tên Tiếng Việt': r.name || '',
+        'Tên Tiếng Trung': r.name_zh || '',
+        'Quy Cách': r.spec || '',
+        'Đơn Vị': r.unit || '',
+        'Cập Nhật': r.updated_at ? new Date(r.updated_at).toLocaleDateString('vi-VN') : '',
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Master ERP');
+      XLSX.writeFile(wb, `master_erp_${new Date().toISOString().split('T')[0]}.xlsx`);
+      showToast(`✅ Đã xuất ${rows.length.toLocaleString()} mã ERP`);
+    } catch (err: any) {
+      showToast('Lỗi xuất Excel: ' + err.message, true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const setFilter = (f: 'all' | 'no_name' | 'no_spec') => {
     setActiveFilter(f);
     setPage(0);
@@ -379,6 +419,9 @@ const MasterERP = () => {
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-error/40 text-sm font-bold text-error hover:bg-error/10 transition-colors"
             >
               <span className="material-symbols-outlined text-base">delete_sweep</span>Xóa tất cả
+            </button>
+            <button onClick={exportToExcel} disabled={loading} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/40 text-sm font-bold text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-50">
+              <span className="material-symbols-outlined text-base">file_download</span>Xuất Excel
             </button>
             <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/40 text-sm font-bold text-on-surface-variant hover:bg-surface-container transition-colors">
               <span className="material-symbols-outlined text-base">download</span>File mẫu

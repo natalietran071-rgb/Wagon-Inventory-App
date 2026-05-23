@@ -69,6 +69,8 @@ const Outbound = () => {
   const [pendingOutboundLoading, setPendingOutboundLoading] = useState(false);
   const [editingOutboundPending, setEditingOutboundPending] = useState<any | null>(null);
   const [pendingOutboundSearch, setPendingOutboundSearch] = useState('');
+  const [selectedOutboundPendingIds, setSelectedOutboundPendingIds] = useState<number[]>([]);
+  const [bulkOutboundPendingLoading, setBulkOutboundPendingLoading] = useState(false);
 
   const fetchPendingOutbound = async () => {
     setPendingOutboundLoading(true);
@@ -81,6 +83,68 @@ const Outbound = () => {
       setPendingOutboundCount(count || 0);
     } catch (err) { console.error(err); }
     finally { setPendingOutboundLoading(false); }
+  };
+
+  const bulkApproveSelectedOutbound = async () => {
+    const toApprove = pendingOutbound.filter(p => selectedOutboundPendingIds.includes(p.id) && p.erp_code?.trim() && parseInt(p.qty) > 0);
+    const skipped = selectedOutboundPendingIds.length - toApprove.length;
+    if (toApprove.length === 0) { showToast('Không có lệnh hợp lệ trong lựa chọn (cần ERP và số lượng > 0).', true); return; }
+    if (!safeConfirm(`Xác nhận tạo ${toApprove.length} lệnh xuất?${skipped > 0 ? `\n(${skipped} mục thiếu thông tin sẽ bỏ qua)` : ''}`)) return;
+    setBulkOutboundPendingLoading(true);
+    try {
+      const CHUNK = 200;
+      const records = toApprove.map(p => {
+        const erpTrim = p.erp_code.trim();
+        const qtyNum = parseInt(p.qty);
+        const outboundId = p.outbound_id || `OUT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const recipientName = p.recipient_name || p.partner || 'Nội bộ';
+        const partnerDisplay = [recipientName, p.dept_name].filter(Boolean).join(' / ');
+        const initials = recipientName.split(' ').map((n: string) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
+        return {
+          outbound_id: outboundId, erp_code: erpTrim, partner: partnerDisplay,
+          recipient_name: p.recipient_name || null, recipient_id: p.recipient_id || null,
+          dept_name: p.dept_name || null, dept_code: p.dept_code || null,
+          bpm_number: p.bpm_number || null, qty: qtyNum, initials,
+          status: 'Chờ xuất', status_color: 'bg-amber-100 text-amber-700', dot_color: 'bg-amber-500',
+          date: new Date().toISOString().split('T')[0],
+          required_date: p.required_date || new Date().toISOString().split('T')[0],
+        };
+      });
+      for (let i = 0; i < records.length; i += CHUNK) {
+        const { error } = await supabase.from('outbound_records').insert(records.slice(i, i + CHUNK));
+        if (error) { showToast('Lỗi: ' + error.message, true); return; }
+      }
+      const ids = toApprove.map(p => p.id);
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        await supabase.from('outbound_pending').delete().in('id', ids.slice(i, i + CHUNK));
+      }
+      setSelectedOutboundPendingIds([]);
+      showToast(`✅ Đã tạo ${toApprove.length} lệnh xuất kho!`);
+      fetchPendingOutbound();
+      loadOutboundRecords();
+    } catch (err: any) {
+      showToast('Lỗi: ' + err.message, true);
+    } finally {
+      setBulkOutboundPendingLoading(false);
+    }
+  };
+
+  const bulkDeleteSelectedOutbound = async () => {
+    if (selectedOutboundPendingIds.length === 0) return;
+    if (!safeConfirm(`Xóa ${selectedOutboundPendingIds.length} lệnh đã chọn khỏi tab chờ xử lý?`)) return;
+    setBulkOutboundPendingLoading(true);
+    try {
+      const CHUNK = 200;
+      for (let i = 0; i < selectedOutboundPendingIds.length; i += CHUNK) {
+        await supabase.from('outbound_pending').delete().in('id', selectedOutboundPendingIds.slice(i, i + CHUNK));
+      }
+      setSelectedOutboundPendingIds([]);
+      fetchPendingOutbound();
+    } catch (err: any) {
+      showToast('Lỗi: ' + err.message, true);
+    } finally {
+      setBulkOutboundPendingLoading(false);
+    }
   };
 
   const approvePendingOutbound = async (p: any) => {
@@ -506,11 +570,48 @@ const Outbound = () => {
       }
     }
 
-    if (validRows.length === 0) {
+    // Detect fully duplicate rows among valid rows — all of erp+recipient+dept+bpm+qty+date must match
+    // Same ERP but different date/recipient are NOT duplicates
+    const rowDupKeys = new Map<string, number>();
+    validRows.forEach(row => {
+      const key = [row.erpCode.trim(), (row.recipientName || '').trim(), (row.deptCode || '').trim(), (row.bpm || '').trim(), row.qty, row.requiredDate].join('|');
+      rowDupKeys.set(key, (rowDupKeys.get(key) || 0) + 1);
+    });
+    const dupValidRows = validRows.filter(row => {
+      const key = [row.erpCode.trim(), (row.recipientName || '').trim(), (row.deptCode || '').trim(), (row.bpm || '').trim(), row.qty, row.requiredDate].join('|');
+      return (rowDupKeys.get(key) || 0) > 1;
+    });
+    const uniqueValidRows = validRows.filter(row => {
+      const key = [row.erpCode.trim(), (row.recipientName || '').trim(), (row.deptCode || '').trim(), (row.bpm || '').trim(), row.qty, row.requiredDate].join('|');
+      return (rowDupKeys.get(key) || 0) === 1;
+    });
+
+    if (dupValidRows.length > 0) {
+      const dupPendingPayload = dupValidRows.map(row => ({
+        outbound_id:    row.outboundId || null,
+        erp_code:       row.erpCode.trim(),
+        partner:        [(row.recipientName || '').trim(), (row.deptName || '').trim()].filter(Boolean).join(' / ') || null,
+        recipient_name: (row.recipientName || '').trim() || null,
+        recipient_id:   (row.recipientId || '').trim() || null,
+        dept_name:      (row.deptName || '').trim() || null,
+        dept_code:      (row.deptCode || '').trim() || null,
+        bpm_number:     row.bpm || null,
+        qty:            row.qty || '0',
+        required_date:  row.requiredDate || null,
+        reason:         'Trùng hoàn toàn trong file',
+      }));
+      const { error: dpErr } = await supabase.from('outbound_pending').insert(dupPendingPayload);
+      if (!dpErr) {
+        setPendingOutboundCount(c => c + dupPendingPayload.length);
+        showToast(`⚠️ ${dupPendingPayload.length} dòng trùng hoàn toàn → tab Chờ xử lý`, true);
+      }
+    }
+
+    if (uniqueValidRows.length === 0) {
       return;
     }
 
-    const payload = validRows.map(row => {
+    const payload = uniqueValidRows.map(row => {
       const recipientName = (row.recipientName || row.partner || '').trim() || 'Nội bộ';
       const recipientId = (row.recipientId || '').trim();
       const deptName = (row.deptName || '').trim();
@@ -1568,6 +1669,25 @@ const Outbound = () => {
                   <span className="material-symbols-outlined text-amber-500">warning</span>
                   <p className="text-sm text-on-surface"><span className="font-bold">Lệnh xuất bị lỗi khi tạo hàng loạt</span> — sửa thông tin rồi bấm Xác nhận để tạo lệnh xuất chính thức.</p>
                 </div>
+
+                {selectedOutboundPendingIds.length > 0 && (
+                  <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-primary/5 border border-primary/20 rounded-xl">
+                    <span className="text-xs font-bold text-primary">Đã chọn {selectedOutboundPendingIds.length} lệnh</span>
+                    <div className="flex gap-2 ml-auto">
+                      <button onClick={bulkApproveSelectedOutbound} disabled={bulkOutboundPendingLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-50">
+                        <span className="material-symbols-outlined text-sm">check_circle</span>
+                        Xác nhận ({pendingOutbound.filter(p => selectedOutboundPendingIds.includes(p.id) && p.erp_code?.trim() && parseInt(p.qty) > 0).length})
+                      </button>
+                      <button onClick={bulkDeleteSelectedOutbound} disabled={bulkOutboundPendingLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-error/10 text-error rounded-lg text-xs font-bold hover:bg-error/20 transition-colors disabled:opacity-50 border border-error/20">
+                        <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                        Xóa ({selectedOutboundPendingIds.length})
+                      </button>
+                      <button onClick={() => setSelectedOutboundPendingIds([])} className="px-2 py-1.5 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors">Bỏ chọn</button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-3 px-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-on-surface-variant">Tổng SL cần xuất:</span>
@@ -1601,6 +1721,13 @@ const Outbound = () => {
                   <div className="overflow-x-auto rounded-xl border border-outline-variant/10">
                     <table className="w-full text-sm text-left">
                       <thead><tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest bg-surface-container">
+                        <th className="px-2 py-3 w-8">
+                          <input type="checkbox"
+                            className="rounded border-outline-variant/30 text-amber-500 w-3.5 h-3.5 focus:ring-amber-500/20"
+                            checked={filteredPendingOutbound.length > 0 && filteredPendingOutbound.every(p => selectedOutboundPendingIds.includes(p.id))}
+                            onChange={e => setSelectedOutboundPendingIds(e.target.checked ? filteredPendingOutbound.map(p => p.id) : [])}
+                          />
+                        </th>
                         <th className="px-3 py-3">Mã ERP</th>
                         <th className="px-3 py-3">SL</th>
                         <th className="px-3 py-3 hidden md:table-cell">Người nhận</th>
@@ -1610,7 +1737,14 @@ const Outbound = () => {
                       </tr></thead>
                       <tbody>
                         {filteredPendingOutbound.map(p => (
-                          <tr key={p.id} className="border-t border-outline-variant/10 hover:bg-amber-500/5">
+                          <tr key={p.id} className={`border-t border-outline-variant/10 hover:bg-amber-500/5 ${selectedOutboundPendingIds.includes(p.id) ? 'bg-amber-500/5' : ''}`}>
+                            <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                              <input type="checkbox"
+                                className="rounded border-outline-variant/30 text-amber-500 w-3.5 h-3.5 focus:ring-amber-500/20"
+                                checked={selectedOutboundPendingIds.includes(p.id)}
+                                onChange={() => setSelectedOutboundPendingIds(prev => prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id])}
+                              />
+                            </td>
                             {editingOutboundPending?.id === p.id ? (
                               <>
                                 <td className="px-2 py-2"><input value={editingOutboundPending.erp_code} onChange={e => setEditingOutboundPending((x: any) => ({...x, erp_code: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded text-xs font-mono border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
@@ -1637,6 +1771,7 @@ const Outbound = () => {
                                   <div className="flex gap-1 justify-end">
                                     <button onClick={() => setEditingOutboundPending({...p})} className="p-1.5 rounded hover:bg-primary/10 text-outline-variant hover:text-primary transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
                                     <button onClick={() => approvePendingOutbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
+                                    <button onClick={async () => { if (safeConfirm('Xóa lệnh này khỏi tab chờ xử lý?')) { await supabase.from('outbound_pending').delete().eq('id', p.id); fetchPendingOutbound(); } }} className="p-1.5 rounded hover:bg-error/10 text-outline-variant hover:text-error transition-colors" title="Xóa"><span className="material-symbols-outlined text-base">delete</span></button>
                                   </div>
                                 </td>
                               </>

@@ -128,7 +128,7 @@ const Inventory = () => {
         } else if (filterProblem === 'critical') {
           query = query.eq('critical', true);
         } else if (filterProblem === 'duplicate') {
-          // Fetch all ERPs and find duplicates client-side
+          // Fetch all inventory items and find duplicate ERPs with different names
           const PAGE = 1000;
           let allData: any[] = [];
           let pg = 0;
@@ -137,9 +137,15 @@ const Inventory = () => {
             const { data: chunk } = await supabase.from('inventory').select('*').order('erp').range(pg * PAGE, (pg + 1) * PAGE - 1);
             if (chunk && chunk.length > 0) { allData = allData.concat(chunk); hasMore = chunk.length === PAGE; pg++; } else { hasMore = false; }
           }
-          const erpCount: Record<string, number> = {};
-          allData.forEach((item: any) => { erpCount[item.erp] = (erpCount[item.erp] || 0) + 1; });
-          const dupSet = new Set(Object.keys(erpCount).filter(k => erpCount[k] > 1));
+          // Group by ERP, normalize name by collapsing whitespace
+          const erpNameMap: Record<string, Set<string>> = {};
+          allData.forEach((item: any) => {
+            const normalizedName = (item.name || '').replace(/\s+/g, ' ').trim();
+            if (!erpNameMap[item.erp]) erpNameMap[item.erp] = new Set();
+            erpNameMap[item.erp].add(normalizedName);
+          });
+          // Duplicate = same ERP but more than 1 distinct name
+          const dupSet = new Set(Object.keys(erpNameMap).filter(erp => erpNameMap[erp].size > 1));
           const filtered = allData.filter((item: any) => dupSet.has(item.erp)).sort((a: any, b: any) => a.erp.localeCompare(b.erp));
           setItems(filtered);
           setTotalFilteredCount(filtered.length);
@@ -518,11 +524,16 @@ const Inventory = () => {
           }
         }
 
-        // Duplicate filter is client-side only
+        // Duplicate filter is client-side only — same ERP with different names
         if (filterProblem === 'duplicate') {
-          const erpCount: Record<string, number> = {};
-          allData.forEach(item => { erpCount[item.erp] = (erpCount[item.erp] || 0) + 1; });
-          allData = allData.filter(item => erpCount[item.erp] > 1);
+          const erpNameMap: Record<string, Set<string>> = {};
+          allData.forEach(item => {
+            const norm = (item.name || '').replace(/\s+/g, ' ').trim();
+            if (!erpNameMap[item.erp]) erpNameMap[item.erp] = new Set();
+            erpNameMap[item.erp].add(norm);
+          });
+          const dupSet = new Set(Object.keys(erpNameMap).filter(erp => erpNameMap[erp].size > 1));
+          allData = allData.filter(item => dupSet.has(item.erp));
         }
 
         // Aggregate in/out from records tables (same source as dashboard)

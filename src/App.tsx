@@ -10,6 +10,7 @@ import Outbound from './components/Outbound';
 import Audit from './components/Audit';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
+import MasterERP from './components/MasterERP';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, loading, error } = useAuth();
@@ -62,6 +63,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       case '/audit': return 'Kiểm Kê';
       case '/new-item': return 'Thêm Mới';
       case '/users': return 'Người dùng';
+      case '/master-erp': return 'Master ERP';
       default: return 'Wagon Inventory Hub';
     }
   };
@@ -121,6 +123,7 @@ function App() {
                     <Route path="/outbound" element={<Outbound />} />
                     <Route path="/audit" element={<Audit />} />
                     <Route path="/users" element={<UserManagement />} />
+                    <Route path="/master-erp" element={<MasterERP />} />
                   </Routes>
                 </Layout>
               </PrivateRoute>

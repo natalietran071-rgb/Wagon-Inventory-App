@@ -59,6 +59,7 @@ const Inventory = () => {
   const [stats, setStats] = useState({
     tong_sku: 0,
     sku_co_nhap: 0,
+    tong_ton_dau: 0,
     tong_nhap: 0,
     tong_xuat: 0,
     tong_ton: 0
@@ -831,22 +832,26 @@ const Inventory = () => {
                 </div>
                 {(reportFromDate || reportToDate) && <span className="text-[9px] md:text-[10px] font-black tracking-widest text-primary px-2 py-0.5 bg-primary/10 rounded-full">Kỳ Báo Cáo</span>}
             </div>
-            <div className="grid grid-cols-2 md:flex md:justify-between items-center px-4 md:px-6 py-4 md:py-6 gap-y-4 md:gap-y-6 h-full z-10 relative text-center md:text-left">
-                <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-6">
-                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">category</span> SKU CO NHAP</p>
-                   <h3 className="text-xl lg:text-3xl font-extrabold text-on-surface data-value">{(stats.sku_co_nhap || 0).toLocaleString()}</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 items-center px-4 md:px-6 py-4 md:py-6 gap-y-4 md:gap-y-0 h-full z-10 relative text-center md:text-left">
+                <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-4">
+                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">category</span> SKU CÓ NHẬP</p>
+                   <h3 className="text-xl lg:text-2xl font-extrabold text-on-surface data-value">{(stats.sku_co_nhap || 0).toLocaleString()}</h3>
                 </div>
-                <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-6 border-l md:border-l-0">
+                <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-4 border-l md:border-l-0">
+                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">warehouse</span> TỒN ĐẦU KỲ</p>
+                   <h3 className="text-xl lg:text-2xl font-extrabold text-on-surface data-value">{Number(stats.tong_ton_dau || 0).toLocaleString()}</h3>
+                </div>
+                <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-4 border-t md:border-t-0">
                    <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">login</span> TỔNG NHẬP</p>
-                   <h3 className="text-xl lg:text-3xl font-extrabold text-on-surface data-value">{(stats.tong_nhap || 0).toLocaleString()}</h3>
+                   <h3 className="text-xl lg:text-2xl font-extrabold text-on-surface data-value">{(stats.tong_nhap || 0).toLocaleString()}</h3>
                 </div>
-                <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-6 border-t md:border-t-0">
+                <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-4 border-t md:border-t-0 border-l md:border-l-0">
                    <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">logout</span> TỔNG XUẤT</p>
-                   <h3 className="text-xl lg:text-3xl font-extrabold text-on-surface data-value">{(stats.tong_xuat || 0).toLocaleString()}</h3>
+                   <h3 className="text-xl lg:text-2xl font-extrabold text-on-surface data-value">{(stats.tong_xuat || 0).toLocaleString()}</h3>
                 </div>
-                <div className="flex-1 px-2 lg:px-6 border-l md:border-l-0 border-t md:border-t-0">
+                <div className="flex-1 px-2 lg:px-4 border-t md:border-t-0">
                    <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">inventory</span> TỒN KHO</p>
-                   <h3 className="text-xl lg:text-3xl font-extrabold text-primary data-value">{Number(stats.tong_ton || 0).toLocaleString()}</h3>
+                   <h3 className="text-xl lg:text-2xl font-extrabold text-primary data-value">{Number(stats.tong_ton || 0).toLocaleString()}</h3>
                 </div>
             </div>
             <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-[0.02] md:opacity-[0.03] group-hover:opacity-5 transition-opacity pointer-events-none">

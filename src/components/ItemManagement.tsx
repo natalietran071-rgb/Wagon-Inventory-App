@@ -522,43 +522,20 @@ const ItemManagement = () => {
         }
       }
 
-      // 2. Handle duplicate ERPs: if same ERP appears multiple times in parsedItems,
-      //    make each one unique by appending a suffix, UNLESS they are true duplicates (same name)
-      const erpOccurrences: Record<string, { count: number; names: Set<string> }> = {};
-      parsedItems.forEach(item => {
-        if (!erpOccurrences[item.erp]) {
-          erpOccurrences[item.erp] = { count: 0, names: new Set() };
-        }
-        erpOccurrences[item.erp].count++;
-        erpOccurrences[item.erp].names.add(item.name || '');
-      });
+      // === CORE LOGIC: Upsert all items with original ERP codes ===
+      // Duplicate ERPs in the file → upsert updates the same record (last row wins)
+      // Do NOT modify ERP codes with suffixes
 
-      // 3. Build inventory items — keep ALL rows
+      // 1. Build inventory items with original ERP codes
       const inventoryItems: any[] = [];
-      const erpCounter: Record<string, number> = {};
 
       parsedItems.forEach(item => {
-        const occ = erpOccurrences[item.erp];
         let finalErp = item.erp;
-
-        if (occ && occ.count > 1) {
-          // This ERP appears multiple times in the file
-          if (!erpCounter[item.erp]) erpCounter[item.erp] = 0;
-          erpCounter[item.erp]++;
-
-          if (erpCounter[item.erp] > 1) {
-            // 2nd, 3rd... occurrence → append suffix to make unique
-            finalErp = `${item.erp}_DUP${erpCounter[item.erp]}`;
-          }
-          // 1st occurrence keeps original ERP
-        }
 
         // Items without ERP get a temp code
         if (!finalErp || finalErp === '0' || finalErp === '#N/A' || finalErp === 'N/A') {
           finalErp = `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         }
-
-        const isExisting = existingMap.has(finalErp);
 
         inventoryItems.push({
           erp: finalErp,

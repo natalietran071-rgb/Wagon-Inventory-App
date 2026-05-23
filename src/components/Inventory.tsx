@@ -524,6 +524,17 @@ const Inventory = () => {
           allData.forEach(item => { erpCount[item.erp] = (erpCount[item.erp] || 0) + 1; });
           allData = allData.filter(item => erpCount[item.erp] > 1);
         }
+
+        // Aggregate in/out from records tables (same source as dashboard)
+        const [inboundAgg, outboundAgg] = await Promise.all([
+          supabase.from('inbound_records').select('erp_code, qty'),
+          supabase.from('outbound_records').select('erp_code, qty').eq('status', 'Đã Xuất')
+        ]);
+        const inMap = new Map<string, number>();
+        (inboundAgg.data || []).forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
+        const outMap = new Map<string, number>();
+        (outboundAgg.data || []).forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
+        allData = allData.map(item => ({ ...item, _in_agg: inMap.get(item.erp) || 0, _out_agg: outMap.get(item.erp) || 0 }));
       }
 
       const exportData = allData.map((item: any, idx: number) => ({
@@ -537,8 +548,8 @@ const Inventory = () => {
         'Tồn tối thiểu': item.min_stock !== null ? item.min_stock : '',
         'Critical': item.critical ? 'Có' : 'Không',
         'Tồn đầu kỳ': item.start_stock || 0,
-        'Nhập trong kỳ': item.in_period !== undefined ? (item.in_period || 0) : (item.in_qty || 0),
-        'Xuất trong kỳ': item.out_period !== undefined ? (item.out_period || 0) : (item.out_qty || 0),
+        'Nhập trong kỳ': item.in_period !== undefined ? (item.in_period || 0) : (item._in_agg ?? item.in_qty ?? 0),
+        'Xuất trong kỳ': item.out_period !== undefined ? (item.out_period || 0) : (item._out_agg ?? item.out_qty ?? 0),
         'Tồn cuối kỳ': item.end_stock || 0
       }));
 

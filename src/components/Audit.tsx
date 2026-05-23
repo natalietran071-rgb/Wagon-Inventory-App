@@ -53,6 +53,7 @@ const Audit = () => {
   const [draftSearchQuery, setDraftSearchQuery] = useState('');
   const [searchErp, setSearchErp] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [pendingSearch, setPendingSearch] = useState('');
   const [movementSearchRange, setMovementSearchRange] = useState({ 
     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0]
@@ -738,6 +739,17 @@ const Audit = () => {
     }
   };
 
+  const filteredPendingRecords = useMemo(() => {
+    if (!pendingSearch.trim()) return pendingRecords;
+    const q = pendingSearch.toLowerCase();
+    return pendingRecords.filter(r =>
+      (r.erp_code && r.erp_code.toLowerCase().includes(q)) ||
+      (r.name && r.name.toLowerCase().includes(q)) ||
+      (r.location && r.location.toLowerCase().includes(q)) ||
+      (r.auditor && r.auditor.toLowerCase().includes(q))
+    );
+  }, [pendingRecords, pendingSearch]);
+
   const filteredInventoryItems = useMemo(() => {
     if (!searchQuery) return [];
     const q = searchQuery.toLowerCase();
@@ -1156,11 +1168,11 @@ const Audit = () => {
             </div>
           ) : (
             <div className="bg-surface-container-lowest rounded-3xl shadow-sm border border-outline-variant/10 overflow-hidden">
-               <div className="p-8 bg-surface-container-low/50 flex justify-between items-center border-b border-outline-variant/10">
-              <div className="flex items-center gap-4">
+               <div className="p-6 bg-surface-container-low/50 border-b border-outline-variant/10 space-y-4">
+              <div className="flex flex-wrap items-center gap-4">
                  <h4 className="text-sm font-black text-on-surface uppercase tracking-wider">Danh Sách Chờ Phê Duyệt</h4>
                  {isAdmin && (
-                   <button 
+                   <button
                       onClick={handleApproveAll}
                       className="bg-emerald-600 text-white px-6 py-2 rounded-2xl text-xs font-black shadow-xl shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
                    >
@@ -1175,6 +1187,15 @@ const Audit = () => {
                    </div>
                  )}
               </div>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base pointer-events-none">search</span>
+                <input
+                  value={pendingSearch}
+                  onChange={e => setPendingSearch(e.target.value)}
+                  placeholder="Tìm mã ERP, tên vật tư, vị trí, người kiểm..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+                />
+              </div>
            </div>
            <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -1185,7 +1206,7 @@ const Audit = () => {
                             type="checkbox" 
                             className="w-4 h-4 rounded text-primary focus:ring-primary outline-none cursor-pointer"
                             onChange={(e) => {
-                               if (e.target.checked) setSelectedRecords(pendingRecords.map(r => r.id));
+                               if (e.target.checked) setSelectedRecords(filteredPendingRecords.map(r => r.id));
                                else setSelectedRecords([]);
                             }}
                           />
@@ -1200,7 +1221,7 @@ const Audit = () => {
                     </tr>
                  </thead>
                  <tbody className="divide-y divide-outline-variant/10">
-                    {pendingRecords.map(item => (
+                    {filteredPendingRecords.map(item => (
                       <tr key={item.id} className="hover:bg-primary/5 transition-colors">
                         <td className="px-6 py-4">
                            <input 
@@ -1248,8 +1269,10 @@ const Audit = () => {
                         </td>
                       </tr>
                     ))}
-                    {pendingRecords.length === 0 && (
-                      <tr><td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant italic text-xs">Không có bản ghi nào đang chờ duyệt.</td></tr>
+                    {filteredPendingRecords.length === 0 && (
+                      <tr><td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant italic text-xs">
+                        {pendingSearch ? `Không tìm thấy kết quả cho "${pendingSearch}"` : 'Không có bản ghi nào đang chờ duyệt.'}
+                      </td></tr>
                     )}
                  </tbody>
               </table>

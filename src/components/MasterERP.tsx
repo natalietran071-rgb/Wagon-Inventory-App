@@ -142,7 +142,7 @@ const MasterERP = () => {
       const getCell = (row: any, col: string | undefined) =>
         col ? String(row[col] ?? '').trim() : '';
 
-      const rows = raw
+      const rawRows = raw
         .map(row => ({
           erp:     getCell(row, erpCol),
           name:    getCell(row, nameCol),
@@ -152,11 +152,18 @@ const MasterERP = () => {
         }))
         .filter(r => r.erp && r.erp !== '#N/A' && r.erp !== 'N/A');
 
+      // Deduplicate by erp — keep last occurrence (latest data wins)
+      const rows = Array.from(
+        new Map(rawRows.map(r => [r.erp, r])).values()
+      );
+
       if (rows.length === 0) {
         showToast('Không có dòng hợp lệ (cột Mã ERP trống hoặc #N/A)', true);
         return;
       }
+      const dupCount = rawRows.length - rows.length;
       setParsedRows(rows);
+      if (dupCount > 0) showToast(`Đã bỏ ${dupCount} dòng trùng Mã ERP trong file`);
       setShowPreview(true);
     } catch (err: any) {
       showToast('Lỗi đọc file: ' + err.message, true);

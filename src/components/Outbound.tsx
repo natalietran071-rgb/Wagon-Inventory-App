@@ -506,48 +506,11 @@ const Outbound = () => {
       }
     }
 
-    // Detect fully duplicate rows among valid rows — all of erp+recipient+dept+bpm+qty+date must match
-    // Rows with same ERP but different date/recipient are NOT duplicates
-    const rowDupKeys = new Map<string, number>();
-    validRows.forEach(row => {
-      const key = [row.erpCode.trim(), (row.recipientName || '').trim(), (row.deptCode || '').trim(), (row.bpm || '').trim(), row.qty, row.requiredDate].join('|');
-      rowDupKeys.set(key, (rowDupKeys.get(key) || 0) + 1);
-    });
-    const dupValidRows = validRows.filter(row => {
-      const key = [row.erpCode.trim(), (row.recipientName || '').trim(), (row.deptCode || '').trim(), (row.bpm || '').trim(), row.qty, row.requiredDate].join('|');
-      return (rowDupKeys.get(key) || 0) > 1;
-    });
-    const uniqueValidRows = validRows.filter(row => {
-      const key = [row.erpCode.trim(), (row.recipientName || '').trim(), (row.deptCode || '').trim(), (row.bpm || '').trim(), row.qty, row.requiredDate].join('|');
-      return (rowDupKeys.get(key) || 0) === 1;
-    });
-
-    if (dupValidRows.length > 0) {
-      const dupPendingPayload = dupValidRows.map(row => ({
-        outbound_id:    row.outboundId || null,
-        erp_code:       row.erpCode.trim(),
-        partner:        [(row.recipientName || '').trim(), (row.deptName || '').trim()].filter(Boolean).join(' / ') || null,
-        recipient_name: (row.recipientName || '').trim() || null,
-        recipient_id:   (row.recipientId || '').trim() || null,
-        dept_name:      (row.deptName || '').trim() || null,
-        dept_code:      (row.deptCode || '').trim() || null,
-        bpm_number:     row.bpm || null,
-        qty:            row.qty || '0',
-        required_date:  row.requiredDate || null,
-        reason:         'Trùng hoàn toàn trong file',
-      }));
-      const { error: dpErr } = await supabase.from('outbound_pending').insert(dupPendingPayload);
-      if (!dpErr) {
-        setPendingOutboundCount(c => c + dupPendingPayload.length);
-        showToast(`⚠️ ${dupPendingPayload.length} dòng trùng hoàn toàn → tab Chờ xử lý`, true);
-      }
-    }
-
-    if (uniqueValidRows.length === 0) {
+    if (validRows.length === 0) {
       return;
     }
 
-    const payload = uniqueValidRows.map(row => {
+    const payload = validRows.map(row => {
       const recipientName = (row.recipientName || row.partner || '').trim() || 'Nội bộ';
       const recipientId = (row.recipientId || '').trim();
       const deptName = (row.deptName || '').trim();

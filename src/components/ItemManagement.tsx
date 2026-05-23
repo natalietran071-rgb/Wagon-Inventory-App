@@ -26,6 +26,7 @@ const ItemManagement = () => {
   // Preview states
   const [parsedItems, setParsedItems] = useState<any[]>([]);
   const [missingCount, setMissingCount] = useState(0);
+  const [duplicateCount, setDuplicateCount] = useState(0);
   const [totalRows, setTotalRows] = useState(0);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -564,11 +565,28 @@ const ItemManagement = () => {
           is_incomplete,
           _temp_order_id: orderId,
           _temp_qty: startStock,
-          _temp_date: parsedDate
+          _temp_date: parsedDate,
+          _is_file_duplicate: false,
         };
       });
 
       setMissingCount(missing);
+
+      // Detect duplicate ERPs within the same file (among valid items)
+      const erpCounts = new Map<string, number>();
+      itemsToInsert.forEach(item => {
+        if (!item.is_incomplete) {
+          erpCounts.set(item.erp, (erpCounts.get(item.erp) || 0) + 1);
+        }
+      });
+      let fileDupCount = 0;
+      itemsToInsert.forEach(item => {
+        if (!item.is_incomplete && (erpCounts.get(item.erp) || 0) > 1) {
+          item._is_file_duplicate = true;
+          fileDupCount++;
+        }
+      });
+      setDuplicateCount(fileDupCount);
 
       if (itemsToInsert.length === 0) {
         alert(`Hệ thống đc được ${jsonData.length} dòng từ file Excel, nhưng KHÔNG CÓ dòng nào được parse.\nVui lòng kiểm tra lại định dạng file.`);
@@ -614,23 +632,24 @@ const ItemManagement = () => {
          }
       });
 
-      // === CORE LOGIC: Preserve ALL items, even duplicate ERPs ===
-      // 1. Fetch existing ERPs from inventory
+      // === CORE LOGIC: Preserve ALL items, route anomalies to pending ===
+      // 1. Collect unique ERPs from valid (non-incomplete) items
       const allErps = parsedItems.map(i => i.erp);
       const uniqueErps = Array.from(new Set(allErps));
-      let existingMap = new Map();
-      
-      // Fetch in chunks to avoid .in() limit
+
+      // 2. Fetch master_erp names for cross-reference (name mismatch check)
+      const masterErpNameMap = new Map<string, string>(); // erp -> master name
       const fetchChunk = 200;
       for (let i = 0; i < uniqueErps.length; i += fetchChunk) {
         const chunk = uniqueErps.slice(i, i + fetchChunk);
-        const { data: existingData } = await supabase.from('inventory').select('erp').in('erp', chunk);
-        if (existingData) {
-          existingData.forEach((item: any) => existingMap.set(item.erp, true));
+        const { data: masterData } = await supabase.from('master_erp').select('erp, name').in('erp', chunk);
+        if (masterData) {
+          masterData.forEach((m: any) => masterErpNameMap.set(m.erp, m.name));
         }
       }
 
-      // Route incomplete rows to pending, valid rows to inventory
+      // Route items: missing info → pending, file duplicate → pending,
+      // master name mismatch → pending, everything else → inventory
       const inventoryItems: any[] = [];
       const pendingToInsert: any[] = [];
 
@@ -638,41 +657,55 @@ const ItemManagement = () => {
         const hasErp  = item.erp && item.erp !== '0' && item.erp !== '#N/A' && item.erp !== 'N/A';
         const hasName = !!item.name?.trim();
 
+        const buildPendingRow = (reason: string) => ({
+          erp:         item.erp || '',
+          name:        item.name || '',
+          name_zh:     item.name_zh || '',
+          category:    item.category || '',
+          unit:        item.unit || 'Cái (PCS)',
+          spec:        item.spec || '',
+          pos:         item.pos || '',
+          start_stock: item.start_stock || 0,
+          price:       item.price || 0,
+          critical:    item.critical || false,
+          order_id:    item._temp_order_id || '',
+          qty:         item._temp_qty || 0,
+          date:        item._temp_date || '',
+          reason,
+        });
+
         if (!hasErp || !hasName) {
-          pendingToInsert.push({
-            erp:         item.erp || '',
-            name:        item.name || '',
-            name_zh:     item.name_zh || '',
-            category:    item.category || '',
-            unit:        item.unit || 'Cái (PCS)',
-            spec:        item.spec || '',
-            pos:         item.pos || '',
-            start_stock: item.start_stock || 0,
-            price:       item.price || 0,
-            critical:    item.critical || false,
-            order_id:    item._temp_order_id || '',
-            qty:         item._temp_qty || 0,
-            date:        item._temp_date || '',
-            reason:      !hasErp && !hasName ? 'missing_erp_and_name' : !hasErp ? 'missing_erp' : 'missing_name',
-          });
+          const reason = !hasErp && !hasName ? 'missing_erp_and_name' : !hasErp ? 'missing_erp' : 'missing_name';
+          pendingToInsert.push(buildPendingRow(reason));
+        } else if (item._is_file_duplicate) {
+          pendingToInsert.push(buildPendingRow('duplicate_erp_in_file'));
         } else {
-          inventoryItems.push({
-            erp:          item.erp,
-            name:         item.name,
-            name_zh:      item.name_zh,
-            category:     item.category,
-            unit:         item.unit,
-            spec:         item.spec,
-            pos:          item.pos,
-            price:        item.price,
-            critical:     item.critical,
-            start_stock:  item.start_stock || 0,
-            end_stock:    item.end_stock || 0,
-            in_qty:       0,
-            out_qty:      0,
-            created_at:   item.created_at,
-            is_incomplete: false,
-          });
+          // Cross-check against master_erp — if ERP exists with a different name, route to pending
+          const masterName = masterErpNameMap.get(item.erp);
+          const nameMismatch = masterName !== undefined &&
+            masterName.trim().toLowerCase() !== item.name.trim().toLowerCase();
+          if (nameMismatch) {
+            // Store master name in reason so user can see it in the pending modal
+            pendingToInsert.push(buildPendingRow(`name_mismatch_with_master|${masterName}`));
+          } else {
+            inventoryItems.push({
+              erp:          item.erp,
+              name:         item.name,
+              name_zh:      item.name_zh,
+              category:     item.category,
+              unit:         item.unit,
+              spec:         item.spec,
+              pos:          item.pos,
+              price:        item.price,
+              critical:     item.critical,
+              start_stock:  item.start_stock || 0,
+              end_stock:    item.end_stock || 0,
+              in_qty:       0,
+              out_qty:      0,
+              created_at:   item.created_at,
+              is_incomplete: false,
+            });
+          }
         }
       });
 
@@ -742,7 +775,7 @@ const ItemManagement = () => {
 
       setUploadProgress(100);
 
-      const pendingMsg = pendingInserted > 0 ? `\n⚠️ ${pendingInserted} dòng thiếu ERP/Tên → chuyển vào tab Chờ xử lý` : '';
+      const pendingMsg = pendingInserted > 0 ? `\n⚠️ ${pendingInserted} dòng bất thường (thiếu ERP/Tên, trùng mã, tên khác Master) → chuyển vào tab Chờ xử lý` : '';
       if (errorCount > 0) {
         alert(`Tải lên hoàn tất nhưng có lỗi.\n\nThành công: ${successCount} item\nLỗi: ${errorCount} item${pendingMsg}`);
       } else {
@@ -768,6 +801,17 @@ const ItemManagement = () => {
     missing_erp: 'Thiếu Mã ERP',
     missing_name: 'Thiếu Tên vật tư',
     missing_erp_and_name: 'Thiếu ERP & Tên',
+    duplicate_erp_in_file: 'Trùng ERP trong file',
+    name_mismatch_with_master: 'Tên khác Master ERP',
+  };
+
+  const getPendingReasonLabel = (reason: string) => {
+    if (!reason) return '';
+    if (reason.startsWith('name_mismatch_with_master')) {
+      const masterName = reason.split('|')[1];
+      return masterName ? `Tên khác Master: "${masterName}"` : 'Tên khác Master ERP';
+    }
+    return PENDING_REASON[reason] || reason;
   };
 
   return (
@@ -791,8 +835,8 @@ const ItemManagement = () => {
           <div className="flex items-center gap-3 mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
             <span className="material-symbols-outlined text-amber-500 text-2xl">warning</span>
             <div>
-              <p className="text-sm font-bold text-on-surface">Dòng thiếu Mã ERP hoặc Tên vật tư khi upload</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
+              <p className="text-sm font-bold text-on-surface">Dữ liệu cần xem xét trước khi nhập kho</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Bao gồm: thiếu ERP/Tên, trùng mã ERP trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
             </div>
           </div>
           {pendingLoading ? (
@@ -825,7 +869,7 @@ const ItemManagement = () => {
                         <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>
                         <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.order_id || '—'}</td>
                         <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.qty || 0}</td>
-                        <td className="px-4 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-semibold">{PENDING_REASON[p.reason] || p.reason}</span></td>
+                        <td className="px-4 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-semibold">{getPendingReasonLabel(p.reason)}</span></td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1 justify-end">
                             <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
@@ -1048,8 +1092,9 @@ const ItemManagement = () => {
                 <h3 className="font-manrope font-bold text-xl">Xác nhận Dữ liệu Upload</h3>
                 <p className="text-sm text-on-surface-variant font-medium">
                   Hệ thống đã đọc được <span className="text-on-surface font-bold">{totalRows.toLocaleString('en-US')}</span> dòng.
-                  Tìm thấy <span className="text-primary font-bold">{(parsedItems.length - missingCount).toLocaleString('en-US')}</span> vật tư hợp lệ.
-                  {missingCount > 0 && <span className="text-amber-600 ml-1 font-semibold">(⚠️ {missingCount.toLocaleString('en-US')} dòng thiếu Mã ERP hoặc Tên → đưa vào <strong>Tab Chờ xử lý</strong>)</span>}
+                  Tìm thấy <span className="text-primary font-bold">{(parsedItems.length - missingCount - duplicateCount).toLocaleString('en-US')}</span> vật tư hợp lệ.
+                  {missingCount > 0 && <span className="text-amber-600 ml-1 font-semibold">(⚠️ {missingCount.toLocaleString('en-US')} dòng thiếu ERP/Tên → <strong>Tab Chờ xử lý</strong>)</span>}
+                  {duplicateCount > 0 && <span className="text-orange-600 ml-1 font-semibold">(⚠️ {duplicateCount.toLocaleString('en-US')} dòng trùng Mã ERP trong file → <strong>Tab Chờ xử lý</strong>)</span>}
                 </p>
               </div>
             </div>
@@ -1135,7 +1180,7 @@ const ItemManagement = () => {
               ) : (
                 <>
                   <span className="material-symbols-outlined">cloud_upload</span>
-                  Xác nhận Upload {parsedItems.length - missingCount} vật tư{missingCount > 0 ? ` + ${missingCount} chờ xử lý` : ''}
+                  Xác nhận Upload {parsedItems.length - missingCount - duplicateCount} vật tư{(missingCount + duplicateCount) > 0 ? ` + ${missingCount + duplicateCount} chờ xử lý` : ''}
                 </>
               )}
             </button>
@@ -1315,7 +1360,7 @@ const ItemManagement = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-on-surface text-lg">Chỉnh sửa mục chờ xử lý</h3>
-                  <p className="text-xs text-on-surface-variant mt-0.5"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full font-semibold">{PENDING_REASON[editingPending.reason] || editingPending.reason}</span></p>
+                  <p className="text-xs text-on-surface-variant mt-0.5"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full font-semibold">{getPendingReasonLabel(editingPending.reason)}</span></p>
                 </div>
               </div>
               <button onClick={() => { setShowPendingModal(false); setEditingPending(null); }} className="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-error-container hover:text-on-error-container transition-colors">

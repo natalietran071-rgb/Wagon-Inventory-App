@@ -366,6 +366,20 @@ const MasterERP = () => {
         </div>
         {canEdit && (
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={async () => {
+                if (!window.confirm(`Bạn có chắc chắn muốn XÓA TOÀN BỘ ${totalCount.toLocaleString()} mã ERP? Hành động này không thể hoàn tác!`)) return;
+                setLoading(true);
+                const { error } = await supabase.from('master_erp').delete().neq('erp', '___NEVER___');
+                setLoading(false);
+                if (error) { alert('Lỗi: ' + error.message); return; }
+                setItems([]); setTotalCount(0); setMissingName(0); setMissingSpec(0);
+                alert('Đã xóa toàn bộ Master ERP.');
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-error/40 text-sm font-bold text-error hover:bg-error/10 transition-colors"
+            >
+              <span className="material-symbols-outlined text-base">delete_sweep</span>Xóa tất cả
+            </button>
             <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/40 text-sm font-bold text-on-surface-variant hover:bg-surface-container transition-colors">
               <span className="material-symbols-outlined text-base">download</span>File mẫu
             </button>

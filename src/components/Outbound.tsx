@@ -128,6 +128,10 @@ const Outbound = () => {
   const createEmptyOutboundRow = () => ({
     outboundId: '',
     partner: '',
+    recipientName: '',
+    recipientId: '',
+    deptName: '',
+    deptCode: '',
     bpm: '',
     erpCode: '',
     qty: '',
@@ -138,7 +142,10 @@ const Outbound = () => {
 
   // Form state
   const [formData, setFormData] = useState({
-    partner: '',
+    recipientName: '',
+    recipientId: '',
+    deptName: '',
+    deptCode: '',
     erpCode: '',
     qty: '',
     requiredDate: new Date().toISOString().split('T')[0],
@@ -427,14 +434,22 @@ const Outbound = () => {
     }
 
     const payload = validRows.map(row => {
-      const partnerValue = row.partner.trim() || 'Nội bộ';
-      const initials = partnerValue.split(' ').map(n => n?.[0] || '').join('').toUpperCase().slice(0, 2);
+      const recipientName = (row.recipientName || row.partner || '').trim() || 'Nội bộ';
+      const recipientId = (row.recipientId || '').trim();
+      const deptName = (row.deptName || '').trim();
+      const deptCode = (row.deptCode || '').trim();
+      const partnerDisplay = [recipientName, deptName].filter(Boolean).join(' / ');
+      const initials = recipientName.split(' ').map((n: string) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
       const outboundId = row.outboundId.trim() || `OUT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
       const bpmValue = row.bpm?.trim();
       return {
         outbound_id: outboundId,
         erp_code: row.erpCode.trim(),
-        partner: partnerValue,
+        partner: partnerDisplay,
+        recipient_name: recipientName || null,
+        recipient_id: recipientId || null,
+        dept_name: deptName || null,
+        dept_code: deptCode || null,
         bpm_number: bpmValue === 'No BPM' ? 'No BPM' : (bpmValue || null),
         qty: Math.round(parseFloat(row.qty)),
         initials: initials,
@@ -485,22 +500,26 @@ const Outbound = () => {
     if (e) e.preventDefault();
     if (!canEdit) return;
 
-    if (!formData.partner.trim() || !formData.erpCode.trim() || !formData.qty) {
-      showToast('Vui lòng điền đầy đủ Người Nhận, Mã ERP và Số Lượng.', true);
+    if (!formData.recipientName.trim() || !formData.erpCode.trim() || !formData.qty) {
+      showToast('Vui lòng điền đầy đủ Tên Người Nhận, Mã ERP và Số Lượng.', true);
       return;
     }
-    
-    const requestedQty = Math.round(parseFloat(formData.qty));
 
+    const requestedQty = Math.round(parseFloat(formData.qty));
     const outboundId = `OUT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const initials = formData.partner.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    const partnerDisplay = [formData.recipientName, formData.deptName].filter(Boolean).join(' / ');
+    const initials = formData.recipientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
     const { error } = await supabase
       .from('outbound_records')
       .insert([{
         outbound_id: outboundId,
         erp_code: formData.erpCode,
-        partner: formData.partner,
+        partner: partnerDisplay,
+        recipient_name: formData.recipientName.trim() || null,
+        recipient_id: formData.recipientId.trim() || null,
+        dept_name: formData.deptName.trim() || null,
+        dept_code: formData.deptCode.trim() || null,
         bpm_number: formData.noBpm ? 'No BPM' : (formData.bpm.trim() || null),
         qty: requestedQty,
         initials: initials,
@@ -515,7 +534,7 @@ const Outbound = () => {
       console.error('Error saving outbound record:', error);
       showToast('Lỗi khi lưu phiếu xuất: ' + error.message, true);
     } else {
-      setFormData({ partner: '', erpCode: '', qty: '', requiredDate: new Date().toISOString().split('T')[0], bpm: '', noBpm: false });
+      setFormData({ recipientName: '', recipientId: '', deptName: '', deptCode: '', erpCode: '', qty: '', requiredDate: new Date().toISOString().split('T')[0], bpm: '', noBpm: false });
       await loadOutboundRecords();
       showToast('Tạo lệnh xuất kho thành công!');
       listRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -793,7 +812,10 @@ const Outbound = () => {
         const inv = inventoryMap.get(item.erp_code);
         return {
           'Mã Phiếu': item.outbound_id,
-          'Người Nhận / Bộ Phận': item.partner,
+          'Mã NV': item.recipient_id || '',
+          'Người Nhận': item.recipient_name || item.partner || '',
+          'Mã Bộ Phận': item.dept_code || '',
+          'Bộ Phận Nhận': item.dept_name || '',
           'Số BPM': item.bpm_number || '',
           'Mã ERP': item.erp_code,
           'Tên Vật Tư': inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : (item.item_name || ''),
@@ -1086,20 +1108,51 @@ const Outbound = () => {
             {activeTab === 'single' ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-5">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận / Bộ Phận</label>
+                  {/* Người Nhận */}
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
+                    <div className="grid grid-cols-2 gap-2">
                       <input
                         className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                        placeholder="Tên đơn vị hoặc cá nhân"
+                        placeholder="Mã nhân viên"
                         type="text"
-                        value={formData.partner}
-                        onChange={(e) => setFormData({ ...formData, partner: e.target.value })}
+                        value={formData.recipientId}
+                        onChange={(e) => setFormData({ ...formData, recipientId: e.target.value })}
+                      />
+                      <input
+                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        placeholder="Tên nhân viên *"
+                        type="text"
+                        value={formData.recipientName}
+                        onChange={(e) => setFormData({ ...formData, recipientName: e.target.value })}
                         required
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số BPM</label>
+                  </div>
+
+                  {/* Bộ Phận Nhận */}
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Bộ Phận Nhận</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        placeholder="Mã bộ phận"
+                        type="text"
+                        value={formData.deptCode}
+                        onChange={(e) => setFormData({ ...formData, deptCode: e.target.value })}
+                      />
+                      <input
+                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        placeholder="Tên bộ phận"
+                        type="text"
+                        value={formData.deptName}
+                        onChange={(e) => setFormData({ ...formData, deptName: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số BPM</label>
                       <input
                         className={`w-full border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm ${formData.noBpm ? 'bg-surface-container-low/40 text-on-surface-variant/50 cursor-not-allowed' : 'bg-surface-container-low'}`}
                         placeholder={formData.noBpm ? 'No BPM' : 'Nhập số BPM...'}
@@ -1117,7 +1170,6 @@ const Outbound = () => {
                         />
                         <span className="text-[11px] font-bold text-on-surface-variant">No BPM</span>
                       </label>
-                    </div>
                   </div>
                   <div>
                     <div className="flex justify-between items-center px-1">
@@ -1463,12 +1515,26 @@ const Outbound = () => {
                       </td>
                       <td className="px-1 py-3 md:px-4 md:py-6 align-middle hidden sm:table-cell">
                         <div className="flex items-center gap-3">
-                          <div className="w-6 h-6 md:w-8 md:h-8 rounded-lg bg-primary-container/20 flex items-center justify-center text-primary font-bold text-[10px] md:text-xs">
+                          <div className="w-6 h-6 md:w-8 md:h-8 rounded-lg bg-primary-container/20 flex items-center justify-center text-primary font-bold text-[10px] md:text-xs shrink-0">
                             {order.initials}
                           </div>
                           <div>
-                            <p className="font-medium text-on-surface text-xs md:text-sm">{order.partner}</p>
-                            <p className="text-[9px] md:text-[10px] text-on-surface-variant">{new Date(order.created_at).toLocaleString()}</p>
+                            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                              {order.recipient_name
+                                ? <>
+                                    <span className="font-medium text-on-surface text-xs md:text-sm">{order.recipient_name}</span>
+                                    {order.recipient_id && <span className="text-[9px] bg-surface-container-high px-1.5 py-0.5 rounded font-mono">{order.recipient_id}</span>}
+                                  </>
+                                : <span className="font-medium text-on-surface text-xs md:text-sm">{order.partner}</span>
+                              }
+                            </div>
+                            {(order.dept_name || order.dept_code) && (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {order.dept_code && <span className="text-[9px] bg-secondary/10 text-secondary px-1.5 py-0.5 rounded font-mono">{order.dept_code}</span>}
+                                {order.dept_name && <span className="text-[9px] text-on-surface-variant">{order.dept_name}</span>}
+                              </div>
+                            )}
+                            <p className="text-[9px] md:text-[10px] text-on-surface-variant mt-0.5">{new Date(order.created_at).toLocaleString()}</p>
                           </div>
                         </div>
                       </td>

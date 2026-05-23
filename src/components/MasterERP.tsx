@@ -84,24 +84,49 @@ const MasterERP = () => {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-      // Flexible column mapping
-      const colMap = (row: any, ...keys: string[]) => {
+      // Flexible column mapping with Unicode normalization + partial fallback
+      const norm = (s: string) => s.trim().toLowerCase().normalize('NFC');
+      const rowKeys = Object.keys(raw[0] || {});
+
+      const findCol = (keys: string[]): string | undefined => {
+        // 1. exact match (after normalize)
         for (const k of keys) {
-          const found = Object.keys(row).find(c => c.trim().toLowerCase() === k.toLowerCase());
-          if (found) return String(row[found] || '').trim();
+          const hit = rowKeys.find(c => norm(c) === norm(k));
+          if (hit) return hit;
         }
-        return '';
+        // 2. partial/contains match
+        for (const k of keys) {
+          const nk = norm(k);
+          const hit = rowKeys.find(c => norm(c).includes(nk) || nk.includes(norm(c)));
+          if (hit) return hit;
+        }
+        return undefined;
       };
+
+      const erpCol   = findCol(['Mã ERP', 'mã erp', 'ERP', 'erp', 'MÃ ERP', 'ma erp', 'Mã Hàng ERP', 'mã hàng erp']);
+      const nameCol  = findCol(['Tên Tiếng Việt', 'tên tiếng việt', 'Tên SP', 'tên sp', 'Tên Vật Tư', 'tên vật tư', 'Tên Hàng', 'tên hàng', 'name', 'tên', 'Tên']);
+      const zhCol    = findCol(['Tên Tiếng Trung', 'tên tiếng trung', 'name_zh', 'Tên Trung', 'tên trung', 'Tên TQ', 'tên tq']);
+      const specCol  = findCol(['Quy Cách', 'quy cách', 'QUY CÁCH', 'spec', 'Quy cách', 'Specifications']);
+      const unitCol  = findCol(['Đơn Tính', 'đơn tính', 'ĐVT', 'đvt', 'ĐƠN TÍNH', 'unit', 'đơn vị', 'Đơn vị', 'DVT']);
+
+      if (!erpCol) {
+        const found = rowKeys.slice(0, 8).join(', ');
+        showToast(`Không tìm thấy cột Mã ERP. Cột trong file: ${found}`, true);
+        return;
+      }
+
+      const getCell = (row: any, col: string | undefined) =>
+        col ? String(row[col] ?? '').trim() : '';
 
       const rows = raw
         .map(row => ({
-          erp: colMap(row, 'Mã ERP', 'ERP', 'erp', 'mã erp', 'MÃ ERP'),
-          name: colMap(row, 'Tên Tiếng Việt', 'Tên SP', 'name', 'tên', 'Tên'),
-          name_zh: colMap(row, 'Tên Tiếng Trung', 'name_zh', 'Tên Trung', 'tên trung'),
-          spec: colMap(row, 'Quy Cách', 'quy cách', 'spec', 'QUY CÁCH'),
-          unit: colMap(row, 'Đơn Tính', 'ĐVT', 'unit', 'đơn vị', 'đơn tính', 'ĐƠN TÍNH'),
+          erp:     getCell(row, erpCol),
+          name:    getCell(row, nameCol),
+          name_zh: getCell(row, zhCol),
+          spec:    getCell(row, specCol),
+          unit:    getCell(row, unitCol),
         }))
-        .filter(r => r.erp && r.erp !== '#N/A' && r.erp !== 'N/A');
+        .filter(r => r.erp && r.erp !== '#N/A' && r.erp !== 'N/A' && r.erp !== '');
 
       if (rows.length === 0) {
         showToast('Không tìm thấy dữ liệu hợp lệ trong file', true);

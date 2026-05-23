@@ -88,6 +88,42 @@ const Inventory = () => {
   const itemsPerPage = 50;
   const [filterProblem, setFilterProblem] = useState<'all' | 'negative' | 'missing' | 'critical' | 'duplicate'>('all');
 
+  // Pending tab
+  const [inventoryMainTab, setInventoryMainTab] = useState<'list' | 'pending'>('list');
+  const [incompleteItems, setIncompleteItems] = useState<any[]>([]);
+  const [incompleteCount, setIncompleteCount] = useState(0);
+  const [incompleteLoading, setIncompleteLoading] = useState(false);
+  const [editingIncomplete, setEditingIncomplete] = useState<any | null>(null);
+
+  const fetchIncompleteItems = async () => {
+    setIncompleteLoading(true);
+    try {
+      const { data, count } = await supabase
+        .from('inventory')
+        .select('*', { count: 'exact' })
+        .or('is_incomplete.eq.true,name.is.null,name.eq.')
+        .order('created_at', { ascending: false });
+      setIncompleteItems(data || []);
+      setIncompleteCount(count || 0);
+    } catch (err) { console.error(err); }
+    finally { setIncompleteLoading(false); }
+  };
+
+  useEffect(() => { if (inventoryMainTab === 'pending') fetchIncompleteItems(); }, [inventoryMainTab]);
+
+  const saveIncomplete = async (item: any) => {
+    if (!item.name?.trim()) { showToast('Cần nhập Tên vật tư.', true); return; }
+    const { error } = await supabase.from('inventory').update({
+      name: item.name, name_zh: item.name_zh, spec: item.spec,
+      category: item.category, unit: item.unit, pos: item.pos,
+      is_incomplete: false, updated_at: new Date().toISOString()
+    }).eq('erp', item.erp);
+    if (error) { showToast('Lỗi: ' + error.message, true); return; }
+    showToast(`Đã cập nhật ${item.erp}`);
+    setEditingIncomplete(null);
+    fetchIncompleteItems();
+  };
+
   const fetchInventory = async () => {
     try {
       let data: any[] = [];
@@ -928,7 +964,93 @@ const Inventory = () => {
         </div>
       </div>
 
-      <div className="technical-card">
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-surface-container rounded-2xl p-1 w-fit">
+        <button onClick={() => setInventoryMainTab('list')}
+          className={`px-5 py-2 rounded-xl text-sm font-bold transition-colors ${inventoryMainTab === 'list' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
+          Danh sách tồn kho
+        </button>
+        <button onClick={() => setInventoryMainTab('pending')}
+          className={`px-5 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 ${inventoryMainTab === 'pending' ? 'bg-amber-500 text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
+          Chờ xử lý
+          {incompleteCount > 0 && <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${inventoryMainTab === 'pending' ? 'bg-white/20' : 'bg-amber-500 text-white'}`}>{incompleteCount}</span>}
+        </button>
+      </div>
+
+      {/* Pending tab */}
+      {inventoryMainTab === 'pending' && (
+        <div>
+          <div className="flex items-center gap-3 mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
+            <span className="material-symbols-outlined text-amber-500 text-2xl">warning</span>
+            <div>
+              <p className="text-sm font-bold text-on-surface">Vật tư thiếu thông tin trong kho</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Bổ sung <strong className="text-amber-600">Tên vật tư</strong> và <strong className="text-amber-600">Quy cách</strong> rồi bấm <strong className="text-amber-600">Lưu</strong> để hoàn tất.</p>
+            </div>
+          </div>
+          {incompleteLoading ? (
+            <p className="text-center py-12 text-on-surface-variant/40">Đang tải...</p>
+          ) : incompleteItems.length === 0 ? (
+            <div className="text-center py-16 bg-surface-container-low rounded-2xl">
+              <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-2">check_circle</span>
+              <p className="text-sm text-on-surface-variant/50">Không có vật tư nào cần bổ sung thông tin</p>
+            </div>
+          ) : (
+            <div className="bg-surface-container-low rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead>
+                    <tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/20">
+                      <th className="px-4 py-3">Mã ERP</th>
+                      <th className="px-4 py-3">Tên VN</th>
+                      <th className="px-4 py-3 hidden md:table-cell">Tên CN</th>
+                      <th className="px-4 py-3 hidden md:table-cell">Quy cách</th>
+                      <th className="px-4 py-3 hidden lg:table-cell">Đơn vị</th>
+                      <th className="px-4 py-3 hidden lg:table-cell">Vị trí</th>
+                      <th className="px-4 py-3 text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incompleteItems.map((p) => (
+                      <tr key={p.erp} className="border-t border-outline-variant/10 hover:bg-amber-500/5">
+                        {editingIncomplete?.erp === p.erp ? (
+                          <>
+                            <td className="px-3 py-2 font-mono font-bold text-amber-600 text-xs">{p.erp}</td>
+                            <td className="px-3 py-2"><input value={editingIncomplete.name || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, name: e.target.value}))} className="w-36 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder="Tên vật tư *" /></td>
+                            <td className="px-3 py-2 hidden md:table-cell"><input value={editingIncomplete.name_zh || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, name_zh: e.target.value}))} className="w-32 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder="Tên tiếng Trung" /></td>
+                            <td className="px-3 py-2 hidden md:table-cell"><input value={editingIncomplete.spec || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, spec: e.target.value}))} className="w-32 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder="Quy cách" /></td>
+                            <td className="px-3 py-2 hidden lg:table-cell"><input value={editingIncomplete.unit || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, unit: e.target.value}))} className="w-24 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                            <td className="px-3 py-2 hidden lg:table-cell"><input value={editingIncomplete.pos || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, pos: e.target.value}))} className="w-24 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex gap-1 justify-end">
+                                <button onClick={() => saveIncomplete(editingIncomplete)} className="px-2 py-1 bg-primary text-on-primary rounded-lg text-xs font-bold">Lưu</button>
+                                <button onClick={() => setEditingIncomplete(null)} className="px-2 py-1 bg-surface-container rounded-lg text-xs">Hủy</button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp}</td>
+                            <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>
+                            <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.name_zh || '—'}</td>
+                            <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>
+                            <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.unit || '—'}</td>
+                            <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.pos || '—'}</td>
+                            <td className="px-4 py-3 text-right">
+                              <button onClick={() => setEditingIncomplete({...p})} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {inventoryMainTab === 'list' && <div className="technical-card">
         <div className="px-4 md:px-8 py-4 md:py-6 flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-surface-container">
           <div className="flex flex-wrap gap-2 md:gap-4 w-full xl:w-auto">
             <select 
@@ -1150,7 +1272,7 @@ const Inventory = () => {
             </button>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Delete Item Modal */}
       <AnimatePresence>

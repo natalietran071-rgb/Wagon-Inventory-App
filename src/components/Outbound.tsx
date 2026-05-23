@@ -68,6 +68,7 @@ const Outbound = () => {
   const [pendingOutboundCount, setPendingOutboundCount] = useState(0);
   const [pendingOutboundLoading, setPendingOutboundLoading] = useState(false);
   const [editingOutboundPending, setEditingOutboundPending] = useState<any | null>(null);
+  const [pendingOutboundSearch, setPendingOutboundSearch] = useState('');
 
   const fetchPendingOutbound = async () => {
     setPendingOutboundLoading(true);
@@ -924,6 +925,17 @@ const Outbound = () => {
     return outboundRecords.filter(r => selectedRows.includes(r.id) && r.status === 'Chờ xuất').length;
   }, [outboundRecords, selectedRows]);
 
+  const filteredPendingOutbound = useMemo(() => {
+    if (!pendingOutboundSearch.trim()) return pendingOutbound;
+    const q = pendingOutboundSearch.toLowerCase();
+    return pendingOutbound.filter(p =>
+      (p.erp_code && p.erp_code.toLowerCase().includes(q)) ||
+      (p.recipient_name && p.recipient_name.toLowerCase().includes(q)) ||
+      (p.dept_name && p.dept_name.toLowerCase().includes(q)) ||
+      (p.reason && p.reason.toLowerCase().includes(q))
+    );
+  }, [pendingOutbound, pendingOutboundSearch]);
+
   const handleBulkConfirmOutbound = async () => {
     if (!canEdit || selectedRows.length === 0) return;
     
@@ -1556,11 +1568,20 @@ const Outbound = () => {
                   <span className="material-symbols-outlined text-amber-500">warning</span>
                   <p className="text-sm text-on-surface"><span className="font-bold">Lệnh xuất bị lỗi khi tạo hàng loạt</span> — sửa thông tin rồi bấm Xác nhận để tạo lệnh xuất chính thức.</p>
                 </div>
+                <div className="relative mb-4">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base pointer-events-none">search</span>
+                  <input
+                    value={pendingOutboundSearch}
+                    onChange={e => setPendingOutboundSearch(e.target.value)}
+                    placeholder="Tìm mã ERP, người nhận, bộ phận..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                  />
+                </div>
                 {pendingOutboundLoading ? <p className="text-center py-8 text-on-surface-variant/40">Đang tải...</p>
-                : pendingOutbound.length === 0 ? (
+                : filteredPendingOutbound.length === 0 ? (
                   <div className="text-center py-12">
-                    <span className="material-symbols-outlined text-3xl text-on-surface-variant/30 block mb-2">check_circle</span>
-                    <p className="text-sm text-on-surface-variant/50">Không có lệnh xuất nào đang chờ xử lý</p>
+                    <span className="material-symbols-outlined text-3xl text-on-surface-variant/30 block mb-2">{pendingOutboundSearch ? 'search_off' : 'check_circle'}</span>
+                    <p className="text-sm text-on-surface-variant/50">{pendingOutboundSearch ? `Không tìm thấy kết quả cho "${pendingOutboundSearch}"` : 'Không có lệnh xuất nào đang chờ xử lý'}</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-outline-variant/10">
@@ -1574,7 +1595,7 @@ const Outbound = () => {
                         <th className="px-3 py-3 text-right">Thao tác</th>
                       </tr></thead>
                       <tbody>
-                        {pendingOutbound.map(p => (
+                        {filteredPendingOutbound.map(p => (
                           <tr key={p.id} className="border-t border-outline-variant/10 hover:bg-amber-500/5">
                             {editingOutboundPending?.id === p.id ? (
                               <>

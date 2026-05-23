@@ -55,6 +55,7 @@ const ItemManagement = () => {
   const [pendingModalSaving, setPendingModalSaving] = useState(false);
   const [deletePendingConfirm, setDeletePendingConfirm] = useState<any | null>(null);
   const [deletingPending, setDeletingPending] = useState(false);
+  const [pendingSearch, setPendingSearch] = useState('');
 
   const handleSelectRow = (erp: string) => {
     setSelectedRows(prev => prev.includes(erp) ? prev.filter(r => r !== erp) : [...prev, erp]);
@@ -797,6 +798,17 @@ const ItemManagement = () => {
   };
 
 
+  const filteredPendingItems = React.useMemo(() => {
+    if (!pendingSearch.trim()) return pendingItems;
+    const q = pendingSearch.toLowerCase();
+    return pendingItems.filter(p =>
+      (p.erp && p.erp.toLowerCase().includes(q)) ||
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.spec && p.spec.toLowerCase().includes(q)) ||
+      (p.order_id && p.order_id.toLowerCase().includes(q))
+    );
+  }, [pendingItems, pendingSearch]);
+
   const PENDING_REASON: Record<string, string> = {
     missing_erp: 'Thiếu Mã ERP',
     missing_name: 'Thiếu Tên vật tư',
@@ -839,12 +851,22 @@ const ItemManagement = () => {
               <p className="text-xs text-on-surface-variant mt-0.5">Bao gồm: thiếu ERP/Tên, trùng mã ERP trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
             </div>
           </div>
+          <div className="relative mb-4">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base pointer-events-none">search</span>
+            <input
+              value={pendingSearch}
+              onChange={e => setPendingSearch(e.target.value)}
+              placeholder="Tìm mã ERP, tên vật tư, Order ID..."
+              className="w-full pl-10 pr-4 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all"
+            />
+          </div>
+
           {pendingLoading ? (
             <p className="text-center py-12 text-on-surface-variant/40">Đang tải...</p>
-          ) : pendingItems.length === 0 ? (
+          ) : filteredPendingItems.length === 0 ? (
             <div className="text-center py-16 bg-surface-container-low rounded-2xl">
-              <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-2">check_circle</span>
-              <p className="text-sm text-on-surface-variant/50">Không có mục nào đang chờ xử lý</p>
+              <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-2">{pendingSearch ? 'search_off' : 'check_circle'}</span>
+              <p className="text-sm text-on-surface-variant/50">{pendingSearch ? `Không tìm thấy kết quả cho "${pendingSearch}"` : 'Không có mục nào đang chờ xử lý'}</p>
             </div>
           ) : (
             <div className="bg-surface-container-low rounded-2xl overflow-hidden">
@@ -862,7 +884,7 @@ const ItemManagement = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {pendingItems.map((p) => (
+                    {filteredPendingItems.map((p) => (
                       <tr key={p.id} onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="border-t border-outline-variant/10 hover:bg-amber-500/5 cursor-pointer">
                         <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
                         <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>

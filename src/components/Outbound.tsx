@@ -295,7 +295,7 @@ const Outbound = () => {
       e.preventDefault();
       
       const newRows = [...outboundRows];
-      const fields = ['outboundId', 'partner', 'erpCode', 'ignored_name', 'qty', 'requiredDate'];
+      const fields = ['outboundId', 'recipientId', 'recipientName', 'deptCode', 'deptName', 'bpm', 'erpCode', 'ignored_name', 'qty', 'requiredDate'];
       const fieldIdx = fields.indexOf(startField);
       
       let currentRowIdx = startIdx;
@@ -331,7 +331,10 @@ const Outbound = () => {
     import('xlsx').then(XLSX => {
       const templateData = [{
         'Mã Phiếu Xuất (Bỏ trống sẽ tự tạo)': '',
-        'Người Nhận / Bộ Phận (*)': '',
+        'Mã Nhân Viên': '',
+        'Tên Người Nhận (*)': '',
+        'Mã Bộ Phận': '',
+        'Tên Bộ Phận': '',
         'Số BPM (hoặc "No BPM")': '',
         'Mã ERP (*)': '',
         'Tên Vật Tư (Không nhập)': '',
@@ -371,14 +374,17 @@ const Outbound = () => {
         for (const row of rows) {
             newRows.push(createEmptyOutboundRow());
             
-            newRows[currentRowIdx].outboundId = row[0]?.toString() || '';
-            newRows[currentRowIdx].partner = row[1]?.toString() || '';
-            newRows[currentRowIdx].bpm = row[2]?.toString() || '';
-            newRows[currentRowIdx].erpCode = row[3]?.toString() || '';
-            newRows[currentRowIdx].qty = row[5]?.toString() || '';
+            newRows[currentRowIdx].outboundId   = row[0]?.toString() || '';
+            newRows[currentRowIdx].recipientId   = row[1]?.toString() || '';
+            newRows[currentRowIdx].recipientName = row[2]?.toString() || '';
+            newRows[currentRowIdx].deptCode      = row[3]?.toString() || '';
+            newRows[currentRowIdx].deptName      = row[4]?.toString() || '';
+            newRows[currentRowIdx].bpm           = row[5]?.toString() || '';
+            newRows[currentRowIdx].erpCode       = row[6]?.toString() || '';
+            newRows[currentRowIdx].qty           = row[8]?.toString() || '';
 
             // Excel dates might be number serials or strings
-            let dateVal = row[6];
+            let dateVal = row[9];
             if (typeof dateVal === 'number') {
                 const dateParam = new Date((dateVal - (25567 + 2)) * 86400 * 1000);
                 dateVal = dateParam.toISOString().split('T')[0];
@@ -1285,9 +1291,12 @@ const Outbound = () => {
                     <thead className="sticky top-0 bg-surface-container-highest z-20 shadow-sm border-b border-outline-variant/20">
                       <tr>
                         <th className="px-2 py-3 text-xs font-bold text-on-surface-variant uppercase text-center w-10">#</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[140px]">Mã Phiếu Xuất</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[140px]">Người Nhận / Bộ Phận</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Số BPM</th>
+                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Mã Phiếu Xuất</th>
+                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã NV</th>
+                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên Người Nhận (*)</th>
+                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã Bộ Phận</th>
+                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên Bộ Phận</th>
+                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">Số BPM</th>
                         <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[180px]">Mã ERP (*)</th>
                         <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên SP</th>
                         <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Số lượng (*)</th>
@@ -1313,11 +1322,41 @@ const Outbound = () => {
                             <td className="p-0 border-r border-outline-variant/5">
                               <input
                                 type="text"
-                                value={row.partner}
-                                onChange={(e) => handleRowChange(idx, 'partner', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'partner')}
+                                value={row.recipientId || ''}
+                                onChange={(e) => handleRowChange(idx, 'recipientId', e.target.value)}
+                                onPaste={(e) => handlePaste(e, idx, 'recipientId')}
                                 className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                                placeholder="..."
+                                placeholder="Mã NV"
+                              />
+                            </td>
+                            <td className="p-0 border-r border-outline-variant/5">
+                              <input
+                                type="text"
+                                value={row.recipientName || ''}
+                                onChange={(e) => handleRowChange(idx, 'recipientName', e.target.value)}
+                                onPaste={(e) => handlePaste(e, idx, 'recipientName')}
+                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                                placeholder="Tên người nhận..."
+                              />
+                            </td>
+                            <td className="p-0 border-r border-outline-variant/5">
+                              <input
+                                type="text"
+                                value={row.deptCode || ''}
+                                onChange={(e) => handleRowChange(idx, 'deptCode', e.target.value)}
+                                onPaste={(e) => handlePaste(e, idx, 'deptCode')}
+                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                                placeholder="Mã BP"
+                              />
+                            </td>
+                            <td className="p-0 border-r border-outline-variant/5">
+                              <input
+                                type="text"
+                                value={row.deptName || ''}
+                                onChange={(e) => handleRowChange(idx, 'deptName', e.target.value)}
+                                onPaste={(e) => handlePaste(e, idx, 'deptName')}
+                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                                placeholder="Tên bộ phận..."
                               />
                             </td>
                             <td className="p-0 border-r border-outline-variant/5">

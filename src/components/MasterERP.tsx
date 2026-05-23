@@ -58,6 +58,10 @@ const MasterERP = () => {
   const [editTarget, setEditTarget] = useState<{ type: 'master' | 'pending'; item: MasterItem | PendingItem } | null>(null);
   const [editForm, setEditForm] = useState({ erp: '', name: '', name_zh: '', spec: '', unit: '' });
 
+  // Delete confirm state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'master' | 'pending'; item: MasterItem | PendingItem } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Upload state
   const [parsedRows, setParsedRows] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -367,6 +371,29 @@ const MasterERP = () => {
     setEditTarget(null);
   };
 
+  // ── Delete single item ───────────────────────────────────
+  const deleteItem = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    const { type, item } = deleteConfirm;
+    try {
+      if (type === 'master') {
+        const { error } = await supabase.from('master_erp').delete().eq('id', item.id);
+        if (error) { showToast('Lỗi: ' + error.message, true); return; }
+        showToast(`Đã xóa ${item.erp} khỏi Master ERP`);
+        await Promise.all([fetchItems(), fetchStats()]);
+      } else {
+        const { error } = await supabase.from('master_erp_pending').delete().eq('id', item.id);
+        if (error) { showToast('Lỗi: ' + error.message, true); return; }
+        showToast(`Đã xóa ${item.erp} khỏi danh sách chờ`);
+        await Promise.all([fetchPending(), fetchStats()]);
+      }
+      setDeleteConfirm(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // ── Approve pending → move to master ─────────────────────
   const approvePending = async (p: PendingItem) => {
     const { error } = await supabase.rpc('bulk_upsert_master_erp', {
@@ -515,9 +542,14 @@ const MasterERP = () => {
                       <td className="px-4 py-3 hidden xl:table-cell text-xs text-on-surface-variant/60">{new Date(item.updated_at).toLocaleDateString('vi-VN')}</td>
                       {canEdit && (
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => openEdit('master', item)} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa">
-                            <span className="material-symbols-outlined text-base">edit</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => openEdit('master', item)} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa">
+                              <span className="material-symbols-outlined text-base">edit</span>
+                            </button>
+                            <button onClick={() => setDeleteConfirm({ type: 'master', item })} className="p-1.5 rounded-lg text-outline-variant hover:text-error hover:bg-error/10 transition-colors" title="Xóa">
+                              <span className="material-symbols-outlined text-base">delete</span>
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -604,6 +636,9 @@ const MasterERP = () => {
                             <button onClick={() => approvePending(item)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors" title="Xác nhận vào Master ERP">
                               <span className="material-symbols-outlined text-sm">check</span>Xác nhận
                             </button>
+                            <button onClick={() => setDeleteConfirm({ type: 'pending', item })} className="p-1.5 rounded-lg text-outline-variant hover:text-error hover:bg-error/10 transition-colors" title="Xóa khỏi danh sách chờ">
+                              <span className="material-symbols-outlined text-base">delete</span>
+                            </button>
                           </div>
                         </td>
                       )}
@@ -684,6 +719,38 @@ const MasterERP = () => {
               )}
               <button onClick={saveEdit} className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm flex items-center gap-2">
                 <span className="material-symbols-outlined text-base">save</span>Lưu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Modal ─────────────────────────── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-surface-container-lowest rounded-3xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="p-6">
+              <div className="w-14 h-14 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-5">
+                <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>delete</span>
+              </div>
+              <h3 className="text-lg font-black text-on-surface mb-2">Xác nhận xóa</h3>
+              <p className="text-sm text-on-surface-variant leading-relaxed mb-1">
+                Bạn có chắc muốn xóa mã ERP <strong className="text-error font-mono">{deleteConfirm.item.erp}</strong>
+                {deleteConfirm.type === 'master' ? ' khỏi Master ERP?' : ' khỏi danh sách chờ xử lý?'}
+              </p>
+              {deleteConfirm.type === 'master' && (
+                <p className="text-xs text-error/70 mt-2">⚠️ Hành động này không thể hoàn tác.</p>
+              )}
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl border border-outline-variant/40 font-bold text-sm hover:bg-surface-container transition-colors disabled:opacity-50">
+                Hủy
+              </button>
+              <button onClick={deleteItem} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-error text-on-error font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined text-base">delete</span>
+                {deleting ? 'Đang xóa...' : 'Xóa'}
               </button>
             </div>
           </div>

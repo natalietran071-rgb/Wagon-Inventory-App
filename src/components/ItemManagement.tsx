@@ -857,7 +857,7 @@ const ItemManagement = () => {
               value={pendingSearch}
               onChange={e => setPendingSearch(e.target.value)}
               placeholder="Tìm mã ERP, tên vật tư, Order ID..."
-              className="w-full pl-10 pr-4 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all"
+              className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm border border-outline-variant/40 shadow-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all"
             />
           </div>
 

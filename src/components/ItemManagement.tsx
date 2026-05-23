@@ -512,7 +512,7 @@ const ItemManagement = () => {
 
       let missing = 0;
 
-      const itemsToInsert = jsonData.map((row, rowIdx) => {
+      const itemsToInsert = (jsonData.map((row, rowIdx) => {
         const inputErp = getVal(row, ['Mã ERP', 'Mã VT', 'Mã Vật Tư', 'Item Code'])?.toString().trim() || '';
         const name = getVal(row, ['Tên Vật Tư (VN)', 'Tên Vật Tư', 'Tên Hàng', 'Item Name'])?.toString().trim() || '';
         const startStock = parseInt(getVal(row, ['Tồn Đầu Kỳ', 'Tồn Đầu', 'Số Lượng', 'Qty', 'Start Stock'])) || 0;
@@ -543,6 +543,11 @@ const ItemManagement = () => {
           }
         }
         
+        // Detect and skip the Excel SUM/TOTAL formula row at the bottom of the file:
+        // such rows have no ERP and no name, only a large quantity value.
+        const isTotalRow = !inputErp && !name && startStock > 1000000;
+        if (isTotalRow) return null;
+
         const is_incomplete = !inputErp || !name;
         if (is_incomplete) {
           missing++;
@@ -553,6 +558,7 @@ const ItemManagement = () => {
         return {
           erp,
           name,
+          _has_real_erp: !!inputErp,
           name_zh: getVal(row, ['Tên Vật Tư (CN)', 'Tên Vật Tư (ZH)', 'Tên Tiếng Trung', 'Chinese Name'])?.toString().trim() || '',
           category: getVal(row, ['Phân Loại', 'Category', 'Nhóm'])?.toString().trim() || '',
           unit: getVal(row, ['Đơn Vị Tính', 'ĐVT', 'Unit'])?.toString().trim() || 'Cái (PCS)',
@@ -571,7 +577,7 @@ const ItemManagement = () => {
           _temp_date: parsedDate,
           _is_file_duplicate: false,
         };
-      });
+      }) as any[]).filter(Boolean);
 
       setMissingCount(missing);
 
@@ -655,7 +661,8 @@ const ItemManagement = () => {
       const pendingToInsert: any[] = [];
 
       parsedItems.forEach(item => {
-        const hasErp  = item.erp && item.erp !== '0' && item.erp !== '#N/A' && item.erp !== 'N/A';
+        // Use _has_real_erp to distinguish actual ERPs from generated TEMP-/EMPTY- placeholders
+        const hasErp  = !!item._has_real_erp;
         const hasName = !!item.name?.trim();
 
         const buildPendingRow = (reason: string) => ({
@@ -730,25 +737,42 @@ const ItemManagement = () => {
       const chunkSize = 500;
       let successCount = 0;
       let errorCount = 0;
-      let lastError = '';
 
       // 4. Upsert inventory chunk by chunk (upsert keeps existing data for same ERP, inserts new)
       for (let i = 0; i < inventoryItems.length; i += chunkSize) {
         const chunk = inventoryItems.slice(i, i + chunkSize);
         let { error } = await supabase.rpc('bulk_upsert_inventory', { p_items: chunk });
-        
-        if (error) {
-          // Fallback: try direct upsert if RPC fails
-          const { error: fallbackError } = await supabase
-            .from('inventory')
-            .upsert(chunk, { onConflict: 'erp' });
 
-          if (fallbackError) {
-            console.error(`Error importing chunk ${i / chunkSize + 1}:`, fallbackError);
-            errorCount += chunk.length;
-            lastError = fallbackError.message;
-          } else {
-            successCount += chunk.length;
+        if (error) {
+          // Fallback: retry in smaller 100-item sub-chunks
+          const subChunkSize = 100;
+          for (let j = 0; j < chunk.length; j += subChunkSize) {
+            const sub = chunk.slice(j, j + subChunkSize);
+            const { error: subErr } = await supabase.from('inventory').upsert(sub, { onConflict: 'erp' });
+            if (subErr) {
+              // Last resort: save each failed item to pending so no data is silently lost
+              sub.forEach(failedItem => {
+                pendingToInsert.push({
+                  erp: failedItem.erp || '',
+                  name: failedItem.name || '',
+                  name_zh: failedItem.name_zh || '',
+                  category: failedItem.category || '',
+                  unit: failedItem.unit || 'Cái (PCS)',
+                  spec: failedItem.spec || '',
+                  pos: failedItem.pos || '',
+                  start_stock: failedItem.start_stock || 0,
+                  price: failedItem.price || 0,
+                  critical: failedItem.critical || false,
+                  order_id: '',
+                  qty: failedItem.start_stock || 0,
+                  date: '',
+                  reason: 'insert_failed',
+                });
+              });
+              errorCount += sub.length;
+            } else {
+              successCount += sub.length;
+            }
           }
         } else {
           successCount += chunk.length;
@@ -780,25 +804,38 @@ const ItemManagement = () => {
          console.log(`Successfully created ${inboundSuccessCount} inbound records out of ${allInboundRecords.length}`);
       }
 
-      // Insert pending rows (don't insert with TEMP codes)
+      // Insert pending rows
       let pendingInserted = 0;
+      let pendingFailedCount = 0;
       if (pendingToInsert.length > 0) {
-        const PCHUNK = 500;
+        const PCHUNK = 200;
         for (let i = 0; i < pendingToInsert.length; i += PCHUNK) {
-          const { error: pErr } = await supabase.from('inbound_upload_pending').insert(pendingToInsert.slice(i, i + PCHUNK));
-          if (!pErr) pendingInserted += Math.min(PCHUNK, pendingToInsert.length - i);
+          const slice = pendingToInsert.slice(i, i + PCHUNK);
+          const { error: pErr } = await supabase.from('inbound_upload_pending').insert(slice);
+          if (!pErr) {
+            pendingInserted += slice.length;
+          } else {
+            console.error('Pending insert error:', pErr);
+            pendingFailedCount += slice.length;
+          }
         }
         setPendingCount(c => c + pendingInserted);
       }
 
       setUploadProgress(100);
+      fetchItemsByDate();
 
-      const pendingMsg = pendingInserted > 0 ? `\n⚠️ ${pendingInserted} dòng bất thường (thiếu ERP/Tên, trùng mã, tên khác Master) → chuyển vào tab Chờ xử lý` : '';
-      if (errorCount > 0) {
-        alert(`Tải lên hoàn tất nhưng có lỗi.\n\nThành công: ${successCount} item\nLỗi: ${errorCount} item${pendingMsg}`);
+      const insertFailedCount = pendingToInsert.filter(p => p.reason === 'insert_failed').length;
+      const pendingMsg = pendingInserted > 0
+        ? `\n⚠️ ${pendingInserted} dòng bất thường → chuyển vào tab Chờ xử lý${insertFailedCount > 0 ? ` (${insertFailedCount} lỗi lưu kho)` : ''}`
+        : '';
+      const pendingFailMsg = pendingFailedCount > 0
+        ? `\n❌ ${pendingFailedCount} dòng không thể lưu vào tab Chờ xử lý (lỗi database)` : '';
+
+      if (errorCount > 0 || pendingFailedCount > 0) {
+        alert(`Tải lên hoàn tất nhưng có lỗi.\n\nThành công: ${successCount} item${pendingMsg}${pendingFailMsg}`);
       } else {
         alert(`✅ Tải lên thành công ${successCount} item${allInboundRecords.length > 0 ? ` và ${allInboundRecords.length} phiếu nhập` : ''}!${pendingMsg}`);
-        fetchItemsByDate();
       }
     } catch (err: any) {
       console.error('Upload error:', err);
@@ -908,6 +945,7 @@ const ItemManagement = () => {
     missing_erp_and_name: 'Thiếu ERP & Tên',
     duplicate_erp_in_file: 'Trùng hoàn toàn trong file',
     name_mismatch_with_master: 'Tên khác Master ERP',
+    insert_failed: 'Lỗi lưu kho (cần xử lý lại)',
   };
 
   const getPendingReasonLabel = (reason: string) => {

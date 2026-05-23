@@ -851,6 +851,19 @@ const ItemManagement = () => {
               <p className="text-xs text-on-surface-variant mt-0.5">Bao gồm: thiếu ERP/Tên, trùng mã ERP trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
             </div>
           </div>
+
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-on-surface-variant">Tổng chờ xử lý:</span>
+              <span className="px-2.5 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-black">{pendingCount}</span>
+            </div>
+            {pendingSearch.trim() && (
+              <span className="text-xs text-on-surface-variant">
+                Đang lọc: <strong className="text-primary">{filteredPendingItems.length}</strong> / {pendingCount}
+              </span>
+            )}
+          </div>
+
           <div className="relative mb-4">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base pointer-events-none">search</span>
             <input

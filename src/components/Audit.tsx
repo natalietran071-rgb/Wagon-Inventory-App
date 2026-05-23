@@ -1187,6 +1187,17 @@ const Audit = () => {
                    </div>
                  )}
               </div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-on-surface-variant">Tổng chờ duyệt:</span>
+                  <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-black">{pendingRecords.length}</span>
+                </div>
+                {pendingSearch.trim() && (
+                  <span className="text-xs text-on-surface-variant">
+                    Đang lọc: <strong className="text-primary">{filteredPendingRecords.length}</strong> / {pendingRecords.length}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base pointer-events-none">search</span>
                 <input

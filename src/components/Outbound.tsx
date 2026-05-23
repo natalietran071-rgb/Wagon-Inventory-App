@@ -1568,6 +1568,17 @@ const Outbound = () => {
                   <span className="material-symbols-outlined text-amber-500">warning</span>
                   <p className="text-sm text-on-surface"><span className="font-bold">Lệnh xuất bị lỗi khi tạo hàng loạt</span> — sửa thông tin rồi bấm Xác nhận để tạo lệnh xuất chính thức.</p>
                 </div>
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-on-surface-variant">Tổng chờ xử lý:</span>
+                    <span className="px-2.5 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-black">{pendingOutboundCount}</span>
+                  </div>
+                  {pendingOutboundSearch.trim() && (
+                    <span className="text-xs text-on-surface-variant">
+                      Đang lọc: <strong className="text-primary">{filteredPendingOutbound.length}</strong> / {pendingOutboundCount}
+                    </span>
+                  )}
+                </div>
                 <div className="relative mb-4">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base pointer-events-none">search</span>
                   <input

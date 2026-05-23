@@ -727,11 +727,11 @@ const ItemManagement = () => {
         let { error } = await supabase.rpc('bulk_upsert_inventory', { p_items: chunk });
         
         if (error) {
-          // Fallback: try direct upsert if RPC fails
+          // Fallback: insert-only when RPC fails — ignoreDuplicates preserves existing start_stock
           const { error: fallbackError } = await supabase
             .from('inventory')
-            .upsert(chunk, { onConflict: 'erp' });
-          
+            .upsert(chunk, { onConflict: 'erp', ignoreDuplicates: true });
+
           if (fallbackError) {
             console.error(`Error importing chunk ${i / chunkSize + 1}:`, fallbackError);
             errorCount += chunk.length;
@@ -816,8 +816,15 @@ const ItemManagement = () => {
     setBulkPendingLoading(true);
     try {
       const CHUNK = 500;
-      // Upsert inventory
-      const inventoryPayload = validItems.map(p => ({
+      // Pre-fetch which ERPs already exist in inventory to avoid overwriting start_stock
+      const allErps = validItems.map(p => p.erp.trim());
+      const existingErpSet = new Set<string>();
+      for (let i = 0; i < allErps.length; i += CHUNK) {
+        const { data: existing } = await supabase.from('inventory').select('erp').in('erp', allErps.slice(i, i + CHUNK));
+        if (existing) existing.forEach((r: any) => existingErpSet.add(r.erp));
+      }
+      // New items: full insert with start_stock
+      const newItems = validItems.filter(p => !existingErpSet.has(p.erp.trim())).map(p => ({
         erp: p.erp.trim(), name: p.name, name_zh: p.name_zh || '',
         category: p.category || '', unit: p.unit || 'Cái (PCS)',
         spec: p.spec || '', pos: p.pos || '',
@@ -826,8 +833,17 @@ const ItemManagement = () => {
         in_qty: 0, out_qty: 0, is_incomplete: false,
         created_at: new Date().toISOString(),
       }));
-      for (let i = 0; i < inventoryPayload.length; i += CHUNK) {
-        await supabase.from('inventory').upsert(inventoryPayload.slice(i, i + CHUNK), { onConflict: 'erp' });
+      for (let i = 0; i < newItems.length; i += CHUNK) {
+        await supabase.from('inventory').insert(newItems.slice(i, i + CHUNK));
+      }
+      // Existing items: update metadata only — never touch start_stock/end_stock/in_qty/out_qty
+      const existingItems = validItems.filter(p => existingErpSet.has(p.erp.trim()));
+      for (const p of existingItems) {
+        await supabase.from('inventory').update({
+          name: p.name, name_zh: p.name_zh || '', category: p.category || '',
+          unit: p.unit || 'Cái (PCS)', spec: p.spec || '', pos: p.pos || '',
+          price: p.price || 0, critical: p.critical || false, is_incomplete: false,
+        }).eq('erp', p.erp.trim());
       }
       // Insert inbound records for items with order_id + qty
       const inboundRecords = validItems

@@ -627,15 +627,26 @@ const ItemManagement = () => {
       const allErps = parsedItems.map(i => i.erp);
       const uniqueErps = Array.from(new Set(allErps));
 
+      const fetchChunk = 200;
+
       // 2. Fetch master_erp names for cross-reference (name mismatch check)
       const masterErpNameMap = new Map<string, string>(); // erp -> master name
-      const fetchChunk = 200;
       for (let i = 0; i < uniqueErps.length; i += fetchChunk) {
         const chunk = uniqueErps.slice(i, i + fetchChunk);
         const { data: masterData } = await supabase.from('master_erp').select('erp, name').in('erp', chunk);
         if (masterData) {
           masterData.forEach((m: any) => masterErpNameMap.set(m.erp, m.name));
         }
+      }
+
+      // 3. Pre-fetch which ERPs already exist in inventory
+      // First upload (new item) → qty is the opening balance, NOT an inbound transaction
+      // Subsequent uploads (existing item) → qty is a real inbound transaction
+      const existingInventoryErps = new Set<string>();
+      for (let i = 0; i < uniqueErps.length; i += fetchChunk) {
+        const chunk = uniqueErps.slice(i, i + fetchChunk);
+        const { data: invData } = await supabase.from('inventory').select('erp').in('erp', chunk);
+        if (invData) invData.forEach((r: any) => existingInventoryErps.add(r.erp));
       }
 
       // Route items: missing info → pending, file duplicate → pending,
@@ -678,6 +689,10 @@ const ItemManagement = () => {
             // Store master name in reason so user can see it in the pending modal
             pendingToInsert.push(buildPendingRow(`name_mismatch_with_master|${masterName}`));
           } else {
+            const isNewItem = !existingInventoryErps.has(item.erp);
+            // First upload of an item = opening balance (start_stock = qty, no inbound record)
+            // Subsequent upload of existing item = real inbound transaction
+            const openingQty = isNewItem ? (item._temp_qty || item.start_stock || 0) : 0;
             inventoryItems.push({
               erp:          item.erp,
               name:         item.name,
@@ -688,15 +703,15 @@ const ItemManagement = () => {
               pos:          item.pos,
               price:        item.price,
               critical:     item.critical,
-              start_stock:  item.start_stock || 0,
-              end_stock:    item.end_stock || 0,
+              start_stock:  isNewItem ? openingQty : (item.start_stock || 0),
+              end_stock:    isNewItem ? openingQty : (item.end_stock || 0),
               in_qty:       0,
               out_qty:      0,
               created_at:   item.created_at,
               is_incomplete: false,
             });
-            // Inbound record only for items confirmed into inventory (not pending)
-            if (item._temp_qty > 0 && item._temp_order_id) {
+            // Only create inbound record for EXISTING items receiving new stock
+            if (!isNewItem && item._temp_qty > 0 && item._temp_order_id) {
               allInboundRecords.push({
                 order_id: item._temp_order_id,
                 erp_code: item.erp,

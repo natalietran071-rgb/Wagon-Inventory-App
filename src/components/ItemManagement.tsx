@@ -52,6 +52,8 @@ const ItemManagement = () => {
   const [editingPending, setEditingPending] = useState<any | null>(null);
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [pendingModalSaving, setPendingModalSaving] = useState(false);
+  const [deletePendingConfirm, setDeletePendingConfirm] = useState<any | null>(null);
+  const [deletingPending, setDeletingPending] = useState(false);
 
   const handleSelectRow = (erp: string) => {
     setSelectedRows(prev => prev.includes(erp) ? prev.filter(r => r !== erp) : [...prev, erp]);
@@ -145,6 +147,18 @@ const ItemManagement = () => {
       fetchPendingInbound();
     } finally {
       setPendingModalSaving(false);
+    }
+  };
+
+  const deletePendingItem = async (p: any) => {
+    setDeletingPending(true);
+    try {
+      const { error } = await supabase.from('inbound_upload_pending').delete().eq('id', p.id);
+      if (error) { alert('Lỗi xóa: ' + error.message); return; }
+      setDeletePendingConfirm(null);
+      fetchPendingInbound();
+    } finally {
+      setDeletingPending(false);
     }
   };
 
@@ -816,6 +830,7 @@ const ItemManagement = () => {
                           <div className="flex gap-1 justify-end">
                             <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
                             <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
+                            <button onClick={e => { e.stopPropagation(); setDeletePendingConfirm(p); }} className="p-1.5 rounded-lg text-outline-variant hover:text-error hover:bg-error/10 transition-colors" title="Xóa"><span className="material-symbols-outlined text-base">delete</span></button>
                           </div>
                         </td>
                       </tr>
@@ -1288,8 +1303,8 @@ const ItemManagement = () => {
         </div>
       )}
 
-      {/* MODAL CHỈNH SỬA PENDING */}
-      {showPendingModal && editingPending && (
+      {/* MODAL CHỈNH SỬA PENDING - moved outside items block, rendered here as placeholder */}
+      {false && editingPending && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-sm" onClick={() => { setShowPendingModal(false); setEditingPending(null); }}>
           <div className="bg-surface-container-lowest rounded-3xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 duration-200 overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* Header */}
@@ -1626,6 +1641,122 @@ const ItemManagement = () => {
         </div>
       )}
       </> }
+
+      {/* MODAL CHỈNH SỬA PENDING — outside items block so it renders on pending tab */}
+      {showPendingModal && editingPending && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-sm" onClick={() => { setShowPendingModal(false); setEditingPending(null); }}>
+          <div className="bg-surface-container-lowest rounded-3xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 duration-200 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-outline-variant/20 flex items-center justify-between bg-amber-500/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-amber-600">pending_actions</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-on-surface text-lg">Chỉnh sửa mục chờ xử lý</h3>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    <span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full font-semibold">
+                      {PENDING_REASON[editingPending.reason] || editingPending.reason}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => { setShowPendingModal(false); setEditingPending(null); }} className="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-error-container hover:text-on-error-container transition-colors">
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Mã ERP <span className="text-error">*</span></label>
+                  <input value={editingPending.erp || ''} onChange={e => setEditingPending((x: any) => ({...x, erp: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm font-mono border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Nhập mã ERP..." />
+                </div>
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Đơn Vị</label>
+                  <input value={editingPending.unit || ''} onChange={e => setEditingPending((x: any) => ({...x, unit: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Cái (PCS)..." />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tên Vật Tư (VN) <span className="text-error">*</span></label>
+                  <input value={editingPending.name || ''} onChange={e => setEditingPending((x: any) => ({...x, name: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Nhập tên tiếng Việt..." />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tên Vật Tư (CN)</label>
+                  <input value={editingPending.name_zh || ''} onChange={e => setEditingPending((x: any) => ({...x, name_zh: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Tên tiếng Trung..." />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Quy Cách</label>
+                  <input value={editingPending.spec || ''} onChange={e => setEditingPending((x: any) => ({...x, spec: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Kích thước, chất liệu..." />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Vị Trí</label>
+                  <input value={editingPending.pos || ''} onChange={e => setEditingPending((x: any) => ({...x, pos: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Zone-A..." />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tồn Đầu Kỳ</label>
+                  <input type="number" value={editingPending.start_stock || 0} onChange={e => setEditingPending((x: any) => ({...x, start_stock: parseInt(e.target.value) || 0}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" />
+                </div>
+              </div>
+              {(editingPending.order_id || editingPending.qty > 0) && (
+                <div className="flex gap-3 bg-surface-container p-3 rounded-xl text-xs text-on-surface-variant">
+                  {editingPending.order_id && <span>Đơn nhập: <strong className="text-on-surface">{editingPending.order_id}</strong></span>}
+                  {editingPending.qty > 0 && <span>SL: <strong className="text-on-surface">{editingPending.qty}</strong></span>}
+                  {editingPending.date && <span>Ngày: <strong className="text-on-surface">{editingPending.date}</strong></span>}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-outline-variant/20 flex gap-3 bg-surface-container-lowest">
+              <button onClick={() => { setShowPendingModal(false); setEditingPending(null); }} disabled={pendingModalSaving}
+                className="px-4 py-2.5 rounded-xl text-sm font-bold text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-50">
+                Đóng
+              </button>
+              <button onClick={savePendingOnly} disabled={pendingModalSaving}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined text-base">save</span>
+                {pendingModalSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
+              <button onClick={() => approvePendingInbound(editingPending)} disabled={pendingModalSaving}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
+                <span className="material-symbols-outlined text-base">check_circle</span>
+                {pendingModalSaving ? 'Đang xử lý...' : 'Xác nhận & Nhập kho'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XÁC NHẬN XÓA PENDING */}
+      {deletePendingConfirm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-sm">
+          <div className="bg-surface-container-lowest rounded-3xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="p-6">
+              <div className="w-14 h-14 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-5">
+                <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>delete</span>
+              </div>
+              <h3 className="text-lg font-black text-on-surface mb-2">Xóa khỏi danh sách chờ?</h3>
+              <p className="text-sm text-on-surface-variant leading-relaxed">
+                Bạn có chắc muốn xóa dòng{deletePendingConfirm.erp ? <> mã <strong className="text-error font-mono">{deletePendingConfirm.erp}</strong></> : ' này'} khỏi tab Chờ xử lý? Dữ liệu sẽ bị xóa hoàn toàn.
+              </p>
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button onClick={() => setDeletePendingConfirm(null)} disabled={deletingPending}
+                className="flex-1 py-2.5 rounded-xl border border-outline-variant/40 font-bold text-sm hover:bg-surface-container transition-colors disabled:opacity-50">
+                Hủy
+              </button>
+              <button onClick={() => deletePendingItem(deletePendingConfirm)} disabled={deletingPending}
+                className="flex-1 py-2.5 rounded-xl bg-error text-on-error font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined text-base">delete</span>
+                {deletingPending ? 'Đang xóa...' : 'Xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

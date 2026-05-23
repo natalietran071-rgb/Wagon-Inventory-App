@@ -56,6 +56,7 @@ const ItemManagement = () => {
   const [deletePendingConfirm, setDeletePendingConfirm] = useState<any | null>(null);
   const [deletingPending, setDeletingPending] = useState(false);
   const [pendingSearch, setPendingSearch] = useState('');
+  const [selectedPendingIds, setSelectedPendingIds] = useState<number[]>([]);
   const [bulkPendingLoading, setBulkPendingLoading] = useState(false);
 
   const handleSelectRow = (erp: string) => {
@@ -574,8 +575,8 @@ const ItemManagement = () => {
 
       setMissingCount(missing);
 
-      // Detect fully duplicate rows within the same file — all of: erp + order + date + qty must match
-      // Items with same ERP but different date/order/qty are NOT duplicates and go to inventory normally
+      // Detect fully duplicate rows within the same file — all of erp + order_id + date + qty must match
+      // Same ERP but different date/order/qty are NOT duplicates and go to inventory normally
       const fullDupKeys = new Map<string, number>();
       itemsToInsert.forEach(item => {
         if (!item.is_incomplete) {
@@ -619,8 +620,6 @@ const ItemManagement = () => {
     setUploadProgress(0);
     
     try {
-      // Create inbound records only for items that actually reach inventory (not pending)
-      // Items going to pending will create inbound_records when approved individually or via bulk approve
       const allInboundRecords: any[] = [];
 
       // === CORE LOGIC: Preserve ALL items, route anomalies to pending ===
@@ -696,7 +695,7 @@ const ItemManagement = () => {
               created_at:   item.created_at,
               is_incomplete: false,
             });
-            // Only create inbound record for items confirmed into inventory
+            // Inbound record only for items confirmed into inventory (not pending)
             if (item._temp_qty > 0 && item._temp_order_id) {
               allInboundRecords.push({
                 order_id: item._temp_order_id,
@@ -800,68 +799,56 @@ const ItemManagement = () => {
     setUploadProgress(0);
   };
 
-  const bulkApproveAllPending = async () => {
-    const validItems = pendingItems.filter(p => p.erp?.trim() && p.name?.trim());
-    const invalidCount = pendingItems.length - validItems.length;
-    if (validItems.length === 0) {
-      alert('Không có item nào hợp lệ để xác nhận (cần có cả Mã ERP và Tên vật tư).');
+  const bulkApproveSelected = async () => {
+    const toApprove = pendingItems.filter(p => selectedPendingIds.includes(p.id) && p.erp?.trim() && p.name?.trim());
+    const skipped = selectedPendingIds.length - toApprove.length;
+    if (toApprove.length === 0) {
+      alert('Không có item nào hợp lệ trong lựa chọn (cần có Mã ERP và Tên vật tư).');
       return;
     }
-    const confirmMsg = `Xác nhận đưa ${validItems.length} item vào hệ thống?` +
-      (invalidCount > 0 ? `\n(${invalidCount} item thiếu ERP/Tên sẽ giữ lại trong tab chờ)` : '');
-    if (!window.confirm(confirmMsg)) return;
+    if (!window.confirm(`Xác nhận đưa ${toApprove.length} item vào hệ thống?${skipped > 0 ? `\n(${skipped} item thiếu ERP/Tên sẽ bỏ qua)` : ''}`)) return;
     setBulkPendingLoading(true);
     try {
-      const CHUNK = 500;
-      // Pre-fetch which ERPs already exist to avoid overwriting their start_stock
-      const allErps = validItems.map(p => p.erp.trim());
+      const CHUNK = 200;
+      const allErps = toApprove.map(p => p.erp.trim());
       const existingErpSet = new Set<string>();
       for (let i = 0; i < allErps.length; i += CHUNK) {
         const { data: ex } = await supabase.from('inventory').select('erp').in('erp', allErps.slice(i, i + CHUNK));
         if (ex) ex.forEach((r: any) => existingErpSet.add(r.erp));
       }
-      // New ERPs: full insert with start_stock from pending row
-      const newItems = validItems.filter(p => !existingErpSet.has(p.erp.trim())).map(p => ({
-        erp: p.erp.trim(), name: p.name, name_zh: p.name_zh || '',
-        category: p.category || '', unit: p.unit || 'Cái (PCS)',
-        spec: p.spec || '', pos: p.pos || '',
+      const newItems = toApprove.filter(p => !existingErpSet.has(p.erp.trim())).map(p => ({
+        erp: p.erp.trim(), name: p.name, name_zh: p.name_zh || '', category: p.category || '',
+        unit: p.unit || 'Cái (PCS)', spec: p.spec || '', pos: p.pos || '',
         start_stock: p.start_stock || 0, end_stock: p.start_stock || 0,
         price: p.price || 0, critical: p.critical || false,
-        in_qty: 0, out_qty: 0, is_incomplete: false,
-        created_at: new Date().toISOString(),
+        in_qty: 0, out_qty: 0, is_incomplete: false, created_at: new Date().toISOString(),
       }));
       for (let i = 0; i < newItems.length; i += CHUNK) {
         await supabase.from('inventory').insert(newItems.slice(i, i + CHUNK));
       }
-      // Existing ERPs: update metadata only — start_stock/end_stock/in_qty/out_qty untouched
-      const existingItems = validItems.filter(p => existingErpSet.has(p.erp.trim()));
-      for (let i = 0; i < existingItems.length; i += CHUNK) {
-        for (const p of existingItems.slice(i, i + CHUNK)) {
-          await supabase.from('inventory').update({
-            name: p.name, name_zh: p.name_zh || '', category: p.category || '',
-            unit: p.unit || 'Cái (PCS)', spec: p.spec || '', pos: p.pos || '',
-            price: p.price || 0, critical: p.critical || false, is_incomplete: false,
-          }).eq('erp', p.erp.trim());
-        }
+      const existingItems = toApprove.filter(p => existingErpSet.has(p.erp.trim()));
+      for (const p of existingItems) {
+        await supabase.from('inventory').update({
+          name: p.name, name_zh: p.name_zh || '', category: p.category || '',
+          unit: p.unit || 'Cái (PCS)', spec: p.spec || '', pos: p.pos || '',
+          price: p.price || 0, critical: p.critical || false, is_incomplete: false,
+        }).eq('erp', p.erp.trim());
       }
-      // Insert inbound records for items with order_id + qty
-      const inboundRecords = validItems
-        .filter(p => p.order_id && p.qty > 0)
-        .map(p => ({
-          order_id: p.order_id, erp_code: p.erp.trim(), qty: p.qty,
-          unit: p.unit, location: p.pos, status: 'Stocked',
-          date: p.date || new Date().toISOString().split('T')[0],
-          time: new Date().toLocaleTimeString(),
-        }));
+      const inboundRecords = toApprove.filter(p => p.order_id && p.qty > 0).map(p => ({
+        order_id: p.order_id, erp_code: p.erp.trim(), qty: p.qty,
+        unit: p.unit, location: p.pos, status: 'Stocked',
+        date: p.date || new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString(),
+      }));
       for (let i = 0; i < inboundRecords.length; i += CHUNK) {
         await supabase.from('inbound_records').insert(inboundRecords.slice(i, i + CHUNK));
       }
-      // Delete approved items from pending
-      const validIds = validItems.map(p => p.id);
-      for (let i = 0; i < validIds.length; i += CHUNK) {
-        await supabase.from('inbound_upload_pending').delete().in('id', validIds.slice(i, i + CHUNK));
+      const ids = toApprove.map(p => p.id);
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        await supabase.from('inbound_upload_pending').delete().in('id', ids.slice(i, i + CHUNK));
       }
-      alert(`✅ Đã xác nhận ${validItems.length} item!${inboundRecords.length > 0 ? ` (${inboundRecords.length} phiếu nhập)` : ''}`);
+      setSelectedPendingIds([]);
+      alert(`✅ Đã xác nhận ${toApprove.length} item!`);
       fetchPendingInbound();
       fetchItemsByDate();
     } catch (err: any) {
@@ -871,15 +858,16 @@ const ItemManagement = () => {
     }
   };
 
-  const bulkDeleteAllPending = async () => {
-    if (!window.confirm(`Xóa TẤT CẢ ${pendingItems.length} item đang chờ xử lý?\nHành động này không thể hoàn tác.`)) return;
+  const bulkDeleteSelected = async () => {
+    if (selectedPendingIds.length === 0) return;
+    if (!window.confirm(`Xóa ${selectedPendingIds.length} item đã chọn khỏi tab chờ xử lý?\nDữ liệu đã nhập kho trước đó không bị ảnh hưởng.`)) return;
     setBulkPendingLoading(true);
     try {
-      const CHUNK = 500;
-      const ids = pendingItems.map(p => p.id);
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        await supabase.from('inbound_upload_pending').delete().in('id', ids.slice(i, i + CHUNK));
+      const CHUNK = 200;
+      for (let i = 0; i < selectedPendingIds.length; i += CHUNK) {
+        await supabase.from('inbound_upload_pending').delete().in('id', selectedPendingIds.slice(i, i + CHUNK));
       }
+      setSelectedPendingIds([]);
       fetchPendingInbound();
     } catch (err: any) {
       alert('Lỗi: ' + err.message);
@@ -887,7 +875,6 @@ const ItemManagement = () => {
       setBulkPendingLoading(false);
     }
   };
-
 
   const filteredPendingItems = React.useMemo(() => {
     if (!pendingSearch.trim()) return pendingItems;
@@ -940,30 +927,35 @@ const ItemManagement = () => {
               <span className="material-symbols-outlined text-amber-500 text-2xl shrink-0">warning</span>
               <div>
                 <p className="text-sm font-bold text-on-surface">Dữ liệu cần xem xét trước khi nhập kho</p>
-                <p className="text-xs text-on-surface-variant mt-0.5">Bao gồm: thiếu ERP/Tên, trùng mã ERP trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">Bao gồm: thiếu ERP/Tên, trùng hoàn toàn trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
               </div>
             </div>
-            {pendingItems.length > 0 && (
-              <div className="flex gap-2 shrink-0">
+          </div>
+
+          {selectedPendingIds.length > 0 && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-primary/5 border border-primary/20 rounded-xl">
+              <span className="text-xs font-bold text-primary">Đã chọn {selectedPendingIds.length} mục</span>
+              <div className="flex gap-2 ml-auto">
                 <button
-                  onClick={bulkApproveAllPending}
+                  onClick={bulkApproveSelected}
                   disabled={bulkPendingLoading}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-50 shadow-sm"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-sm">check_circle</span>
-                  Xác nhận tất cả ({pendingItems.filter(p => p.erp?.trim() && p.name?.trim()).length})
+                  Xác nhận ({pendingItems.filter(p => selectedPendingIds.includes(p.id) && p.erp?.trim() && p.name?.trim()).length})
                 </button>
                 <button
-                  onClick={bulkDeleteAllPending}
+                  onClick={bulkDeleteSelected}
                   disabled={bulkPendingLoading}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-error/10 text-error rounded-xl text-xs font-bold hover:bg-error/20 transition-colors disabled:opacity-50 border border-error/20"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-error/10 text-error rounded-lg text-xs font-bold hover:bg-error/20 transition-colors disabled:opacity-50 border border-error/20"
                 >
                   <span className="material-symbols-outlined text-sm">delete_sweep</span>
-                  Xóa tất cả ({pendingItems.length})
+                  Xóa ({selectedPendingIds.length})
                 </button>
+                <button onClick={() => setSelectedPendingIds([])} className="px-2 py-1.5 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors">Bỏ chọn</button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between mb-3 px-1">
             <div className="flex items-center gap-1.5">
@@ -1003,6 +995,13 @@ const ItemManagement = () => {
                 <table className="w-full text-sm text-left">
                   <thead>
                     <tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/20">
+                      <th className="px-3 py-3 w-8">
+                        <input type="checkbox"
+                          className="rounded border-outline-variant/30 text-amber-500 w-3.5 h-3.5 focus:ring-amber-500/20"
+                          checked={filteredPendingItems.length > 0 && filteredPendingItems.every(p => selectedPendingIds.includes(p.id))}
+                          onChange={e => setSelectedPendingIds(e.target.checked ? filteredPendingItems.map(p => p.id) : [])}
+                        />
+                      </th>
                       <th className="px-4 py-3">Mã ERP</th>
                       <th className="px-4 py-3">Tên vật tư</th>
                       <th className="px-4 py-3 hidden md:table-cell">Quy Cách</th>
@@ -1015,7 +1014,14 @@ const ItemManagement = () => {
                   </thead>
                   <tbody>
                     {filteredPendingItems.map((p) => (
-                      <tr key={p.id} onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="border-t border-outline-variant/10 hover:bg-amber-500/5 cursor-pointer">
+                      <tr key={p.id} onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className={`border-t border-outline-variant/10 hover:bg-amber-500/5 cursor-pointer ${selectedPendingIds.includes(p.id) ? 'bg-amber-500/5' : ''}`}>
+                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                          <input type="checkbox"
+                            className="rounded border-outline-variant/30 text-amber-500 w-3.5 h-3.5 focus:ring-amber-500/20"
+                            checked={selectedPendingIds.includes(p.id)}
+                            onChange={() => setSelectedPendingIds(prev => prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id])}
+                          />
+                        </td>
                         <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
                         <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>
                         <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>

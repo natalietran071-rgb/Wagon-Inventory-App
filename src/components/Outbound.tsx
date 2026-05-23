@@ -1569,21 +1569,15 @@ const Outbound = () => {
                   <p className="text-sm text-on-surface"><span className="font-bold">Lệnh xuất bị lỗi khi tạo hàng loạt</span> — sửa thông tin rồi bấm Xác nhận để tạo lệnh xuất chính thức.</p>
                 </div>
                 <div className="flex items-center justify-between mb-3 px-1">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-on-surface-variant">Tổng lệnh:</span>
-                      <span className="px-2.5 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-black">{pendingOutboundCount}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-on-surface-variant">Tổng SL xuất:</span>
-                      <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-black">
-                        {pendingOutbound.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}
-                      </span>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-on-surface-variant">Tổng SL cần xuất:</span>
+                    <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-black">
+                      {pendingOutbound.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}
+                    </span>
                   </div>
                   {pendingOutboundSearch.trim() && (
                     <span className="text-xs text-on-surface-variant">
-                      Đang lọc: <strong className="text-primary">{filteredPendingOutbound.length}</strong> / {pendingOutboundCount}
+                      Lọc: <strong className="text-primary">{filteredPendingOutbound.length}</strong> / {pendingOutboundCount} lệnh
                       {' · SL: '}<strong className="text-primary">{filteredPendingOutbound.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}</strong>
                     </span>
                   )}

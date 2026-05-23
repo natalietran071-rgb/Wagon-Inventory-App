@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -14,6 +14,8 @@ type MasterItem = {
 
 type Toast = { msg: string; error?: boolean };
 
+const PAGE_SIZE = 50;
+
 const MasterERP = () => {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'admin' || profile?.role === 'editor';
@@ -23,22 +25,43 @@ const MasterERP = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [missingName, setMissingName] = useState(0);
+  const [missingSpec, setMissingSpec] = useState(0);
   const [page, setPage] = useState(0);
-  const PAGE_SIZE = 50;
 
   // Upload state
   const [parsedRows, setParsedRows] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit state
+  const [editItem, setEditItem] = useState<MasterItem | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', name_zh: '', spec: '', unit: '' });
+
+  // Delete-all confirm state
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const showToast = (msg: string, error = false) => {
     setToast({ msg, error });
-    setTimeout(() => setToast(null), 3500);
+    setTimeout(() => setToast(null), 4000);
   };
 
-  const fetchItems = async (search = searchQuery, pg = page) => {
+  const fetchStats = useCallback(async () => {
+    const [{ count: total }, { count: noName }, { count: noSpec }] = await Promise.all([
+      supabase.from('master_erp').select('*', { count: 'exact', head: true }),
+      supabase.from('master_erp').select('*', { count: 'exact', head: true }).is('name', null),
+      supabase.from('master_erp').select('*', { count: 'exact', head: true }).is('spec', null),
+    ]);
+    setTotalCount(total || 0);
+    setMissingName(noName || 0);
+    setMissingSpec(noSpec || 0);
+  }, []);
+
+  const fetchItems = useCallback(async (search = searchQuery, pg = page) => {
     setLoading(true);
     try {
       let query = supabase
@@ -56,15 +79,18 @@ const MasterERP = () => {
       const { data, error, count } = await query;
       if (error) throw error;
       setItems(data || []);
-      setTotalCount(count || 0);
+      if (!search.trim()) setTotalCount(count || 0);
+      else setTotalCount(count || 0);
     } catch (err: any) {
       showToast('Lỗi tải dữ liệu: ' + err.message, true);
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, page]);
 
   useEffect(() => { fetchItems(); }, [page]);
+
+  useEffect(() => { fetchStats(); }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,17 +110,16 @@ const MasterERP = () => {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-      // Flexible column mapping with Unicode normalization + partial fallback
+      if (raw.length === 0) { showToast('File không có dữ liệu', true); return; }
+
       const norm = (s: string) => s.trim().toLowerCase().normalize('NFC');
       const rowKeys = Object.keys(raw[0] || {});
 
       const findCol = (keys: string[]): string | undefined => {
-        // 1. exact match (after normalize)
         for (const k of keys) {
           const hit = rowKeys.find(c => norm(c) === norm(k));
           if (hit) return hit;
         }
-        // 2. partial/contains match
         for (const k of keys) {
           const nk = norm(k);
           const hit = rowKeys.find(c => norm(c).includes(nk) || nk.includes(norm(c)));
@@ -103,15 +128,14 @@ const MasterERP = () => {
         return undefined;
       };
 
-      const erpCol   = findCol(['Mã ERP', 'mã erp', 'ERP', 'erp', 'MÃ ERP', 'ma erp', 'Mã Hàng ERP', 'mã hàng erp']);
-      const nameCol  = findCol(['Tên Tiếng Việt', 'tên tiếng việt', 'Tên SP', 'tên sp', 'Tên Vật Tư', 'tên vật tư', 'Tên Hàng', 'tên hàng', 'name', 'tên', 'Tên']);
-      const zhCol    = findCol(['Tên Tiếng Trung', 'tên tiếng trung', 'name_zh', 'Tên Trung', 'tên trung', 'Tên TQ', 'tên tq']);
-      const specCol  = findCol(['Quy Cách', 'quy cách', 'QUY CÁCH', 'spec', 'Quy cách', 'Specifications']);
-      const unitCol  = findCol(['Đơn Tính', 'đơn tính', 'ĐVT', 'đvt', 'ĐƠN TÍNH', 'unit', 'đơn vị', 'Đơn vị', 'DVT']);
+      const erpCol  = findCol(['Mã ERP', 'mã erp', 'ERP', 'erp', 'MÃ ERP', 'ma erp', 'Mã Hàng ERP', 'mã hàng erp', 'Mã vật tư']);
+      const nameCol = findCol(['Tên Tiếng Việt', 'tên tiếng việt', 'Tên SP', 'tên sp', 'Tên Vật Tư', 'tên vật tư', 'Tên Hàng', 'tên hàng', 'name', 'tên', 'Tên']);
+      const zhCol   = findCol(['Tên Tiếng Trung', 'tên tiếng trung', 'name_zh', 'Tên Trung', 'tên trung', 'Tên TQ', 'tên tq']);
+      const specCol = findCol(['Quy Cách', 'quy cách', 'QUY CÁCH', 'spec', 'Specifications']);
+      const unitCol = findCol(['Đơn Tính', 'đơn tính', 'ĐVT', 'đvt', 'ĐƠN TÍNH', 'unit', 'đơn vị', 'Đơn vị', 'DVT']);
 
       if (!erpCol) {
-        const found = rowKeys.slice(0, 8).join(', ');
-        showToast(`Không tìm thấy cột Mã ERP. Cột trong file: ${found}`, true);
+        showToast(`Không tìm thấy cột Mã ERP. Cột trong file: ${rowKeys.slice(0, 8).join(', ')}`, true);
         return;
       }
 
@@ -126,10 +150,10 @@ const MasterERP = () => {
           spec:    getCell(row, specCol),
           unit:    getCell(row, unitCol),
         }))
-        .filter(r => r.erp && r.erp !== '#N/A' && r.erp !== 'N/A' && r.erp !== '');
+        .filter(r => r.erp && r.erp !== '#N/A' && r.erp !== 'N/A');
 
       if (rows.length === 0) {
-        showToast('Không tìm thấy dữ liệu hợp lệ trong file', true);
+        showToast('Không có dòng hợp lệ (cột Mã ERP trống hoặc #N/A)', true);
         return;
       }
       setParsedRows(rows);
@@ -142,40 +166,40 @@ const MasterERP = () => {
     }
   };
 
-  // ── Confirm upload ────────────────────────────────────────
+  // ── Confirm upload via RPC (no row limit) ─────────────────
   const confirmUpload = async () => {
     if (!parsedRows.length) return;
     setUploading(true);
     setUploadProgress(0);
+    setUploadStatus('');
     try {
-      const CHUNK = 500;
+      const CHUNK = 3000;
       let done = 0;
       for (let i = 0; i < parsedRows.length; i += CHUNK) {
         const chunk = parsedRows.slice(i, i + CHUNK).map(r => ({
-          erp: r.erp,
-          name: r.name || null,
+          erp:     r.erp,
+          name:    r.name || null,
           name_zh: r.name_zh || null,
-          spec: r.spec || null,
-          unit: r.unit || null,
-          updated_at: new Date().toISOString(),
+          spec:    r.spec || null,
+          unit:    r.unit || null,
         }));
-        const { error } = await supabase
-          .from('master_erp')
-          .upsert(chunk, { onConflict: 'erp' });
+        setUploadStatus(`Đang xử lý ${done + 1}–${Math.min(done + CHUNK, parsedRows.length)} / ${parsedRows.length.toLocaleString()}...`);
+        const { error } = await supabase.rpc('bulk_upsert_master_erp', { items: chunk });
         if (error) throw error;
         done += chunk.length;
         setUploadProgress(Math.round((done / parsedRows.length) * 100));
       }
-      showToast(`✅ Đã cập nhật ${parsedRows.length.toLocaleString()} mã ERP vào Master`);
+      showToast(`Đã cập nhật ${parsedRows.length.toLocaleString()} mã ERP`);
       setShowPreview(false);
       setParsedRows([]);
       setPage(0);
-      fetchItems(searchQuery, 0);
+      await Promise.all([fetchItems(searchQuery, 0), fetchStats()]);
     } catch (err: any) {
       showToast('Lỗi upload: ' + err.message, true);
     } finally {
       setUploading(false);
       setUploadProgress(0);
+      setUploadStatus('');
     }
   };
 
@@ -194,20 +218,57 @@ const MasterERP = () => {
     XLSX.writeFile(wb, 'Template_Master_ERP.xlsx');
   };
 
-  // ── Delete item ───────────────────────────────────────────
+  // ── Edit item ─────────────────────────────────────────────
+  const openEdit = (item: MasterItem) => {
+    setEditItem(item);
+    setEditForm({
+      name:    item.name    || '',
+      name_zh: item.name_zh || '',
+      spec:    item.spec    || '',
+      unit:    item.unit    || '',
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editItem) return;
+    const { error } = await supabase
+      .from('master_erp')
+      .update({
+        name:       editForm.name.trim()    || null,
+        name_zh:    editForm.name_zh.trim() || null,
+        spec:       editForm.spec.trim()    || null,
+        unit:       editForm.unit.trim()    || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', editItem.id);
+    if (error) { showToast('Lỗi cập nhật: ' + error.message, true); return; }
+    showToast(`Đã cập nhật ${editItem.erp}`);
+    setEditItem(null);
+    await Promise.all([fetchItems(), fetchStats()]);
+  };
+
+  // ── Delete single ─────────────────────────────────────────
   const handleDelete = async (id: string, erp: string) => {
     if (!window.confirm(`Xóa mã ERP "${erp}" khỏi Master?`)) return;
     const { error } = await supabase.from('master_erp').delete().eq('id', id);
     if (error) { showToast('Lỗi xóa: ' + error.message, true); return; }
     showToast(`Đã xóa ${erp}`);
-    fetchItems();
+    await Promise.all([fetchItems(), fetchStats()]);
   };
 
-  const stats = useMemo(() => ({
-    total: totalCount,
-    missingName: items.filter(i => !i.name).length,
-    missingSpec: items.filter(i => !i.spec).length,
-  }), [items, totalCount]);
+  // ── Delete all ────────────────────────────────────────────
+  const handleDeleteAll = async () => {
+    if (deleteConfirmText !== 'XÓA TẤT CẢ') return;
+    const { error } = await supabase.from('master_erp').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) { showToast('Lỗi xóa: ' + error.message, true); return; }
+    showToast('Đã xóa toàn bộ Master ERP');
+    setShowDeleteAll(false);
+    setDeleteConfirmText('');
+    setItems([]);
+    setTotalCount(0);
+    setMissingName(0);
+    setMissingSpec(0);
+  };
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -227,7 +288,16 @@ const MasterERP = () => {
           <p className="text-sm text-on-surface-variant mt-1">Danh sách mã ERP chuẩn — nguồn đối chiếu cho nhập/xuất kho</p>
         </div>
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {totalCount > 0 && (
+              <button
+                onClick={() => setShowDeleteAll(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-error/40 text-sm font-bold text-error hover:bg-error/10 transition-colors"
+              >
+                <span className="material-symbols-outlined text-base">delete_sweep</span>
+                Xóa tất cả
+              </button>
+            )}
             <button
               onClick={downloadTemplate}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/40 text-sm font-bold text-on-surface-variant hover:bg-surface-container transition-colors"
@@ -245,18 +315,18 @@ const MasterERP = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-surface-container rounded-2xl p-5">
           <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Tổng mã ERP</p>
           <p className="text-3xl font-extrabold text-primary">{totalCount.toLocaleString()}</p>
         </div>
         <div className="bg-surface-container rounded-2xl p-5">
-          <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Thiếu tên</p>
-          <p className="text-3xl font-extrabold text-error">{stats.missingName.toLocaleString()}</p>
+          <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Thiếu tên VN</p>
+          <p className="text-3xl font-extrabold text-error">{missingName.toLocaleString()}</p>
         </div>
-        <div className="bg-surface-container rounded-2xl p-5 col-span-2 md:col-span-1">
+        <div className="bg-surface-container rounded-2xl p-5">
           <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Thiếu quy cách</p>
-          <p className="text-3xl font-extrabold text-tertiary">{stats.missingSpec.toLocaleString()}</p>
+          <p className="text-3xl font-extrabold text-tertiary">{missingSpec.toLocaleString()}</p>
         </div>
       </div>
 
@@ -267,7 +337,7 @@ const MasterERP = () => {
           <input
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Tìm mã ERP, tên, quy cách..."
+            placeholder="Tìm mã ERP, tên Việt, tên Trung, quy cách..."
             className="w-full pl-10 pr-4 py-2.5 bg-surface-container rounded-xl text-sm text-on-surface placeholder-on-surface-variant/40 border border-outline-variant/30 focus:outline-none focus:border-primary/50"
           />
         </div>
@@ -276,7 +346,7 @@ const MasterERP = () => {
         </button>
         {searchQuery && (
           <button type="button" onClick={() => { setSearchQuery(''); setPage(0); fetchItems('', 0); }} className="px-4 py-2.5 bg-surface-container rounded-xl text-sm font-bold hover:bg-surface-container-high transition-colors">
-            Xóa
+            Xóa lọc
           </button>
         )}
       </form>
@@ -293,7 +363,7 @@ const MasterERP = () => {
                 <th className="px-4 py-4 hidden lg:table-cell">Quy Cách</th>
                 <th className="px-4 py-4 hidden xl:table-cell">Đơn Tính</th>
                 <th className="px-4 py-4 hidden xl:table-cell">Cập nhật</th>
-                {canEdit && <th className="px-4 py-4 text-right">Xóa</th>}
+                {canEdit && <th className="px-4 py-4 text-right">Thao tác</th>}
               </tr>
             </thead>
             <tbody className="text-sm">
@@ -315,7 +385,7 @@ const MasterERP = () => {
                   <td className="px-4 py-3">
                     {item.name
                       ? <span className="font-medium text-on-surface">{item.name}</span>
-                      : <span className="text-outline-variant/40 italic text-xs">—</span>
+                      : <span className="text-error/50 italic text-xs">Chưa có tên</span>
                     }
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{item.name_zh || <span className="text-outline-variant/40">—</span>}</td>
@@ -328,9 +398,14 @@ const MasterERP = () => {
                   </td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => handleDelete(item.id, item.erp)} className="p-1.5 rounded-lg text-outline-variant hover:text-error hover:bg-error/10 transition-colors">
-                        <span className="material-symbols-outlined text-base">delete</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa">
+                          <span className="material-symbols-outlined text-base">edit</span>
+                        </button>
+                        <button onClick={() => handleDelete(item.id, item.erp)} className="p-1.5 rounded-lg text-outline-variant hover:text-error hover:bg-error/10 transition-colors" title="Xóa">
+                          <span className="material-symbols-outlined text-base">delete</span>
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -343,17 +418,125 @@ const MasterERP = () => {
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-outline-variant/10 text-sm">
             <span className="text-on-surface-variant text-xs">
-              {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} / {totalCount.toLocaleString()}
+              {(page * PAGE_SIZE + 1).toLocaleString()}–{Math.min((page + 1) * PAGE_SIZE, totalCount).toLocaleString()} / {totalCount.toLocaleString()}
             </span>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage(0)} disabled={page === 0} className="px-3 py-1.5 rounded-lg bg-surface-container disabled:opacity-30 font-bold text-xs hover:bg-surface-container-high transition-colors">«</button>
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-3 py-1.5 rounded-lg bg-surface-container disabled:opacity-30 font-bold text-xs hover:bg-surface-container-high transition-colors">← Trước</button>
+              <span className="text-xs text-on-surface-variant px-2">Trang {page + 1} / {totalPages}</span>
               <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-3 py-1.5 rounded-lg bg-surface-container disabled:opacity-30 font-bold text-xs hover:bg-surface-container-high transition-colors">Sau →</button>
+              <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} className="px-3 py-1.5 rounded-lg bg-surface-container disabled:opacity-30 font-bold text-xs hover:bg-surface-container-high transition-colors">»</button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Upload Preview Modal */}
+      {/* ── Edit Modal ─────────────────────────────────────────── */}
+      {editItem && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-3xl w-full max-w-lg shadow-2xl">
+            <div className="p-6 border-b border-outline-variant/20 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-extrabold text-on-surface">Sửa thông tin</h2>
+                <p className="text-xs font-mono text-primary mt-0.5">{editItem.erp}</p>
+              </div>
+              <button onClick={() => setEditItem(null)} className="p-2 rounded-xl hover:bg-surface-container transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-6 flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1.5 block">Tên Tiếng Việt</label>
+                <input
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-surface-container rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary/50"
+                  placeholder="Tên sản phẩm tiếng Việt"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1.5 block">Tên Tiếng Trung</label>
+                <input
+                  value={editForm.name_zh}
+                  onChange={e => setEditForm(f => ({ ...f, name_zh: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-surface-container rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary/50"
+                  placeholder="中文名称"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1.5 block">Quy Cách</label>
+                  <input
+                    value={editForm.spec}
+                    onChange={e => setEditForm(f => ({ ...f, spec: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-surface-container rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary/50"
+                    placeholder="VD: M4×25mm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1.5 block">Đơn Tính</label>
+                  <input
+                    value={editForm.unit}
+                    onChange={e => setEditForm(f => ({ ...f, unit: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-surface-container rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:outline-none focus:border-primary/50"
+                    placeholder="VD: Cái, Kg, M"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-outline-variant/20 flex gap-3 justify-end">
+              <button onClick={() => setEditItem(null)} className="px-5 py-2.5 rounded-xl border border-outline-variant/40 font-bold text-sm">
+                Hủy
+              </button>
+              <button onClick={saveEdit} className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm flex items-center gap-2">
+                <span className="material-symbols-outlined text-base">save</span>
+                Lưu thay đổi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete All Modal ──────────────────────────────────── */}
+      {showDeleteAll && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-3xl w-full max-w-md shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="material-symbols-outlined text-error text-3xl">warning</span>
+                <div>
+                  <h2 className="text-lg font-extrabold text-on-surface">Xóa toàn bộ Master ERP?</h2>
+                  <p className="text-sm text-on-surface-variant mt-0.5">Hành động này không thể hoàn tác</p>
+                </div>
+              </div>
+              <p className="text-sm text-on-surface-variant mb-4">
+                Sẽ xóa <span className="font-bold text-error">{totalCount.toLocaleString()} mã ERP</span>. Gõ <span className="font-mono font-bold">XÓA TẤT CẢ</span> để xác nhận:
+              </p>
+              <input
+                value={deleteConfirmText}
+                onChange={e => setDeleteConfirmText(e.target.value)}
+                className="w-full px-4 py-2.5 bg-surface-container rounded-xl text-sm font-mono border border-error/30 focus:outline-none focus:border-error/60 mb-4"
+                placeholder="XÓA TẤT CẢ"
+              />
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => { setShowDeleteAll(false); setDeleteConfirmText(''); }} className="px-5 py-2.5 rounded-xl border border-outline-variant/40 font-bold text-sm">
+                  Hủy
+                </button>
+                <button
+                  onClick={handleDeleteAll}
+                  disabled={deleteConfirmText !== 'XÓA TẤT CẢ'}
+                  className="px-5 py-2.5 rounded-xl bg-error text-on-error font-bold text-sm disabled:opacity-40 flex items-center gap-2 transition-opacity"
+                >
+                  <span className="material-symbols-outlined text-base">delete_forever</span>
+                  Xóa tất cả
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Upload Preview Modal ──────────────────────────────── */}
       {showPreview && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-surface rounded-3xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl">
@@ -361,10 +544,10 @@ const MasterERP = () => {
               <div>
                 <h2 className="text-lg font-extrabold text-on-surface">Xác nhận upload Master ERP</h2>
                 <p className="text-sm text-on-surface-variant mt-0.5">
-                  {parsedRows.length.toLocaleString()} mã ERP — mã đã có sẽ được cập nhật, mã mới sẽ được thêm
+                  <span className="font-bold text-primary">{parsedRows.length.toLocaleString()}</span> mã ERP — mã đã có sẽ được cập nhật, mã mới sẽ được thêm
                 </p>
               </div>
-              <button onClick={() => { setShowPreview(false); setParsedRows([]); }} className="p-2 rounded-xl hover:bg-surface-container transition-colors">
+              <button onClick={() => { setShowPreview(false); setParsedRows([]); }} disabled={uploading} className="p-2 rounded-xl hover:bg-surface-container transition-colors disabled:opacity-40">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
@@ -373,6 +556,7 @@ const MasterERP = () => {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
+                    <th className="px-3 py-2 text-left">#</th>
                     <th className="px-3 py-2 text-left">Mã ERP</th>
                     <th className="px-3 py-2 text-left">Tên Tiếng Việt</th>
                     <th className="px-3 py-2 text-left hidden md:table-cell">Tên Tiếng Trung</th>
@@ -381,17 +565,22 @@ const MasterERP = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {parsedRows.slice(0, 50).map((r, i) => (
+                  {parsedRows.slice(0, 100).map((r, i) => (
                     <tr key={i} className="border-t border-outline-variant/10">
-                      <td className="px-3 py-2 font-mono font-bold text-primary">{r.erp}</td>
-                      <td className="px-3 py-2">{r.name || <span className="text-error/60 italic">Trống</span>}</td>
-                      <td className="px-3 py-2 hidden md:table-cell text-on-surface-variant">{r.name_zh || '—'}</td>
-                      <td className="px-3 py-2 hidden md:table-cell text-on-surface-variant">{r.spec || '—'}</td>
-                      <td className="px-3 py-2">{r.unit || '—'}</td>
+                      <td className="px-3 py-1.5 text-on-surface-variant/40">{i + 1}</td>
+                      <td className="px-3 py-1.5 font-mono font-bold text-primary">{r.erp}</td>
+                      <td className="px-3 py-1.5">{r.name || <span className="text-error/60 italic">Trống</span>}</td>
+                      <td className="px-3 py-1.5 hidden md:table-cell text-on-surface-variant">{r.name_zh || '—'}</td>
+                      <td className="px-3 py-1.5 hidden md:table-cell text-on-surface-variant">{r.spec || '—'}</td>
+                      <td className="px-3 py-1.5">{r.unit || '—'}</td>
                     </tr>
                   ))}
-                  {parsedRows.length > 50 && (
-                    <tr><td colSpan={5} className="px-3 py-2 text-center text-on-surface-variant/50 italic">... và {parsedRows.length - 50} dòng nữa</td></tr>
+                  {parsedRows.length > 100 && (
+                    <tr>
+                      <td colSpan={6} className="px-3 py-2 text-center text-on-surface-variant/50 italic text-xs">
+                        ... và {(parsedRows.length - 100).toLocaleString()} dòng nữa
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -399,10 +588,10 @@ const MasterERP = () => {
 
             {uploading && (
               <div className="px-6 pb-2">
-                <div className="w-full bg-surface-container rounded-full h-2">
-                  <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                <div className="w-full bg-surface-container rounded-full h-2.5">
+                  <div className="bg-primary h-2.5 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
                 </div>
-                <p className="text-xs text-on-surface-variant mt-1 text-center">{uploadProgress}%</p>
+                <p className="text-xs text-on-surface-variant mt-1.5 text-center">{uploadStatus || `${uploadProgress}%`}</p>
               </div>
             )}
 
@@ -411,7 +600,10 @@ const MasterERP = () => {
                 Hủy
               </button>
               <button onClick={confirmUpload} disabled={uploading} className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm disabled:opacity-50 flex items-center gap-2">
-                {uploading ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> Đang upload...</> : <><span className="material-symbols-outlined text-base">upload</span> Xác nhận Upload</>}
+                {uploading
+                  ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> Đang upload...</>
+                  : <><span className="material-symbols-outlined text-base">upload</span> Xác nhận Upload</>
+                }
               </button>
             </div>
           </div>

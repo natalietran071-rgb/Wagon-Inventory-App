@@ -573,18 +573,23 @@ const ItemManagement = () => {
 
       setMissingCount(missing);
 
-      // Detect duplicate ERPs within the same file (among valid items)
-      const erpCounts = new Map<string, number>();
+      // Detect fully duplicate rows within the same file — all of: erp + order + date + qty must match
+      // Items with same ERP but different date/order/qty are NOT duplicates and go to inventory normally
+      const fullDupKeys = new Map<string, number>();
       itemsToInsert.forEach(item => {
         if (!item.is_incomplete) {
-          erpCounts.set(item.erp, (erpCounts.get(item.erp) || 0) + 1);
+          const key = [item.erp, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
+          fullDupKeys.set(key, (fullDupKeys.get(key) || 0) + 1);
         }
       });
       let fileDupCount = 0;
       itemsToInsert.forEach(item => {
-        if (!item.is_incomplete && (erpCounts.get(item.erp) || 0) > 1) {
-          item._is_file_duplicate = true;
-          fileDupCount++;
+        if (!item.is_incomplete) {
+          const key = [item.erp, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
+          if ((fullDupKeys.get(key) || 0) > 1) {
+            item._is_file_duplicate = true;
+            fileDupCount++;
+          }
         }
       });
       setDuplicateCount(fileDupCount);
@@ -813,7 +818,7 @@ const ItemManagement = () => {
     missing_erp: 'Thiếu Mã ERP',
     missing_name: 'Thiếu Tên vật tư',
     missing_erp_and_name: 'Thiếu ERP & Tên',
-    duplicate_erp_in_file: 'Trùng ERP trong file',
+    duplicate_erp_in_file: 'Trùng hoàn toàn trong file',
     name_mismatch_with_master: 'Tên khác Master ERP',
   };
 

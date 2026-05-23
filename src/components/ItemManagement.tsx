@@ -50,6 +50,8 @@ const ItemManagement = () => {
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [editingPending, setEditingPending] = useState<any | null>(null);
+  const [showPendingModal, setShowPendingModal] = useState(false);
+  const [pendingModalSaving, setPendingModalSaving] = useState(false);
 
   const handleSelectRow = (erp: string) => {
     setSelectedRows(prev => prev.includes(erp) ? prev.filter(r => r !== erp) : [...prev, erp]);
@@ -85,26 +87,65 @@ const ItemManagement = () => {
       alert('Cần có Mã ERP và Tên vật tư trước khi xác nhận.');
       return;
     }
-    const invPayload = {
-      erp: p.erp.trim(), name: p.name, name_zh: p.name_zh, category: p.category,
-      unit: p.unit || 'Cái (PCS)', spec: p.spec, pos: p.pos,
-      start_stock: p.start_stock || 0, end_stock: p.start_stock || 0,
-      price: p.price || 0, critical: p.critical || false,
-      in_qty: 0, out_qty: 0, created_at: new Date().toISOString(), is_incomplete: false,
-    };
-    const { error: invErr } = await supabase.from('inventory').upsert([invPayload], { onConflict: 'erp' });
-    if (invErr) { alert('Lỗi: ' + invErr.message); return; }
-    if (p.order_id && p.qty > 0) {
-      await supabase.from('inbound_records').insert([{
-        order_id: p.order_id, erp_code: p.erp.trim(), qty: p.qty,
-        unit: p.unit, location: p.pos, status: 'Stocked',
-        date: p.date || new Date().toISOString().split('T')[0],
-        time: new Date().toLocaleTimeString()
-      }]);
+    setPendingModalSaving(true);
+    try {
+      const erpTrimmed = p.erp.trim();
+      // Check if ERP already exists in inventory
+      const { data: existing } = await supabase.from('inventory').select('erp').eq('erp', erpTrimmed).maybeSingle();
+      if (existing) {
+        // Update existing record
+        const { error: updErr } = await supabase.from('inventory').update({
+          name: p.name, name_zh: p.name_zh, category: p.category,
+          unit: p.unit || 'Cái (PCS)', spec: p.spec, pos: p.pos,
+          price: p.price || 0, critical: p.critical || false, is_incomplete: false,
+          updated_at: new Date().toISOString(),
+        }).eq('erp', erpTrimmed);
+        if (updErr) { alert('Lỗi cập nhật: ' + updErr.message); setPendingModalSaving(false); return; }
+      } else {
+        // Insert new record
+        const { error: insErr } = await supabase.from('inventory').insert([{
+          erp: erpTrimmed, name: p.name, name_zh: p.name_zh, category: p.category,
+          unit: p.unit || 'Cái (PCS)', spec: p.spec, pos: p.pos,
+          start_stock: p.start_stock || 0, end_stock: p.start_stock || 0,
+          price: p.price || 0, critical: p.critical || false,
+          in_qty: 0, out_qty: 0, created_at: new Date().toISOString(), is_incomplete: false,
+        }]);
+        if (insErr) { alert('Lỗi thêm mới: ' + insErr.message); setPendingModalSaving(false); return; }
+      }
+      if (p.order_id && p.qty > 0) {
+        await supabase.from('inbound_records').insert([{
+          order_id: p.order_id, erp_code: erpTrimmed, qty: p.qty,
+          unit: p.unit, location: p.pos, status: 'Stocked',
+          date: p.date || new Date().toISOString().split('T')[0],
+          time: new Date().toLocaleTimeString()
+        }]);
+      }
+      await supabase.from('inbound_upload_pending').delete().eq('id', p.id);
+      setShowPendingModal(false);
+      setEditingPending(null);
+      fetchPendingInbound();
+      fetchItemsByDate();
+    } finally {
+      setPendingModalSaving(false);
     }
-    await supabase.from('inbound_upload_pending').delete().eq('id', p.id);
-    fetchPendingInbound();
-    fetchItemsByDate();
+  };
+
+  const savePendingOnly = async () => {
+    if (!editingPending) return;
+    setPendingModalSaving(true);
+    try {
+      const { error } = await supabase.from('inbound_upload_pending').update({
+        erp: editingPending.erp, name: editingPending.name, name_zh: editingPending.name_zh,
+        category: editingPending.category, unit: editingPending.unit, spec: editingPending.spec,
+        pos: editingPending.pos, start_stock: editingPending.start_stock, price: editingPending.price,
+      }).eq('id', editingPending.id);
+      if (error) { alert('Lỗi lưu: ' + error.message); return; }
+      setShowPendingModal(false);
+      setEditingPending(null);
+      fetchPendingInbound();
+    } finally {
+      setPendingModalSaving(false);
+    }
   };
 
   const fetchItemsByDate = async () => {
@@ -764,39 +805,19 @@ const ItemManagement = () => {
                   </thead>
                   <tbody>
                     {pendingItems.map((p) => (
-                      <tr key={p.id} className="border-t border-outline-variant/10 hover:bg-amber-500/5">
-                        {editingPending?.id === p.id ? (
-                          <>
-                            <td className="px-3 py-2"><input value={editingPending.erp} onChange={e => setEditingPending((x: any) => ({...x, erp: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded-lg text-xs font-mono border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
-                            <td className="px-3 py-2"><input value={editingPending.name} onChange={e => setEditingPending((x: any) => ({...x, name: e.target.value}))} className="w-40 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
-                            <td className="px-3 py-2 hidden md:table-cell"><input value={editingPending.spec} onChange={e => setEditingPending((x: any) => ({...x, spec: e.target.value}))} className="w-32 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
-                            <td className="px-3 py-2 hidden lg:table-cell text-on-surface-variant text-xs">{p.order_id || '—'}</td>
-                            <td className="px-3 py-2 hidden lg:table-cell text-on-surface-variant text-xs">{p.qty || 0}</td>
-                            <td className="px-3 py-2"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs">{PENDING_REASON[p.reason] || p.reason}</span></td>
-                            <td className="px-3 py-2 text-right">
-                              <div className="flex gap-1 justify-end">
-                                <button onClick={async () => { const upd = {...editingPending}; await supabase.from('inbound_upload_pending').update(upd).eq('id', p.id); setEditingPending(null); fetchPendingInbound(); }} className="px-2 py-1 bg-primary text-on-primary rounded-lg text-xs font-bold">Lưu</button>
-                                <button onClick={() => approvePendingInbound(editingPending)} className="px-2 py-1 bg-amber-500 text-white rounded-lg text-xs font-bold">Xác nhận</button>
-                                <button onClick={() => setEditingPending(null)} className="px-2 py-1 bg-surface-container rounded-lg text-xs">Hủy</button>
-                              </div>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
-                            <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>
-                            <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>
-                            <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.order_id || '—'}</td>
-                            <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.qty || 0}</td>
-                            <td className="px-4 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-semibold">{PENDING_REASON[p.reason] || p.reason}</span></td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex gap-1 justify-end">
-                                <button onClick={() => setEditingPending({...p})} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
-                                <button onClick={() => approvePendingInbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
-                              </div>
-                            </td>
-                          </>
-                        )}
+                      <tr key={p.id} onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="border-t border-outline-variant/10 hover:bg-amber-500/5 cursor-pointer">
+                        <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
+                        <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>
+                        <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>
+                        <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.order_id || '—'}</td>
+                        <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.qty || 0}</td>
+                        <td className="px-4 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-semibold">{PENDING_REASON[p.reason] || p.reason}</span></td>
+                        <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                          <div className="flex gap-1 justify-end">
+                            <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
+                            <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1263,6 +1284,94 @@ const ItemManagement = () => {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHỈNH SỬA PENDING */}
+      {showPendingModal && editingPending && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-scrim/50 backdrop-blur-sm" onClick={() => { setShowPendingModal(false); setEditingPending(null); }}>
+          <div className="bg-surface-container-lowest rounded-3xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 duration-200 overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-outline-variant/20 flex items-center justify-between bg-amber-500/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-amber-600">pending_actions</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-on-surface text-lg">Chỉnh sửa mục chờ xử lý</h3>
+                  <p className="text-xs text-on-surface-variant mt-0.5"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full font-semibold">{PENDING_REASON[editingPending.reason] || editingPending.reason}</span></p>
+                </div>
+              </div>
+              <button onClick={() => { setShowPendingModal(false); setEditingPending(null); }} className="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-error-container hover:text-on-error-container transition-colors">
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Mã ERP <span className="text-error">*</span></label>
+                  <input value={editingPending.erp || ''} onChange={e => setEditingPending((x: any) => ({...x, erp: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm font-mono border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Nhập mã ERP..." />
+                </div>
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Đơn Vị</label>
+                  <input value={editingPending.unit || ''} onChange={e => setEditingPending((x: any) => ({...x, unit: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Cái (PCS)..." />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tên Vật Tư (VN) <span className="text-error">*</span></label>
+                  <input value={editingPending.name || ''} onChange={e => setEditingPending((x: any) => ({...x, name: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Nhập tên tiếng Việt..." />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tên Vật Tư (CN)</label>
+                  <input value={editingPending.name_zh || ''} onChange={e => setEditingPending((x: any) => ({...x, name_zh: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Tên tiếng Trung..." />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Quy Cách</label>
+                  <input value={editingPending.spec || ''} onChange={e => setEditingPending((x: any) => ({...x, spec: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Kích thước, chất liệu..." />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Vị Trí</label>
+                  <input value={editingPending.pos || ''} onChange={e => setEditingPending((x: any) => ({...x, pos: e.target.value}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Zone-A..." />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tồn Đầu Kỳ</label>
+                  <input type="number" value={editingPending.start_stock || 0} onChange={e => setEditingPending((x: any) => ({...x, start_stock: parseInt(e.target.value) || 0}))}
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" />
+                </div>
+              </div>
+              {/* Read-only info */}
+              {(editingPending.order_id || editingPending.qty) && (
+                <div className="flex gap-3 bg-surface-container p-3 rounded-xl text-xs text-on-surface-variant">
+                  {editingPending.order_id && <span>Đơn nhập: <strong className="text-on-surface">{editingPending.order_id}</strong></span>}
+                  {editingPending.qty > 0 && <span>SL: <strong className="text-on-surface">{editingPending.qty}</strong></span>}
+                  {editingPending.date && <span>Ngày: <strong className="text-on-surface">{editingPending.date}</strong></span>}
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-outline-variant/20 flex gap-3 bg-surface-container-lowest">
+              <button onClick={() => { setShowPendingModal(false); setEditingPending(null); }} disabled={pendingModalSaving}
+                className="px-4 py-2.5 rounded-xl text-sm font-bold text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-50">
+                Đóng
+              </button>
+              <button onClick={savePendingOnly} disabled={pendingModalSaving}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined text-base">save</span>
+                {pendingModalSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
+              <button onClick={() => approvePendingInbound(editingPending)} disabled={pendingModalSaving}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
+                <span className="material-symbols-outlined text-base">check_circle</span>
+                {pendingModalSaving ? 'Đang xử lý...' : 'Xác nhận & Nhập kho'}
+              </button>
+            </div>
           </div>
         </div>
       )}

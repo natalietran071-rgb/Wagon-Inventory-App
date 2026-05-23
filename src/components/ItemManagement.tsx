@@ -406,7 +406,10 @@ const ItemManagement = () => {
         const inputErp = getVal(row, ['Mã ERP', 'Mã VT', 'Mã Vật Tư', 'Item Code'])?.toString().trim() || '';
         const name = getVal(row, ['Tên Vật Tư (VN)', 'Tên Vật Tư', 'Tên Hàng', 'Item Name'])?.toString().trim() || '';
         const startStock = parseInt(getVal(row, ['Tồn Đầu Kỳ', 'Tồn Đầu', 'Số Lượng', 'Qty', 'Start Stock'])) || 0;
-        const orderId = getVal(row, ['Mã Đơn Nhập Kho (Order ID)', 'Mã Đơn Nhập Kho', 'Order ID', 'Mã Đơn'])?.toString().trim() || '';
+        const rawOrderId = getVal(row, ['Mã Đơn Nhập Kho (Order ID)', 'Mã Đơn Nhập Kho', 'Order ID', 'Mã Đơn'])?.toString().trim() || '';
+        // "Opening Q'ty" and similar represent opening balance, not real inbound transactions
+        const isOpeningStock = rawOrderId && /opening|tồn\s*đầu|ton\s*dau|opening\s*q/i.test(rawOrderId);
+        const orderId = isOpeningStock ? '' : rawOrderId;
         const rawDate = getVal(row, ['Ngày Nhập Kho', 'Ngày Nhập', 'Date', 'Ngày']);
         
         // Parse date
@@ -445,15 +448,14 @@ const ItemManagement = () => {
           unit: getVal(row, ['Đơn Vị Tính', 'ĐVT', 'Unit'])?.toString().trim() || 'Cái (PCS)',
           spec: getVal(row, ['Quy Cách', 'Spec', 'Kích Thước'])?.toString().trim() || '',
           pos: getVal(row, ['Vị Trí', 'Location', 'Khu Vực'])?.toString().trim() || '',
-          start_stock: orderId ? 0 : startStock,
-          end_stock: orderId ? 0 : startStock,
+          start_stock: (rawOrderId && !isOpeningStock) ? 0 : startStock,
+          end_stock: (rawOrderId && !isOpeningStock) ? 0 : startStock,
           price: parseFloat(getVal(row, ['Đơn Giá', 'Price', 'Giá'])) || 0,
           critical: getVal(row, ['Vật Tư Quan Trọng (Y/N)', 'Vật Tư Quan Trọng', 'Critical'])?.toString().trim().toUpperCase() === 'Y',
           in_qty: 0,
           out_qty: 0,
           created_at: new Date().toISOString(),
           is_incomplete,
-          // Bắt các trường tạm thời để xử lý Nhập Kho sau
           _temp_order_id: orderId,
           _temp_qty: startStock,
           _temp_date: parsedDate

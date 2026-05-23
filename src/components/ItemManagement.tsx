@@ -44,6 +44,13 @@ const ItemManagement = () => {
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const [showDeleteSelectedConfirm, setShowDeleteSelectedConfirm] = useState(false);
 
+  // Pending tab state
+  const [activeMainTab, setActiveMainTab] = useState<'items' | 'pending'>('items');
+  const [pendingItems, setPendingItems] = useState<any[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [editingPending, setEditingPending] = useState<any | null>(null);
+
   const handleSelectRow = (erp: string) => {
     setSelectedRows(prev => prev.includes(erp) ? prev.filter(r => r !== erp) : [...prev, erp]);
   };
@@ -56,9 +63,49 @@ const ItemManagement = () => {
     }
   };
 
-  useEffect(() => {
+  useEffect(() => { fetchItemsByDate(); }, [fromDate, toDate]);
+
+  const fetchPendingInbound = async () => {
+    setPendingLoading(true);
+    try {
+      const { data, count } = await supabase
+        .from('inbound_upload_pending')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false });
+      setPendingItems(data || []);
+      setPendingCount(count || 0);
+    } catch (err) { console.error(err); }
+    finally { setPendingLoading(false); }
+  };
+
+  useEffect(() => { if (activeMainTab === 'pending') fetchPendingInbound(); }, [activeMainTab]);
+
+  const approvePendingInbound = async (p: any) => {
+    if (!p.erp?.trim() || !p.name?.trim()) {
+      alert('Cần có Mã ERP và Tên vật tư trước khi xác nhận.');
+      return;
+    }
+    const invPayload = {
+      erp: p.erp.trim(), name: p.name, name_zh: p.name_zh, category: p.category,
+      unit: p.unit || 'Cái (PCS)', spec: p.spec, pos: p.pos,
+      start_stock: p.start_stock || 0, end_stock: p.start_stock || 0,
+      price: p.price || 0, critical: p.critical || false,
+      in_qty: 0, out_qty: 0, created_at: new Date().toISOString(), is_incomplete: false,
+    };
+    const { error: invErr } = await supabase.from('inventory').upsert([invPayload], { onConflict: 'erp' });
+    if (invErr) { alert('Lỗi: ' + invErr.message); return; }
+    if (p.order_id && p.qty > 0) {
+      await supabase.from('inbound_records').insert([{
+        order_id: p.order_id, erp_code: p.erp.trim(), qty: p.qty,
+        unit: p.unit, location: p.pos, status: 'Stocked',
+        date: p.date || new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString()
+      }]);
+    }
+    await supabase.from('inbound_upload_pending').delete().eq('id', p.id);
+    fetchPendingInbound();
     fetchItemsByDate();
-  }, [fromDate, toDate]);
+  };
 
   const fetchItemsByDate = async () => {
     setLoading(true);
@@ -524,38 +571,50 @@ const ItemManagement = () => {
         }
       }
 
-      // === CORE LOGIC: Upsert all items with original ERP codes ===
-      // Duplicate ERPs in the file → upsert updates the same record (last row wins)
-      // Do NOT modify ERP codes with suffixes
-
-      // 1. Build inventory items with original ERP codes
+      // Route incomplete rows to pending, valid rows to inventory
       const inventoryItems: any[] = [];
+      const pendingToInsert: any[] = [];
 
       parsedItems.forEach(item => {
-        let finalErp = item.erp;
+        const hasErp  = item.erp && item.erp !== '0' && item.erp !== '#N/A' && item.erp !== 'N/A';
+        const hasName = !!item.name?.trim();
 
-        // Items without ERP get a temp code
-        if (!finalErp || finalErp === '0' || finalErp === '#N/A' || finalErp === 'N/A') {
-          finalErp = `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!hasErp || !hasName) {
+          pendingToInsert.push({
+            erp:         item.erp || '',
+            name:        item.name || '',
+            name_zh:     item.name_zh || '',
+            category:    item.category || '',
+            unit:        item.unit || 'Cái (PCS)',
+            spec:        item.spec || '',
+            pos:         item.pos || '',
+            start_stock: item.start_stock || 0,
+            price:       item.price || 0,
+            critical:    item.critical || false,
+            order_id:    item._temp_order_id || '',
+            qty:         item._temp_qty || 0,
+            date:        item._temp_date || '',
+            reason:      !hasErp && !hasName ? 'missing_erp_and_name' : !hasErp ? 'missing_erp' : 'missing_name',
+          });
+        } else {
+          inventoryItems.push({
+            erp:          item.erp,
+            name:         item.name,
+            name_zh:      item.name_zh,
+            category:     item.category,
+            unit:         item.unit,
+            spec:         item.spec,
+            pos:          item.pos,
+            price:        item.price,
+            critical:     item.critical,
+            start_stock:  item.start_stock || 0,
+            end_stock:    item.end_stock || 0,
+            in_qty:       0,
+            out_qty:      0,
+            created_at:   item.created_at,
+            is_incomplete: false,
+          });
         }
-
-        inventoryItems.push({
-          erp: finalErp,
-          name: item.name,
-          name_zh: item.name_zh,
-          category: item.category,
-          unit: item.unit,
-          spec: item.spec,
-          pos: item.pos,
-          price: item.price,
-          critical: item.critical,
-          start_stock: item.start_stock || 0,
-          end_stock: item.end_stock || 0,
-          in_qty: 0,
-          out_qty: 0,
-          created_at: item.created_at,
-          is_incomplete: item.is_incomplete || !item.name || !finalErp.match(/^[A-Z]/)
-        });
       });
 
       const chunkSize = 500;
@@ -611,12 +670,24 @@ const ItemManagement = () => {
          console.log(`Successfully created ${inboundSuccessCount} inbound records out of ${allInboundRecords.length}`);
       }
 
+      // Insert pending rows (don't insert with TEMP codes)
+      let pendingInserted = 0;
+      if (pendingToInsert.length > 0) {
+        const PCHUNK = 500;
+        for (let i = 0; i < pendingToInsert.length; i += PCHUNK) {
+          const { error: pErr } = await supabase.from('inbound_upload_pending').insert(pendingToInsert.slice(i, i + PCHUNK));
+          if (!pErr) pendingInserted += Math.min(PCHUNK, pendingToInsert.length - i);
+        }
+        setPendingCount(c => c + pendingInserted);
+      }
+
       setUploadProgress(100);
 
+      const pendingMsg = pendingInserted > 0 ? `\n⚠️ ${pendingInserted} dòng thiếu ERP/Tên → chuyển vào tab Chờ xử lý` : '';
       if (errorCount > 0) {
-        alert(`Tải lên hoàn tất nhưng có lỗi.\n\nThành công: ${successCount} item\nLỗi: ${errorCount} item\nTổng upload: ${parsedItems.length} dòng\nChi tiết lỗi cuối: ${lastError}`);
+        alert(`Tải lên hoàn tất nhưng có lỗi.\n\nThành công: ${successCount} item\nLỗi: ${errorCount} item${pendingMsg}`);
       } else {
-        alert(`✅ Đã tải lên thành công ${successCount} item${allInboundRecords.length > 0 ? ` và ${allInboundRecords.length} phiếu nhập kho` : ''}!\n\nTổng dòng Excel: ${parsedItems.length}\nItem tạo mới/cập nhật: ${successCount}`);
+        alert(`✅ Tải lên thành công ${successCount} item${allInboundRecords.length > 0 ? ` và ${allInboundRecords.length} phiếu nhập` : ''}!${pendingMsg}`);
         fetchItemsByDate();
       }
     } catch (err: any) {
@@ -634,8 +705,105 @@ const ItemManagement = () => {
   };
 
 
+  const PENDING_REASON: Record<string, string> = {
+    missing_erp: 'Thiếu Mã ERP',
+    missing_name: 'Thiếu Tên vật tư',
+    missing_erp_and_name: 'Thiếu ERP & Tên',
+  };
+
   return (
     <div className="space-y-10">
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-surface-container rounded-2xl p-1 w-fit">
+        <button onClick={() => setActiveMainTab('items')}
+          className={`px-5 py-2 rounded-xl text-sm font-bold transition-colors ${activeMainTab === 'items' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
+          Danh sách vật tư
+        </button>
+        <button onClick={() => setActiveMainTab('pending')}
+          className={`px-5 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 ${activeMainTab === 'pending' ? 'bg-amber-500 text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
+          Chờ xử lý
+          {pendingCount > 0 && <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${activeMainTab === 'pending' ? 'bg-white/20' : 'bg-amber-500 text-white'}`}>{pendingCount}</span>}
+        </button>
+      </div>
+
+      {/* Pending tab */}
+      {activeMainTab === 'pending' && (
+        <div>
+          <div className="flex items-center gap-3 mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
+            <span className="material-symbols-outlined text-amber-500 text-2xl">warning</span>
+            <div>
+              <p className="text-sm font-bold text-on-surface">Dòng thiếu Mã ERP hoặc Tên vật tư khi upload</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
+            </div>
+          </div>
+          {pendingLoading ? (
+            <p className="text-center py-12 text-on-surface-variant/40">Đang tải...</p>
+          ) : pendingItems.length === 0 ? (
+            <div className="text-center py-16 bg-surface-container-low rounded-2xl">
+              <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-2">check_circle</span>
+              <p className="text-sm text-on-surface-variant/50">Không có mục nào đang chờ xử lý</p>
+            </div>
+          ) : (
+            <div className="bg-surface-container-low rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead>
+                    <tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/20">
+                      <th className="px-4 py-3">Mã ERP</th>
+                      <th className="px-4 py-3">Tên vật tư</th>
+                      <th className="px-4 py-3 hidden md:table-cell">Quy Cách</th>
+                      <th className="px-4 py-3 hidden lg:table-cell">Order ID</th>
+                      <th className="px-4 py-3 hidden lg:table-cell">SL</th>
+                      <th className="px-4 py-3">Lý do</th>
+                      <th className="px-4 py-3 text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingItems.map((p) => (
+                      <tr key={p.id} className="border-t border-outline-variant/10 hover:bg-amber-500/5">
+                        {editingPending?.id === p.id ? (
+                          <>
+                            <td className="px-3 py-2"><input value={editingPending.erp} onChange={e => setEditingPending((x: any) => ({...x, erp: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded-lg text-xs font-mono border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                            <td className="px-3 py-2"><input value={editingPending.name} onChange={e => setEditingPending((x: any) => ({...x, name: e.target.value}))} className="w-40 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                            <td className="px-3 py-2 hidden md:table-cell"><input value={editingPending.spec} onChange={e => setEditingPending((x: any) => ({...x, spec: e.target.value}))} className="w-32 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                            <td className="px-3 py-2 hidden lg:table-cell text-on-surface-variant text-xs">{p.order_id || '—'}</td>
+                            <td className="px-3 py-2 hidden lg:table-cell text-on-surface-variant text-xs">{p.qty || 0}</td>
+                            <td className="px-3 py-2"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs">{PENDING_REASON[p.reason] || p.reason}</span></td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex gap-1 justify-end">
+                                <button onClick={async () => { const upd = {...editingPending}; await supabase.from('inbound_upload_pending').update(upd).eq('id', p.id); setEditingPending(null); fetchPendingInbound(); }} className="px-2 py-1 bg-primary text-on-primary rounded-lg text-xs font-bold">Lưu</button>
+                                <button onClick={() => approvePendingInbound(editingPending)} className="px-2 py-1 bg-amber-500 text-white rounded-lg text-xs font-bold">Xác nhận</button>
+                                <button onClick={() => setEditingPending(null)} className="px-2 py-1 bg-surface-container rounded-lg text-xs">Hủy</button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
+                            <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>
+                            <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>
+                            <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.order_id || '—'}</td>
+                            <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.qty || 0}</td>
+                            <td className="px-4 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-semibold">{PENDING_REASON[p.reason] || p.reason}</span></td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex gap-1 justify-end">
+                                <button onClick={() => setEditingPending({...p})} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
+                                <button onClick={() => approvePendingInbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeMainTab === 'items' && <>
       <div className="flex flex-col md:flex-row md:items-end justify-between items-start gap-4">
         <div>
           <h2 className="text-3xl md:text-4xl font-extrabold font-manrope text-on-surface tracking-tight mb-2">Đăng Ký Vật Tư Mới</h2>
@@ -1344,6 +1512,7 @@ const ItemManagement = () => {
           </div>
         </div>
       )}
+      </> }
     </div>
   );
 };

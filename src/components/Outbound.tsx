@@ -62,6 +62,51 @@ const Outbound = () => {
   const [errorLog, setErrorLog] = useState<string>('');
   const [editHistory, setEditHistory] = useState<any[]>([]);
 
+  // Pending tab
+  const [outboundTab, setOutboundTab] = useState<'list' | 'pending'>('list');
+  const [pendingOutbound, setPendingOutbound] = useState<any[]>([]);
+  const [pendingOutboundCount, setPendingOutboundCount] = useState(0);
+  const [pendingOutboundLoading, setPendingOutboundLoading] = useState(false);
+  const [editingOutboundPending, setEditingOutboundPending] = useState<any | null>(null);
+
+  const fetchPendingOutbound = async () => {
+    setPendingOutboundLoading(true);
+    try {
+      const { data, count } = await supabase
+        .from('outbound_pending')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false });
+      setPendingOutbound(data || []);
+      setPendingOutboundCount(count || 0);
+    } catch (err) { console.error(err); }
+    finally { setPendingOutboundLoading(false); }
+  };
+
+  const approvePendingOutbound = async (p: any) => {
+    const erpTrim = p.erp_code?.trim();
+    const qtyNum = parseInt(p.qty);
+    if (!erpTrim) { showToast('Cần có Mã ERP trước khi xác nhận.', true); return; }
+    if (!qtyNum || qtyNum <= 0) { showToast('Số lượng không hợp lệ.', true); return; }
+    const outboundId = p.outbound_id || `OUT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const recipientName = p.recipient_name || p.partner || 'Nội bộ';
+    const partnerDisplay = [recipientName, p.dept_name].filter(Boolean).join(' / ');
+    const initials = recipientName.split(' ').map((n: string) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
+    const { error } = await supabase.from('outbound_records').insert([{
+      outbound_id: outboundId, erp_code: erpTrim, partner: partnerDisplay,
+      recipient_name: p.recipient_name || null, recipient_id: p.recipient_id || null,
+      dept_name: p.dept_name || null, dept_code: p.dept_code || null,
+      bpm_number: p.bpm_number || null, qty: qtyNum, initials,
+      status: 'Chờ xuất', status_color: 'bg-amber-100 text-amber-700', dot_color: 'bg-amber-500',
+      date: new Date().toISOString().split('T')[0],
+      required_date: p.required_date || new Date().toISOString().split('T')[0],
+    }]);
+    if (error) { showToast('Lỗi: ' + error.message, true); return; }
+    await supabase.from('outbound_pending').delete().eq('id', p.id);
+    showToast(`Đã xác nhận ${erpTrim} vào Xuất Kho`);
+    fetchPendingOutbound();
+    loadOutboundRecords();
+  };
+
   const fetchOutboundRecords = async (): Promise<any[]> => {
     const PAGE = 1000;
     let allData: any[] = [];
@@ -93,6 +138,8 @@ const Outbound = () => {
       console.error('Error fetching outbound records:', error);
     }
   };
+
+  useEffect(() => { if (outboundTab === 'pending') fetchPendingOutbound(); }, [outboundTab]);
 
   useEffect(() => {
     if (showEditHistory) {
@@ -433,9 +480,32 @@ const Outbound = () => {
       }
     });
     
+    // Save invalid rows to pending instead of discarding
+    if (errorRows.length > 0) {
+      const pendingPayload = errorRows.map(e => {
+        const raw = allRows[e.row - 1] || {};
+        return {
+          outbound_id:    (raw as any).outboundId || null,
+          erp_code:       (raw as any).erpCode || '',
+          partner:        [(raw as any).recipientName, (raw as any).deptName].filter(Boolean).join(' / ') || null,
+          recipient_name: (raw as any).recipientName || null,
+          recipient_id:   (raw as any).recipientId || null,
+          dept_name:      (raw as any).deptName || null,
+          dept_code:      (raw as any).deptCode || null,
+          bpm_number:     (raw as any).bpm || null,
+          qty:            (raw as any).qty || '0',
+          required_date:  (raw as any).requiredDate || null,
+          reason:         e.reason,
+        };
+      });
+      const { error: pErr } = await supabase.from('outbound_pending').insert(pendingPayload);
+      if (!pErr) {
+        setPendingOutboundCount(c => c + pendingPayload.length);
+        showToast(`⚠️ ${pendingPayload.length} dòng lỗi → chuyển vào tab Chờ xử lý`, true);
+      }
+    }
+
     if (validRows.length === 0) {
-      const errorMsg = `Không có dòng nào hợp lệ!\n\n${errorRows.map(e => `Dòng ${e.row}: ${e.reason} — ${e.data}`).join('\n')}`;
-      setErrorLog(errorMsg); return;
       return;
     }
 
@@ -1459,7 +1529,16 @@ const Outbound = () => {
         <section ref={listRef} className="col-span-1 border border-outline-variant/10 rounded-[2rem] overflow-hidden shadow-sm">
           <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
             <div className="px-4 md:px-8 py-4 md:py-6 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-              <h3 className="text-base md:text-lg font-bold">Danh sách lệnh xuất kho</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base md:text-lg font-bold">Danh sách lệnh xuất kho</h3>
+                <div className="flex gap-1 bg-surface-container rounded-xl p-1 ml-2">
+                  <button onClick={() => setOutboundTab('list')} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${outboundTab === 'list' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>Danh sách</button>
+                  <button onClick={() => setOutboundTab('pending')} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 ${outboundTab === 'pending' ? 'bg-amber-500 text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
+                    Chờ xử lý
+                    {pendingOutboundCount > 0 && <span className={`text-[10px] px-1 py-0.5 rounded-full font-black ${outboundTab === 'pending' ? 'bg-white/20' : 'bg-amber-500 text-white'}`}>{pendingOutboundCount}</span>}
+                  </button>
+                </div>
+              </div>
               <div className="flex gap-2 items-center">
                 <button 
                   onClick={() => loadOutboundRecords()}
@@ -1470,10 +1549,76 @@ const Outbound = () => {
                 </button>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            {/* Pending outbound tab */}
+            {outboundTab === 'pending' && (
+              <div className="p-4">
+                <div className="flex items-center gap-3 mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                  <span className="material-symbols-outlined text-amber-500">warning</span>
+                  <p className="text-sm text-on-surface"><span className="font-bold">Lệnh xuất bị lỗi khi tạo hàng loạt</span> — sửa thông tin rồi bấm Xác nhận để tạo lệnh xuất chính thức.</p>
+                </div>
+                {pendingOutboundLoading ? <p className="text-center py-8 text-on-surface-variant/40">Đang tải...</p>
+                : pendingOutbound.length === 0 ? (
+                  <div className="text-center py-12">
+                    <span className="material-symbols-outlined text-3xl text-on-surface-variant/30 block mb-2">check_circle</span>
+                    <p className="text-sm text-on-surface-variant/50">Không có lệnh xuất nào đang chờ xử lý</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-outline-variant/10">
+                    <table className="w-full text-sm text-left">
+                      <thead><tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest bg-surface-container">
+                        <th className="px-3 py-3">Mã ERP</th>
+                        <th className="px-3 py-3">SL</th>
+                        <th className="px-3 py-3 hidden md:table-cell">Người nhận</th>
+                        <th className="px-3 py-3 hidden lg:table-cell">Bộ phận</th>
+                        <th className="px-3 py-3">Lý do</th>
+                        <th className="px-3 py-3 text-right">Thao tác</th>
+                      </tr></thead>
+                      <tbody>
+                        {pendingOutbound.map(p => (
+                          <tr key={p.id} className="border-t border-outline-variant/10 hover:bg-amber-500/5">
+                            {editingOutboundPending?.id === p.id ? (
+                              <>
+                                <td className="px-2 py-2"><input value={editingOutboundPending.erp_code} onChange={e => setEditingOutboundPending((x: any) => ({...x, erp_code: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded text-xs font-mono border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                                <td className="px-2 py-2"><input value={editingOutboundPending.qty} onChange={e => setEditingOutboundPending((x: any) => ({...x, qty: e.target.value}))} className="w-16 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                                <td className="px-2 py-2 hidden md:table-cell"><input value={editingOutboundPending.recipient_name || ''} onChange={e => setEditingOutboundPending((x: any) => ({...x, recipient_name: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                                <td className="px-2 py-2 hidden lg:table-cell"><input value={editingOutboundPending.dept_name || ''} onChange={e => setEditingOutboundPending((x: any) => ({...x, dept_name: e.target.value}))} className="w-24 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                                <td className="px-2 py-2"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs">{p.reason}</span></td>
+                                <td className="px-2 py-2 text-right">
+                                  <div className="flex gap-1 justify-end flex-wrap">
+                                    <button onClick={async () => { await supabase.from('outbound_pending').update(editingOutboundPending).eq('id', p.id); setEditingOutboundPending(null); fetchPendingOutbound(); }} className="px-2 py-1 bg-primary text-on-primary rounded text-xs font-bold">Lưu</button>
+                                    <button onClick={() => approvePendingOutbound(editingOutboundPending)} className="px-2 py-1 bg-amber-500 text-white rounded text-xs font-bold">Xác nhận</button>
+                                    <button onClick={() => setEditingOutboundPending(null)} className="px-2 py-1 bg-surface-container rounded text-xs">Hủy</button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp_code || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
+                                <td className="px-3 py-3 text-xs">{p.qty}</td>
+                                <td className="px-3 py-3 hidden md:table-cell text-xs text-on-surface-variant">{p.recipient_name || '—'}</td>
+                                <td className="px-3 py-3 hidden lg:table-cell text-xs text-on-surface-variant">{p.dept_name || '—'}</td>
+                                <td className="px-3 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs font-semibold">{p.reason}</span></td>
+                                <td className="px-3 py-3 text-right">
+                                  <div className="flex gap-1 justify-end">
+                                    <button onClick={() => setEditingOutboundPending({...p})} className="p-1.5 rounded hover:bg-primary/10 text-outline-variant hover:text-primary transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
+                                    <button onClick={() => approvePendingOutbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {outboundTab === 'list' && (<><div className="overflow-x-auto">
               <div className="px-4 py-3 bg-surface-container-low flex items-center justify-between border-b border-outline-variant/10">
                 <div className="flex items-center gap-3">
-                  <input 
+                  <input
                     type="checkbox"
                     className="rounded border-outline-variant/30 text-primary w-4 h-4 focus:ring-primary/20"
                     checked={filteredOutbound.length > 0 && filteredOutbound.every(r => selectedRows.includes(r.id))}
@@ -1661,7 +1806,7 @@ const Outbound = () => {
             <div className="px-4 md:px-8 py-4 md:py-6 bg-surface-container-low/30 border-t border-outline-variant/10 flex justify-between items-center text-[10px] md:text-xs font-medium text-on-surface-variant">
               <span>Hiển thị {paginatedOutbound.length} / {filteredOutbound.length}</span>
               <div className="flex items-center gap-2 md:gap-4">
-                <button 
+                <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                   className="p-1.5 md:p-2 hover:bg-surface-container-low rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1669,7 +1814,7 @@ const Outbound = () => {
                   <span className="material-symbols-outlined text-[16px] md:text-sm">chevron_left</span>
                 </button>
                 <span className="text-on-surface font-bold tracking-widest">{currentPage} / {totalPages}</span>
-                <button 
+                <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
                   className="p-1.5 md:p-2 hover:bg-surface-container-low rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1678,6 +1823,7 @@ const Outbound = () => {
                 </button>
               </div>
             </div>
+            </>)}
           </div>
         </section>
       </div>

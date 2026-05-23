@@ -56,6 +56,7 @@ const ItemManagement = () => {
   const [deletePendingConfirm, setDeletePendingConfirm] = useState<any | null>(null);
   const [deletingPending, setDeletingPending] = useState(false);
   const [pendingSearch, setPendingSearch] = useState('');
+  const [pendingReasonFilter, setPendingReasonFilter] = useState('');
   const [selectedPendingIds, setSelectedPendingIds] = useState<number[]>([]);
   const [bulkPendingLoading, setBulkPendingLoading] = useState(false);
 
@@ -929,15 +930,23 @@ const ItemManagement = () => {
   };
 
   const filteredPendingItems = React.useMemo(() => {
-    if (!pendingSearch.trim()) return pendingItems;
+    let items = pendingItems;
+    if (pendingReasonFilter) {
+      items = items.filter(p =>
+        pendingReasonFilter === 'name_mismatch_with_master'
+          ? p.reason?.startsWith('name_mismatch_with_master')
+          : p.reason === pendingReasonFilter
+      );
+    }
+    if (!pendingSearch.trim()) return items;
     const q = pendingSearch.toLowerCase();
-    return pendingItems.filter(p =>
+    return items.filter(p =>
       (p.erp && p.erp.toLowerCase().includes(q)) ||
       (p.name && p.name.toLowerCase().includes(q)) ||
       (p.spec && p.spec.toLowerCase().includes(q)) ||
       (p.order_id && p.order_id.toLowerCase().includes(q))
     );
-  }, [pendingItems, pendingSearch]);
+  }, [pendingItems, pendingSearch, pendingReasonFilter]);
 
   const PENDING_REASON: Record<string, string> = {
     missing_erp: 'Thiếu Mã ERP',
@@ -1017,13 +1026,52 @@ const ItemManagement = () => {
                 {pendingItems.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}
               </span>
             </div>
-            {pendingSearch.trim() && (
+            {(pendingSearch.trim() || pendingReasonFilter) && (
               <span className="text-xs text-on-surface-variant">
                 Lọc: <strong className="text-primary">{filteredPendingItems.length}</strong> / {pendingCount} mã
                 {' · SL: '}<strong className="text-primary">{filteredPendingItems.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}</strong>
               </span>
             )}
           </div>
+
+          {/* Reason filter chips */}
+          {(() => {
+            const reasonCounts: Record<string, number> = {};
+            pendingItems.forEach(p => {
+              const key = p.reason?.startsWith('name_mismatch_with_master') ? 'name_mismatch_with_master' : (p.reason || '');
+              if (key) reasonCounts[key] = (reasonCounts[key] || 0) + 1;
+            });
+            const chips = [
+              { key: '', label: 'Tất cả', count: pendingItems.length },
+              ...Object.entries(PENDING_REASON)
+                .filter(([k]) => reasonCounts[k] > 0)
+                .map(([k, label]) => ({ key: k, label, count: reasonCounts[k] })),
+            ];
+            if (chips.length <= 1) return null;
+            return (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {chips.map(chip => {
+                  const active = pendingReasonFilter === chip.key;
+                  return (
+                    <button
+                      key={chip.key}
+                      onClick={() => setPendingReasonFilter(active ? '' : chip.key)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                        active
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'bg-white text-on-surface-variant border-outline-variant/40 hover:border-amber-400 hover:text-amber-600'
+                      }`}
+                    >
+                      {chip.label}
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${active ? 'bg-white/25 text-white' : 'bg-amber-500/10 text-amber-600'}`}>
+                        {chip.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           <div className="relative mb-4">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base pointer-events-none">search</span>
@@ -1040,7 +1088,7 @@ const ItemManagement = () => {
           ) : filteredPendingItems.length === 0 ? (
             <div className="text-center py-16 bg-surface-container-low rounded-2xl">
               <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-2">{pendingSearch ? 'search_off' : 'check_circle'}</span>
-              <p className="text-sm text-on-surface-variant/50">{pendingSearch ? `Không tìm thấy kết quả cho "${pendingSearch}"` : 'Không có mục nào đang chờ xử lý'}</p>
+              <p className="text-sm text-on-surface-variant/50">{pendingSearch || pendingReasonFilter ? `Không có kết quả phù hợp với bộ lọc hiện tại` : 'Không có mục nào đang chờ xử lý'}</p>
             </div>
           ) : (
             <div className="bg-surface-container-low rounded-2xl overflow-hidden">

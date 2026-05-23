@@ -928,21 +928,25 @@ const ItemManagement = () => {
       )}
 
       {activeMainTab === 'items' && <>
-      <div className="flex flex-col md:flex-row md:items-end justify-between items-start gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between items-start gap-4">
         <div>
-          <h2 className="text-3xl md:text-4xl font-extrabold font-manrope text-on-surface tracking-tight mb-2">Đăng Ký Vật Tư Mới</h2>
-          <p className="text-on-surface-variant md:text-lg">Khởi tạo mã ERP và định danh thông số kỹ thuật cho hệ thống quản trị.</p>
+          <h2 className="text-3xl md:text-4xl font-extrabold font-manrope text-on-surface tracking-tight mb-2">Quản Lý Mã Vật Tư</h2>
+          <p className="text-on-surface-variant md:text-lg">Xem và chỉnh sửa danh sách vật tư. Đăng ký mã mới tại <strong>Master ERP</strong>.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button 
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex flex-col items-center justify-center px-5 py-3 bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant/30 text-center gap-1 opacity-60 cursor-not-allowed" title="Tính năng đang phát triển">
+            <span className="material-symbols-outlined text-xl text-primary">add_a_photo</span>
+            <span className="text-[10px] font-bold text-on-surface-variant">Ảnh Minh Họa</span>
+          </div>
+          <button
             type="button"
             onClick={downloadTemplate}
             className="px-6 py-3 bg-surface-container-high text-on-surface-variant rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-surface-container-highest transition-all"
           >
             <span className="material-symbols-outlined">download</span>
-            Tải Template Excel
+            Tải Template
           </button>
-          <button 
+          <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={importing}
@@ -951,177 +955,15 @@ const ItemManagement = () => {
             <span className="material-symbols-outlined">{importing ? 'sync' : 'upload_file'}</span>
             {importing ? 'Đang tải...' : 'Upload Excel (Bulk)'}
           </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleExcelUpload} 
-            accept=".xlsx, .xls" 
-            className="hidden" 
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleExcelUpload}
+            accept=".xlsx, .xls"
+            className="hidden"
           />
         </div>
       </div>
-
-      <form onSubmit={handleSubmit} className={`grid grid-cols-12 gap-8 ${parsedItems.length > 0 ? 'hidden' : ''}`}>
-        <div className="col-span-12 lg:col-span-8 space-y-8">
-          <section className="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
-            <div className="flex items-center gap-2 mb-8 text-primary">
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>assignment</span>
-              <h3 className="font-manrope font-bold text-lg">Thông Tin Cơ Bản</h3>
-            </div>
-            <div className="grid grid-cols-2 gap-6">
-              <div className="col-span-1">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
-                <input 
-                  className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all outline-none text-on-surface font-medium placeholder:text-outline-variant/50" 
-                  placeholder="E.g., WGN-2024-001" 
-                  type="text" 
-                  value={formData.erp}
-                  onChange={(e) => setFormData({ ...formData, erp: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="col-span-1">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Đơn Vị Tính</label>
-                <input 
-                  list="unit-options"
-                  className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all outline-none text-on-surface font-medium"
-                  placeholder="Nhập hoặc chọn đơn vị..."
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                />
-                <datalist id="unit-options">
-                  <option value="Cái (PCS)" />
-                  <option value="Bộ (SET)" />
-                  <option value="Mét (M)" />
-                  <option value="Kg (KG)" />
-                  <option value="Cuộn" />
-                  <option value="Thùng" />
-                  <option value="Hộp" />
-                  <option value="Tấm" />
-                </datalist>
-              </div>
-              <div className="col-span-2 md:col-span-1">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Tên Vật Tư (VN)</label>
-                <input 
-                  className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all outline-none text-on-surface font-medium" 
-                  placeholder="Nhập tên tiếng Việt..." 
-                  type="text" 
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="col-span-2 md:col-span-1">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Tên Vật Tư (CN)</label>
-                <input 
-                  className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all outline-none text-on-surface font-medium" 
-                  placeholder="Nhập tên tiếng Trung..." 
-                  type="text" 
-                  value={formData.name_zh}
-                  onChange={(e) => setFormData({ ...formData, name_zh: e.target.value })}
-                />
-              </div>
-              <div className="col-span-1">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Phân Loại (Category)</label>
-                <input 
-                  className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all outline-none text-on-surface font-medium" 
-                  placeholder="E.g., Metal, Parts..." 
-                  type="text" 
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                />
-              </div>
-              <div className="col-span-1">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Đơn Giá (VND)</label>
-                <input 
-                  className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all outline-none text-on-surface font-medium" 
-                  placeholder="0" 
-                  type="number" 
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <div className="col-span-2 flex items-center gap-3 bg-surface-container-low p-4 rounded-xl">
-                <input 
-                  type="checkbox" 
-                  id="critical"
-                  className="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary"
-                  checked={formData.critical}
-                  onChange={(e) => setFormData({ ...formData, critical: e.target.checked })}
-                />
-                <label htmlFor="critical" className="text-sm font-bold text-on-surface cursor-pointer">Vật Tư Quan Trọng (Critical Item)</label>
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Thông Số Kỹ Thuật (Spec)</label>
-                <textarea 
-                  className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all outline-none text-on-surface font-medium resize-none" 
-                  placeholder="Mô tả chi tiết kỹ thuật, kích thước, chất liệu..." 
-                  rows={4}
-                  value={formData.spec}
-                  onChange={(e) => setFormData({ ...formData, spec: e.target.value })}
-                ></textarea>
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
-            <div className="flex items-center gap-2 mb-8 text-secondary">
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>location_on</span>
-              <h3 className="font-manrope font-bold text-lg">Lưu Trữ & Khởi Tạo</h3>
-            </div>
-            <div className="grid grid-cols-2 gap-6">
-              <div className="col-span-1">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Vị Trí Mặc Định</label>
-                <div className="relative">
-                  <input 
-                    className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all outline-none text-on-surface font-medium" 
-                    placeholder="Zone-A / Rack-05" 
-                    type="text" 
-                    value={formData.pos}
-                    onChange={(e) => setFormData({ ...formData, pos: e.target.value })}
-                  />
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant">search</span>
-                </div>
-              </div>
-              <div className="col-span-1">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số Lượng Đầu Kỳ</label>
-                <div className="flex items-center bg-surface-container-low rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:bg-surface-container-lowest transition-all">
-                  <button type="button" onClick={() => setFormData(prev => ({ ...prev, start_stock: Math.max(0, prev.start_stock - 1) }))} className="px-4 py-3 hover:bg-surface-container-high transition-colors text-on-surface-variant"><span className="material-symbols-outlined text-sm">remove</span></button>
-                  <input 
-                    className="w-full bg-transparent border-0 text-center py-3 focus:ring-0 text-on-surface font-bold" 
-                    type="number" 
-                    value={formData.start_stock}
-                    onChange={(e) => setFormData({ ...formData, start_stock: parseInt(e.target.value) || 0 })}
-                  />
-                  <button type="button" onClick={() => setFormData(prev => ({ ...prev, start_stock: prev.start_stock + 1 }))} className="px-4 py-3 hover:bg-surface-container-high transition-colors text-on-surface-variant"><span className="material-symbols-outlined text-sm">add</span></button>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <div className="col-span-12 lg:col-span-4 space-y-6">
-          <div className="bg-surface-container-low rounded-xl p-6 border-2 border-dashed border-outline-variant/30 flex flex-col items-center justify-center text-center">
-            <div className="w-20 h-20 rounded-full bg-surface-container-lowest flex items-center justify-center text-primary mb-4 shadow-sm">
-              <span className="material-symbols-outlined text-3xl">add_a_photo</span>
-            </div>
-            <h4 className="font-bold text-on-surface mb-1">Ảnh Minh Họa</h4>
-            <p className="text-xs text-on-surface-variant mb-4">Tải lên hình ảnh vật tư thực tế để dễ dàng nhận diện.</p>
-            <button type="button" className="px-6 py-2 bg-surface-container-lowest text-primary text-xs font-bold rounded-full shadow-sm hover:bg-primary hover:text-on-primary transition-all">Chọn File</button>
-          </div>
-
-          <div className="bg-surface-container-highest rounded-xl p-6 space-y-4">
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-primary-container text-on-primary font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined">{loading ? 'sync' : 'save'}</span>
-              {loading ? 'Đang lưu...' : 'Lưu Thông Tin'}
-            </button>
-          </div>
-        </div>
-      </form>
 
       {parsedItems.length > 0 && (
         <div className="bg-surface-container-lowest rounded-xl p-8 shadow-sm space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

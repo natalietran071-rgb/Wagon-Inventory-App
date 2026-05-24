@@ -516,7 +516,7 @@ const ItemManagement = () => {
       const itemsToInsert = (jsonData.map((row, rowIdx) => {
         const inputErp = getVal(row, ['Mã ERP', 'Mã VT', 'Mã Vật Tư', 'Item Code'])?.toString().trim() || '';
         const name = getVal(row, ['Tên Vật Tư (VN)', 'Tên Vật Tư', 'Tên Hàng', 'Item Name'])?.toString().trim() || '';
-        const startStock = parseInt(getVal(row, ['Tồn Đầu Kỳ', 'Tồn Đầu', 'Số Lượng', 'Qty', 'Start Stock'])) || 0;
+        const startStock = Math.round(parseFloat(getVal(row, ['Tồn Đầu Kỳ', 'Tồn Đầu', 'Số Lượng', 'Qty', 'Start Stock'])) || 0);
         const rawOrderId = getVal(row, ['Mã Đơn Nhập Kho (Order ID)', 'Mã Đơn Nhập Kho', 'Order ID', 'Mã Đơn'])?.toString().trim() || '';
         // "Opening Q'ty" and similar represent opening balance, not real inbound transactions
         const isOpeningStock = rawOrderId && /opening|tồn\s*đầu|ton\s*dau|opening\s*q/i.test(rawOrderId);
@@ -660,6 +660,10 @@ const ItemManagement = () => {
       // master name mismatch → pending, everything else → inventory
       const inventoryItems: any[] = [];
       const pendingToInsert: any[] = [];
+      // Track ERPs already routed to inventory — prevents PostgreSQL
+      // "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+      // when the same ERP appears multiple times in the file with different qty/date
+      const erpRoutedToInventory = new Set<string>();
 
       parsedItems.forEach(item => {
         // Use _has_real_erp to distinguish actual ERPs from generated TEMP-/EMPTY- placeholders
@@ -688,6 +692,11 @@ const ItemManagement = () => {
           pendingToInsert.push(buildPendingRow(reason));
         } else if (item._is_file_duplicate) {
           pendingToInsert.push(buildPendingRow('duplicate_erp_in_file'));
+        } else if (erpRoutedToInventory.has(item.erp)) {
+          // Same ERP with different qty/date already queued for inventory.
+          // Sending both in the same INSERT causes a PostgreSQL error, so route this
+          // occurrence to pending so no data is lost.
+          pendingToInsert.push(buildPendingRow('duplicate_erp_in_file'));
         } else {
           // Cross-check against master_erp — if ERP exists with a different name, route to pending
           const masterName = masterErpNameMap.get(item.erp);
@@ -701,6 +710,7 @@ const ItemManagement = () => {
             // First upload of an item = opening balance (start_stock = qty, no inbound record)
             // Subsequent upload of existing item = real inbound transaction
             const openingQty = isNewItem ? (item._temp_qty || item.start_stock || 0) : 0;
+            erpRoutedToInventory.add(item.erp);
             inventoryItems.push({
               erp:          item.erp,
               name:         item.name,

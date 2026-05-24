@@ -759,25 +759,6 @@ const Inventory = () => {
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2 items-center px-1 md:px-2">
-        <div className="text-[10px] md:text-sm font-bold text-on-surface-variant mr-1 md:mr-2">Sắp xếp:</div>
-        {[
-          { value: 'newest', label: 'Mới nhất', icon: 'schedule' },
-          { value: 'name_asc', label: 'Tên A-Z', icon: 'sort_by_alpha' },
-          { value: 'stock_desc', label: 'Tồn cao nhất', icon: 'trending_down' },
-          { value: 'stock_asc', label: 'Tồn thấp nhất', icon: 'trending_up' },
-        ].map(opt => (
-          <button
-            key={opt.value}
-            onClick={() => setSortBy(opt.value)}
-            className={`px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all flex items-center gap-1 ${sortBy === opt.value ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'}`}
-          >
-            <span className="material-symbols-outlined text-[12px] md:text-[14px]">{opt.icon}</span>
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
       <AnimatePresence>
         {isFilterOpen && (
           <motion.div

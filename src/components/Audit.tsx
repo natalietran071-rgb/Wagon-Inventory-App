@@ -155,16 +155,20 @@ const Audit = () => {
 
         setDraftSessions(sessions || []);
 
-        if (currentSession?.id && currentSession.id !== '00000000-0000-0000-0000-000000000000') {
-           const tasks = [
-             fetchBaseData(),
-             fetchDraftRecords(currentSession.id),
-             fetchPendingRecords(currentSession.id)
-           ];
-           if (hasSearched) {
-             tasks.push(fetchPendingAuditItems(currentSession.id));
-           }
-           await Promise.all(tasks);
+        // Auto-select the latest draft session if none selected
+        const activeSessionId = (currentSession?.id && currentSession.id !== '00000000-0000-0000-0000-000000000000')
+          ? currentSession.id
+          : sessions?.[0]?.id;
+
+        if (activeSessionId) {
+          if (!currentSession?.id || currentSession.id === '00000000-0000-0000-0000-000000000000') {
+            setCurrentSession(sessions[0]);
+          }
+          await Promise.all([
+            fetchBaseData(),
+            fetchDraftRecords(activeSessionId),
+            fetchPendingRecords(activeSessionId),
+          ]);
         } else {
            await fetchBaseData();
         }
@@ -487,8 +491,9 @@ const Audit = () => {
         setActualQtyInput('');
         setLocationInput('');
         setNoteInput('');
-        fetchDraftRecords();
-        fetchPendingAuditItems();
+        fetchDraftRecords(sessionId);
+        fetchPendingAuditItems(sessionId);
+        setActiveTab('draft');
       }
     } catch (err: any) {
       showToast('Lỗi: ' + err.message, true);

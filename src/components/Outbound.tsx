@@ -1775,37 +1775,18 @@ const Outbound = () => {
                                 onChange={() => setSelectedOutboundPendingIds(prev => prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id])}
                               />
                             </td>
-                            {editingOutboundPending?.id === p.id ? (
-                              <>
-                                <td className="px-2 py-2"><input value={editingOutboundPending.erp_code} onChange={e => setEditingOutboundPending((x: any) => ({...x, erp_code: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded text-xs font-mono border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
-                                <td className="px-2 py-2"><input value={editingOutboundPending.qty} onChange={e => setEditingOutboundPending((x: any) => ({...x, qty: e.target.value}))} className="w-16 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
-                                <td className="px-2 py-2 hidden md:table-cell"><input value={editingOutboundPending.recipient_name || ''} onChange={e => setEditingOutboundPending((x: any) => ({...x, recipient_name: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
-                                <td className="px-2 py-2 hidden lg:table-cell"><input value={editingOutboundPending.dept_name || ''} onChange={e => setEditingOutboundPending((x: any) => ({...x, dept_name: e.target.value}))} className="w-24 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
-                                <td className="px-2 py-2"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs">{p.reason}</span></td>
-                                <td className="px-2 py-2 text-right">
-                                  <div className="flex gap-1 justify-end flex-wrap">
-                                    <button onClick={async () => { await supabase.from('outbound_pending').update(editingOutboundPending).eq('id', p.id); setEditingOutboundPending(null); fetchPendingOutbound(); }} className="px-2 py-1 bg-primary text-on-primary rounded text-xs font-bold">Lưu</button>
-                                    <button onClick={() => approvePendingOutbound(editingOutboundPending)} className="px-2 py-1 bg-amber-500 text-white rounded text-xs font-bold">Xác nhận</button>
-                                    <button onClick={() => setEditingOutboundPending(null)} className="px-2 py-1 bg-surface-container rounded text-xs">Hủy</button>
-                                  </div>
-                                </td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="px-3 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp_code || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
-                                <td className="px-3 py-3 text-xs">{p.qty}</td>
-                                <td className="px-3 py-3 hidden md:table-cell text-xs text-on-surface-variant">{p.recipient_name || '—'}</td>
-                                <td className="px-3 py-3 hidden lg:table-cell text-xs text-on-surface-variant">{p.dept_name || '—'}</td>
-                                <td className="px-3 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs font-semibold">{p.reason}</span></td>
-                                <td className="px-3 py-3 text-right">
-                                  <div className="flex gap-1 justify-end">
-                                    <button onClick={() => setEditingOutboundPending({...p})} className="p-1.5 rounded hover:bg-primary/10 text-outline-variant hover:text-primary transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
-                                    <button onClick={() => approvePendingOutbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
-                                    <button onClick={async () => { if (safeConfirm('Xóa lệnh này khỏi tab chờ xử lý?')) { await supabase.from('outbound_pending').delete().eq('id', p.id); fetchPendingOutbound(); } }} className="p-1.5 rounded hover:bg-error/10 text-outline-variant hover:text-error transition-colors" title="Xóa"><span className="material-symbols-outlined text-base">delete</span></button>
-                                  </div>
-                                </td>
-                              </>
-                            )}
+                            <td className="px-3 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp_code || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
+                            <td className="px-3 py-3 text-xs">{p.qty}</td>
+                            <td className="px-3 py-3 hidden md:table-cell text-xs text-on-surface-variant">{p.recipient_name || '—'}</td>
+                            <td className="px-3 py-3 hidden lg:table-cell text-xs text-on-surface-variant">{p.dept_name || '—'}</td>
+                            <td className="px-3 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs font-semibold">{p.reason}</span></td>
+                            <td className="px-3 py-3 text-right">
+                              <div className="flex gap-1 justify-end">
+                                <button onClick={() => setEditingOutboundPending({...p})} className="p-1.5 rounded hover:bg-primary/10 text-outline-variant hover:text-primary transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
+                                <button onClick={() => approvePendingOutbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
+                                <button onClick={async () => { if (safeConfirm('Xóa lệnh này khỏi tab chờ xử lý?')) { await supabase.from('outbound_pending').delete().eq('id', p.id); fetchPendingOutbound(); } }} className="p-1.5 rounded hover:bg-error/10 text-outline-variant hover:text-error transition-colors" title="Xóa"><span className="material-symbols-outlined text-base">delete</span></button>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -2027,6 +2008,166 @@ const Outbound = () => {
           </div>
         </section>
       </div>
+
+      {/* Pending Edit Modal */}
+      <AnimatePresence>
+        {editingOutboundPending && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center bg-amber-500/10 flex-shrink-0">
+                <div>
+                  <h3 className="text-lg font-black text-on-surface">Sửa lệnh chờ xử lý</h3>
+                  <p className="text-xs text-amber-700 font-medium mt-0.5">Lý do: {editingOutboundPending.reason}</p>
+                </div>
+                <button onClick={() => setEditingOutboundPending(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors rounded-xl">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                {/* Số BPM */}
+                <div>
+                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Số BPM</label>
+                  <input
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-bold"
+                    type="text"
+                    placeholder="Nhập số BPM..."
+                    value={editingOutboundPending.bpm_number || ''}
+                    onChange={e => setEditingOutboundPending((x: any) => ({...x, bpm_number: e.target.value}))}
+                  />
+                </div>
+                {/* Người nhận */}
+                <div>
+                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
+                      type="text"
+                      placeholder="Mã nhân viên"
+                      value={editingOutboundPending.recipient_id || ''}
+                      onChange={e => setEditingOutboundPending((x: any) => ({...x, recipient_id: e.target.value}))}
+                    />
+                    <input
+                      className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
+                      type="text"
+                      placeholder="Tên người nhận"
+                      value={editingOutboundPending.recipient_name || ''}
+                      onChange={e => setEditingOutboundPending((x: any) => ({...x, recipient_name: e.target.value}))}
+                    />
+                  </div>
+                </div>
+                {/* Bộ phận */}
+                <div>
+                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Bộ Phận Nhận</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
+                      type="text"
+                      placeholder="Mã bộ phận"
+                      value={editingOutboundPending.dept_code || ''}
+                      onChange={e => setEditingOutboundPending((x: any) => ({...x, dept_code: e.target.value}))}
+                    />
+                    <input
+                      className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
+                      type="text"
+                      placeholder="Tên bộ phận"
+                      value={editingOutboundPending.dept_name || ''}
+                      onChange={e => setEditingOutboundPending((x: any) => ({...x, dept_name: e.target.value}))}
+                    />
+                  </div>
+                </div>
+                {/* ERP + Qty */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
+                    <input
+                      className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono font-bold"
+                      type="text"
+                      placeholder="Mã ERP"
+                      value={editingOutboundPending.erp_code || ''}
+                      onChange={e => setEditingOutboundPending((x: any) => ({...x, erp_code: e.target.value}))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Số lượng</label>
+                    <input
+                      className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
+                      type="number" min="1"
+                      value={editingOutboundPending.qty || ''}
+                      onChange={e => setEditingOutboundPending((x: any) => ({...x, qty: e.target.value}))}
+                    />
+                  </div>
+                </div>
+                {/* Date + Outbound ID */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Ngày yêu cầu</label>
+                    <input
+                      className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
+                      type="date"
+                      value={editingOutboundPending.required_date || ''}
+                      onChange={e => setEditingOutboundPending((x: any) => ({...x, required_date: e.target.value}))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Mã phiếu xuất</label>
+                    <input
+                      className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono"
+                      type="text"
+                      placeholder="Mã phiếu xuất"
+                      value={editingOutboundPending.outbound_id || ''}
+                      onChange={e => setEditingOutboundPending((x: any) => ({...x, outbound_id: e.target.value}))}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-outline-variant/10 flex gap-3 justify-between flex-shrink-0 bg-surface-container-low/30">
+                <button
+                  onClick={() => approvePendingOutbound(editingOutboundPending)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white font-black rounded-xl shadow-md hover:bg-amber-600 transition-all"
+                >
+                  <span className="material-symbols-outlined text-base">check_circle</span>
+                  Xác nhận xuất
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingOutboundPending(null)}
+                    className="px-5 py-2.5 bg-surface-container-high text-on-surface font-bold rounded-xl hover:bg-surface-container-highest transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const { error } = await supabase.from('outbound_pending').update({
+                        erp_code: editingOutboundPending.erp_code,
+                        qty: editingOutboundPending.qty,
+                        recipient_id: editingOutboundPending.recipient_id,
+                        recipient_name: editingOutboundPending.recipient_name,
+                        dept_code: editingOutboundPending.dept_code,
+                        dept_name: editingOutboundPending.dept_name,
+                        bpm_number: editingOutboundPending.bpm_number,
+                        required_date: editingOutboundPending.required_date,
+                        outbound_id: editingOutboundPending.outbound_id,
+                      }).eq('id', editingOutboundPending.id);
+                      if (error) { showToast('Lỗi: ' + error.message, true); return; }
+                      setEditingOutboundPending(null);
+                      fetchPendingOutbound();
+                      showToast('Đã lưu thay đổi!');
+                    }}
+                    className="px-5 py-2.5 bg-primary text-on-primary font-black rounded-xl shadow-md hover:shadow-primary/30 transition-all"
+                  >
+                    Lưu thay đổi
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* View Modal */}
       {viewingRecord && (() => {

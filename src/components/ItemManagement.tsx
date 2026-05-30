@@ -582,19 +582,19 @@ const ItemManagement = () => {
 
       setMissingCount(missing);
 
-      // Detect fully duplicate rows within the same file — all of erp + order_id + date + qty must match
-      // Same ERP but different date/order/qty are NOT duplicates and go to inventory normally
+      // Detect fully duplicate rows within the same file — ALL of erp + name + spec + order_id + date + qty must match
+      // Same ERP but different date/order/qty/name/spec are NOT duplicates and go to inventory normally
       const fullDupKeys = new Map<string, number>();
       itemsToInsert.forEach(item => {
         if (!item.is_incomplete) {
-          const key = [item.erp, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
+          const key = [item.erp, item.name, item.spec, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
           fullDupKeys.set(key, (fullDupKeys.get(key) || 0) + 1);
         }
       });
       let fileDupCount = 0;
       itemsToInsert.forEach(item => {
         if (!item.is_incomplete) {
-          const key = [item.erp, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
+          const key = [item.erp, item.name, item.spec, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
           if ((fullDupKeys.get(key) || 0) > 1) {
             item._is_file_duplicate = true;
             fileDupCount++;
@@ -693,10 +693,27 @@ const ItemManagement = () => {
         } else if (item._is_file_duplicate) {
           pendingToInsert.push(buildPendingRow('duplicate_erp_in_file'));
         } else if (erpRoutedToInventory.has(item.erp)) {
-          // Same ERP with different qty/date already queued for inventory.
-          // Sending both in the same INSERT causes a PostgreSQL error, so route this
-          // occurrence to pending so no data is lost.
-          pendingToInsert.push(buildPendingRow('duplicate_erp_in_file'));
+          // Same ERP, different transaction (different date/order/qty) — process as inbound.
+          // The inventory master row was already queued from the first occurrence.
+          // Update start_stock if this occurrence has a higher opening balance.
+          const existingInv = inventoryItems.find(inv => inv.erp === item.erp);
+          if (existingInv && (item.start_stock || 0) > existingInv.start_stock) {
+            existingInv.start_stock = item.start_stock || 0;
+            existingInv.end_stock = item.start_stock || 0;
+          }
+          // Record the inbound transaction
+          if (item._temp_qty > 0 && item._temp_order_id) {
+            allInboundRecords.push({
+              order_id: item._temp_order_id,
+              erp_code: item.erp,
+              qty:      item._temp_qty,
+              unit:     item.unit,
+              location: item.pos,
+              status:   'Stocked',
+              date:     item._temp_date || bulkImportDate,
+              time:     new Date().toLocaleTimeString(),
+            });
+          }
         } else {
           // Cross-check against master_erp — if ERP exists with a different name, route to pending
           const masterName = masterErpNameMap.get(item.erp);

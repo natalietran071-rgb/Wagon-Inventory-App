@@ -154,17 +154,13 @@ const UserManagement: React.FC = () => {
         p_role: formData.role,
         p_full_name: formData.full_name,
         p_is_active: formData.is_active,
-        p_password: formData.password || null
+        p_password: formData.password || null,
+        p_dept_code: formData.role === 'dept_user' ? formData.dept_code.trim() || null : null,
+        p_dept_name: formData.role === 'dept_user' ? (formData.dept_name.trim() || formData.dept_code.trim() || null) : null,
       });
 
       if (error) throw error;
       if (data && data.status === 'error') throw new Error(data.error);
-
-      // Update dept fields
-      await supabase.from('profiles').update({
-        dept_code: formData.role === 'dept_user' ? formData.dept_code.trim() : null,
-        dept_name: formData.role === 'dept_user' ? (formData.dept_name.trim() || formData.dept_code.trim()) : null,
-      }).eq('id', selectedUser.id);
 
       setIsEditModalOpen(false);
       await fetchUsers();

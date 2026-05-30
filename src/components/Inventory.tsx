@@ -573,15 +573,28 @@ const Inventory = () => {
           allData = allData.filter(item => dupSet.has(item.erp));
         }
 
-        // Aggregate in/out from records tables (same source as dashboard)
-        const [inboundAgg, outboundAgg] = await Promise.all([
-          supabase.from('inbound_records').select('erp_code, qty'),
-          supabase.from('outbound_records').select('erp_code, qty').eq('status', 'Đã Xuất')
+        // Aggregate in/out from records tables — paginate to bypass PostgREST 1,000-row cap
+        const fetchAllPages = async (query: any) => {
+          const PGSIZE = 1000;
+          let all: any[] = [];
+          let p = 0;
+          while (true) {
+            const { data, error } = await query.range(p * PGSIZE, (p + 1) * PGSIZE - 1);
+            if (error || !data || data.length === 0) break;
+            all = all.concat(data);
+            if (data.length < PGSIZE) break;
+            p++;
+          }
+          return all;
+        };
+        const [inboundRows, outboundRows] = await Promise.all([
+          fetchAllPages(supabase.from('inbound_records').select('erp_code, qty')),
+          fetchAllPages(supabase.from('outbound_records').select('erp_code, qty').eq('status', 'Đã Xuất')),
         ]);
         const inMap = new Map<string, number>();
-        (inboundAgg.data || []).forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
+        inboundRows.forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
         const outMap = new Map<string, number>();
-        (outboundAgg.data || []).forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
+        outboundRows.forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
         allData = allData.map(item => ({ ...item, _in_agg: inMap.get(item.erp) || 0, _out_agg: outMap.get(item.erp) || 0 }));
       }
 

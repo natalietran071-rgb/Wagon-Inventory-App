@@ -582,19 +582,19 @@ const ItemManagement = () => {
 
       setMissingCount(missing);
 
-      // Detect fully duplicate rows within the same file — all of erp + order_id + date + qty must match
-      // Same ERP but different date/order/qty are NOT duplicates and go to inventory normally
+      // Detect fully duplicate rows within the same file — ALL of erp + name + spec + order_id + date + qty must match
+      // Same ERP but different date/order/qty/name/spec are NOT duplicates and go to inventory normally
       const fullDupKeys = new Map<string, number>();
       itemsToInsert.forEach(item => {
         if (!item.is_incomplete) {
-          const key = [item.erp, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
+          const key = [item.erp, item.name, item.spec, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
           fullDupKeys.set(key, (fullDupKeys.get(key) || 0) + 1);
         }
       });
       let fileDupCount = 0;
       itemsToInsert.forEach(item => {
         if (!item.is_incomplete) {
-          const key = [item.erp, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
+          const key = [item.erp, item.name, item.spec, item._temp_order_id, item._temp_date, item._temp_qty].join('|');
           if ((fullDupKeys.get(key) || 0) > 1) {
             item._is_file_duplicate = true;
             fileDupCount++;
@@ -693,10 +693,20 @@ const ItemManagement = () => {
         } else if (item._is_file_duplicate) {
           pendingToInsert.push(buildPendingRow('duplicate_erp_in_file'));
         } else if (erpRoutedToInventory.has(item.erp)) {
-          // Same ERP with different qty/date already queued for inventory.
-          // Sending both in the same INSERT causes a PostgreSQL error, so route this
-          // occurrence to pending so no data is lost.
-          pendingToInsert.push(buildPendingRow('duplicate_erp_in_file'));
+          // Same ERP, different transaction — inventory master row already queued.
+          // Just add the inbound record; never touch start_stock here.
+          if (item._temp_qty > 0 && item._temp_order_id) {
+            allInboundRecords.push({
+              order_id: item._temp_order_id,
+              erp_code: item.erp,
+              qty:      item._temp_qty,
+              unit:     item.unit,
+              location: item.pos,
+              status:   'Stocked',
+              date:     item._temp_date || bulkImportDate,
+              time:     new Date().toLocaleTimeString(),
+            });
+          }
         } else {
           // Cross-check against master_erp — if ERP exists with a different name, route to pending
           const masterName = masterErpNameMap.get(item.erp);
@@ -707,9 +717,10 @@ const ItemManagement = () => {
             pendingToInsert.push(buildPendingRow(`name_mismatch_with_master|${masterName}`));
           } else {
             const isNewItem = !existingInventoryErps.has(item.erp);
-            // First upload of an item = opening balance (start_stock = qty, no inbound record)
-            // Subsequent upload of existing item = real inbound transaction
-            const openingQty = isNewItem ? (item._temp_qty || item.start_stock || 0) : 0;
+            const hasOrderId = !!item._temp_order_id;
+            // Opening balance only for new items without an order ID (pure initial stock).
+            // Items with an order ID are inbound transactions regardless of new/existing.
+            const openingQty = (isNewItem && !hasOrderId) ? (item._temp_qty || item.start_stock || 0) : 0;
             erpRoutedToInventory.add(item.erp);
             inventoryItems.push({
               erp:          item.erp,
@@ -721,15 +732,15 @@ const ItemManagement = () => {
               pos:          item.pos,
               price:        item.price,
               critical:     item.critical,
-              start_stock:  isNewItem ? openingQty : (item.start_stock || 0),
-              end_stock:    isNewItem ? openingQty : (item.end_stock || 0),
+              start_stock:  openingQty,
+              end_stock:    openingQty,
               in_qty:       0,
               out_qty:      0,
               created_at:   item.created_at,
               is_incomplete: false,
             });
-            // Only create inbound record for EXISTING items receiving new stock
-            if (!isNewItem && item._temp_qty > 0 && item._temp_order_id) {
+            // Create inbound record for any item with a real transaction (new OR existing)
+            if (item._temp_qty > 0 && item._temp_order_id) {
               allInboundRecords.push({
                 order_id: item._temp_order_id,
                 erp_code: item.erp,

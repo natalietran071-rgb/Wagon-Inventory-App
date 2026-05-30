@@ -47,12 +47,17 @@ const Outbound = () => {
   const [outboundRecords, setOutboundRecords] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
 
   useEffect(() => {
     if (location.state?.scannedErp) {
-      setFormData(prev => ({ ...prev, erpCode: location.state.scannedErp }));
-      setActiveTab('single');
+      // Fill first empty ERP row in the bulk table
+      setOutboundRows(prev => {
+        const newRows = [...prev];
+        const emptyIdx = newRows.findIndex(r => !r.erpCode.trim());
+        const targetIdx = emptyIdx !== -1 ? emptyIdx : 0;
+        newRows[targetIdx] = { ...newRows[targetIdx], erpCode: location.state.scannedErp };
+        return newRows;
+      });
     }
   }, [location.state?.scannedErp]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
@@ -274,18 +279,6 @@ const Outbound = () => {
 
   const [outboundRows, setOutboundRows] = useState(Array.from({ length: 5 }, createEmptyOutboundRow));
 
-  // Form state
-  const [formData, setFormData] = useState({
-    recipientName: '',
-    recipientId: '',
-    deptName: '',
-    deptCode: '',
-    erpCode: '',
-    qty: '',
-    requiredDate: new Date().toISOString().split('T')[0],
-    bpm: '',
-    noBpm: false
-  });
 
   // Modal states
   const [viewingRecord, setViewingRecord] = useState<any | null>(null);
@@ -351,21 +344,14 @@ const Outbound = () => {
     const handleQRScanned = (e: any) => {
       const scannedCode = e.detail?.code;
       if (!scannedCode) return;
-
-      if (activeTab === 'single') {
-        setFormData(prev => ({ ...prev, erpCode: scannedCode }));
-        showToast(`Đã nhận mã: ${scannedCode}`);
-      } else {
-        // Fill first empty ERP row or update state
-        setOutboundRows(prev => {
-          const newRows = [...prev];
-          const emptyIdx = newRows.findIndex(r => !r.erpCode.trim());
-          const targetIdx = emptyIdx !== -1 ? emptyIdx : 0;
-          newRows[targetIdx] = { ...newRows[targetIdx], erpCode: scannedCode };
-          return newRows;
-        });
-        showToast(`Đã thêm mã vào bảng: ${scannedCode}`);
-      }
+      setOutboundRows(prev => {
+        const newRows = [...prev];
+        const emptyIdx = newRows.findIndex(r => !r.erpCode.trim());
+        const targetIdx = emptyIdx !== -1 ? emptyIdx : 0;
+        newRows[targetIdx] = { ...newRows[targetIdx], erpCode: scannedCode };
+        return newRows;
+      });
+      showToast(`Đã thêm mã vào bảng: ${scannedCode}`);
     };
 
     window.addEventListener('qr-scanned', handleQRScanned);
@@ -375,7 +361,7 @@ const Outbound = () => {
       supabase.removeChannel(inventorySub);
       window.removeEventListener('qr-scanned', handleQRScanned);
     };
-  }, [activeTab]);
+  }, []);
 
   const handleErpLookup = async (erp: string, rowIndex?: number) => {
     if (!erp || erp.trim().length < 3) return;
@@ -402,11 +388,9 @@ const Outbound = () => {
 
     // Set value in the field (uppercase)
     if (rowIndex !== undefined) {
-         const newRows = [...outboundRows];
-         newRows[rowIndex].erpCode = upperErp;
-         setOutboundRows(newRows);
-    } else {
-         setFormData(prev => ({ ...prev, erpCode: upperErp }));
+      const newRows = [...outboundRows];
+      newRows[rowIndex].erpCode = upperErp;
+      setOutboundRows(newRows);
     }
     
     if (!cached) {
@@ -696,50 +680,6 @@ const Outbound = () => {
     listRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSubmit = async (e: React.FormEvent | React.MouseEvent) => {
-    if (e) e.preventDefault();
-    if (!canEdit) return;
-
-    if (!formData.recipientName.trim() || !formData.erpCode.trim() || !formData.qty) {
-      showToast('Vui lòng điền đầy đủ Tên Người Nhận, Mã ERP và Số Lượng.', true);
-      return;
-    }
-
-    const requestedQty = Math.round(parseFloat(formData.qty));
-    const outboundId = `OUT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const partnerDisplay = [formData.recipientName, formData.deptName].filter(Boolean).join(' / ');
-    const initials = formData.recipientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-
-    const { error } = await supabase
-      .from('outbound_records')
-      .insert([{
-        outbound_id: outboundId,
-        erp_code: formData.erpCode,
-        partner: partnerDisplay,
-        recipient_name: formData.recipientName.trim() || null,
-        recipient_id: formData.recipientId.trim() || null,
-        dept_name: formData.deptName.trim() || null,
-        dept_code: formData.deptCode.trim() || null,
-        bpm_number: formData.noBpm ? 'No BPM' : (formData.bpm.trim() || null),
-        qty: requestedQty,
-        initials: initials,
-        status: 'Chờ xuất',
-        status_color: 'bg-amber-100 text-amber-700',
-        dot_color: 'bg-amber-500',
-        date: new Date().toISOString().split('T')[0],
-        required_date: formData.requiredDate
-      }]);
-
-    if (error) {
-      console.error('Error saving outbound record:', error);
-      showToast('Lỗi khi lưu phiếu xuất: ' + error.message, true);
-    } else {
-      setFormData({ recipientName: '', recipientId: '', deptName: '', deptCode: '', erpCode: '', qty: '', requiredDate: new Date().toISOString().split('T')[0], bpm: '', noBpm: false });
-      await loadOutboundRecords();
-      showToast('Tạo lệnh xuất kho thành công!');
-      listRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
 
   const handleDeleteOutbound = async (id: string) => {
     if (!canEdit) return;
@@ -1000,11 +940,6 @@ const Outbound = () => {
     setCurrentPage(1);
   }, [filterDateFrom, filterDateTo, filterDateType, filterStatus, filterNoBpm]);
 
-  const selectedItemDetails = useMemo(() => {
-    return inventoryItems.find(i => i.erp === formData.erpCode) || null;
-  }, [inventoryItems, formData.erpCode]);
-
-  const selectedItemStock = selectedItemDetails ? (selectedItemDetails.end_stock || 0) : 0;
 
   // dbOutboundTotal = SUM(qty) WHERE status='Đã Xuất' — use it whenever no
   // date/search/NoBPM filters are active and status is 'all' or 'Đã Xuất'
@@ -1316,384 +1251,196 @@ const Outbound = () => {
                   <span className="material-symbols-outlined text-secondary">assignment_add</span>
                   Tạo Lệnh Xuất Kho
                 </h3>
-                {activeTab === 'bulk' && (
-                  <div className="flex items-center gap-3 mt-1 text-sm text-on-surface-variant font-medium">
-                    <p>Hỗ trợ dán (Ctrl+V) hoặc nạp dữ liệu từ Excel.</p>
-                    <button onClick={exportTemplate} className="text-primary hover:underline flex items-center gap-1 font-bold">
-                      <span className="material-symbols-outlined text-[14px]">download</span> Tải File Mẫu
-                    </button>
-                    <span className="text-outline-variant">|</span>
-                    <label className="text-secondary hover:underline flex items-center gap-1 font-bold cursor-pointer">
-                      <span className="material-symbols-outlined text-[14px]">upload_file</span> Nạp File Excel
-                      <input 
-                        type="file" 
-                        accept=".xlsx, .xls" 
-                        ref={fileInputRef} 
-                        onChange={handleFileUpload} 
-                        className="hidden" 
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-              <div className="flex bg-surface-container-low p-1 rounded-xl">
-                <button 
-                  onClick={() => setActiveTab('single')}
-                  className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'single' ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-primary'}`}
-                >
-                  Đơn lẻ
-                </button>
-                <button 
-                  onClick={() => setActiveTab('bulk')}
-                  className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'bulk' ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-primary'}`}
-                >
-                  Hàng loạt
-                </button>
+                <div className="flex items-center gap-3 mt-1 text-sm text-on-surface-variant font-medium">
+                  <p>Hỗ trợ dán (Ctrl+V) hoặc nạp dữ liệu từ Excel.</p>
+                  <button onClick={exportTemplate} className="text-primary hover:underline flex items-center gap-1 font-bold">
+                    <span className="material-symbols-outlined text-[14px]">download</span> Tải File Mẫu
+                  </button>
+                  <span className="text-outline-variant">|</span>
+                  <label className="text-secondary hover:underline flex items-center gap-1 font-bold cursor-pointer">
+                    <span className="material-symbols-outlined text-[14px]">upload_file</span> Nạp File Excel
+                    <input
+                      type="file"
+                      accept=".xlsx, .xls"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
 
-            {activeTab === 'single' ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="space-y-5">
-                  {/* Người Nhận */}
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                        placeholder="Mã nhân viên"
-                        type="text"
-                        value={formData.recipientId}
-                        onChange={(e) => setFormData({ ...formData, recipientId: e.target.value })}
-                      />
-                      <input
-                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                        placeholder="Tên nhân viên *"
-                        type="text"
-                        value={formData.recipientName}
-                        onChange={(e) => setFormData({ ...formData, recipientName: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Bộ Phận Nhận */}
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Bộ Phận Nhận</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                        placeholder="Mã bộ phận"
-                        type="text"
-                        value={formData.deptCode}
-                        onChange={(e) => setFormData({ ...formData, deptCode: e.target.value })}
-                      />
-                      <input
-                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                        placeholder="Tên bộ phận"
-                        type="text"
-                        value={formData.deptName}
-                        onChange={(e) => setFormData({ ...formData, deptName: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số BPM</label>
-                      <input
-                        className={`w-full border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm ${formData.noBpm ? 'bg-surface-container-low/40 text-on-surface-variant/50 cursor-not-allowed' : 'bg-surface-container-low'}`}
-                        placeholder={formData.noBpm ? 'No BPM' : 'Nhập số BPM...'}
-                        type="text"
-                        value={formData.noBpm ? '' : formData.bpm}
-                        onChange={(e) => setFormData({ ...formData, bpm: e.target.value })}
-                        disabled={formData.noBpm}
-                      />
-                      <label className="flex items-center gap-2 mt-1.5 cursor-pointer w-fit">
-                        <input
-                          type="checkbox"
-                          checked={formData.noBpm}
-                          onChange={(e) => setFormData({ ...formData, noBpm: e.target.checked, bpm: '' })}
-                          className="w-3.5 h-3.5 accent-primary"
-                        />
-                        <span className="text-[11px] font-bold text-on-surface-variant">No BPM</span>
-                      </label>
-                  </div>
-                  <div>
-                    <div className="flex justify-between items-center px-1">
-                      <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{t('erpCode')}</label>
-                      <Link to="/new-item" className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px]">add_circle</span>
-                        Tạo mới vật tư
-                      </Link>
-                    </div>
-                    <div className="relative">
-                      <input 
-                        list="erp-options"
-                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
-                        placeholder="Nhập hoặc chọn mã vật tư..."
-                        value={formData.erpCode}
-                        onChange={(e) => setFormData({ ...formData, erpCode: e.target.value })}
-                        onBlur={(e) => handleErpLookup(e.target.value)}
-                        required
-                      />
-                      <datalist id="erp-options">
-                        {inventoryItems.map((item, idx) => (
-                          <option key={item.erp || `outbound-erp-${idx}`} value={item.erp || ''}>
-                            {item.name} {item.name_zh ? `(${item.name_zh})` : ''}
-                          </option>
-                        ))}
-                      </datalist>
-                    </div>
-                    {selectedItemDetails && (
-                      <div className="mt-3 p-3 bg-primary-container/10 rounded-xl border border-primary-container/30">
-                        <div className="text-sm font-bold text-on-surface">{selectedItemDetails.name}</div>
-                        {selectedItemDetails.name_zh && <div className="text-xs font-medium text-primary/70 mb-1">{selectedItemDetails.name_zh}</div>}
-                        <div className="text-xs text-on-surface-variant flex items-center gap-1 mt-1">
-                          <span className="material-symbols-outlined text-[14px]">straighten</span>
-                          Quy cách: {selectedItemDetails.spec || 'Không có'}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số lượng yêu cầu</label>
-                      <input 
-                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
-                        type="number" 
-                        value={formData.qty}
-                        onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
-                        required
-                        max={selectedItemStock}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Tồn kho hiện tại</label>
-                      <div className="w-full bg-surface-container-low/50 border border-outline-variant/15 rounded-xl py-3 px-4 text-sm font-semibold text-primary flex items-center justify-between">
-                        <span>{selectedItemStock.toLocaleString('en-US')}</span>
-                        <span className="text-[10px] px-2 py-0.5 bg-primary-container/20 rounded-full">Khả dụng</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Ngày cần xuất</label>
-                      <input 
-                        className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
-                        type="date" 
-                        value={formData.requiredDate}
-                        onChange={(e) => setFormData({ ...formData, requiredDate: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="pt-4">
-                    <button 
-                      className="w-full py-4 bg-primary text-on-primary font-bold rounded-xl shadow-md hover:bg-primary-dim transition-colors flex justify-center items-center gap-2 disabled:opacity-50" 
-                      type="button"
-                      onClick={handleSubmit}
-                      disabled={!canEdit}
-                    >
-                      <span className="material-symbols-outlined">send</span>
-                      Xác Nhận Tạo Phiếu Xuất
-                    </button>
-                  </div>
+            <div className="space-y-4 relative z-10 w-full">
+              <div className="overflow-x-auto border border-outline-variant/20 rounded-xl max-h-[500px] overflow-y-auto no-scrollbar">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead className="sticky top-0 bg-surface-container-highest z-20 shadow-sm border-b border-outline-variant/20">
+                    <tr>
+                      <th className="px-2 py-3 text-xs font-bold text-on-surface-variant uppercase text-center w-10">#</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Mã Phiếu Xuất</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã NV</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên Người Nhận (*)</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã Bộ Phận</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên Bộ Phận</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">Số BPM</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[180px]">Mã ERP (*)</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên SP</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px] text-primary">Tồn Kho</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Số lượng (*)</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Ngày cần xuất</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/10 text-sm bg-surface-container-lowest">
+                    {outboundRows.map((row, idx) => {
+                      const item = inventoryItems.find(i => i.erp === row.erpCode);
+                      return (
+                        <tr key={idx} className="hover:bg-surface-container-low focus-within:bg-secondary-container/20 transition-colors group">
+                          <td className="px-2 py-2 text-center text-on-surface-variant/50 text-[10px] font-bold select-none">{idx + 1}</td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.outboundId}
+                              onChange={(e) => handleRowChange(idx, 'outboundId', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'outboundId')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="..."
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.recipientId || ''}
+                              onChange={(e) => handleRowChange(idx, 'recipientId', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'recipientId')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Mã NV"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.recipientName || ''}
+                              onChange={(e) => handleRowChange(idx, 'recipientName', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'recipientName')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Tên người nhận..."
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.deptCode || ''}
+                              onChange={(e) => handleRowChange(idx, 'deptCode', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'deptCode')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Mã BP"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.deptName || ''}
+                              onChange={(e) => handleRowChange(idx, 'deptName', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'deptName')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Tên bộ phận..."
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.bpm || ''}
+                              onChange={(e) => handleRowChange(idx, 'bpm', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'bpm')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="BPM / No BPM"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5 relative">
+                            <input
+                              list="outbound-erp-options"
+                              type="text"
+                              value={row.erpCode}
+                              onChange={(e) => handleRowChange(idx, 'erpCode', e.target.value)}
+                              onBlur={(e) => handleErpLookup(e.target.value, idx)}
+                              onPaste={(e) => handlePaste(e, idx, 'erpCode')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-bold text-primary"
+                              placeholder="Nhập/Chọn ERP"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5 bg-on-surface/5">
+                            <div className="w-full px-4 py-2 text-[10px] font-medium text-on-surface-variant select-none h-full min-h-[60px]" title={item?.name || ''}>
+                              {item ? (
+                                <div className="space-y-0.5">
+                                  <div className="font-bold text-on-surface line-clamp-1">{item.name}</div>
+                                  {item.name_zh && <div className="text-[9px] opacity-60 line-clamp-1">{item.name_zh}</div>}
+                                  <span className="text-[9px] bg-secondary/10 text-secondary px-1 py-0.5 rounded">QC: {item.spec || '-'}</span>
+                                </div>
+                              ) : <span className="text-outline-variant/50 italic">-</span>}
+                            </div>
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5 bg-primary/5">
+                            <div className="w-full px-4 py-3 text-sm font-bold text-primary select-none text-right">
+                              {item ? item.end_stock.toLocaleString('en-US') : <span className="text-outline-variant/40 font-normal">-</span>}
+                            </div>
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="number"
+                              value={row.qty}
+                              onChange={(e) => handleRowChange(idx, 'qty', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'qty')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-bold"
+                              placeholder="0"
+                              min="0.01" step="0.01"
+                            />
+                          </td>
+                          <td className="p-0">
+                            <input
+                              type="date"
+                              value={row.requiredDate}
+                              onChange={(e) => handleRowChange(idx, 'requiredDate', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'requiredDate')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium text-on-surface-variant"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-between items-center bg-surface-container-low p-4 rounded-xl border border-outline-variant/20 mt-4">
+                <div className="text-sm font-medium text-on-surface-variant flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">info</span>
+                  Sẽ lưu <strong className="text-primary">{outboundRows.filter(r => r.erpCode.trim() !== '' && Math.round(parseFloat(r.qty)) > 0).length}</strong> phiếu xuất hợp lệ.
                 </div>
-                <div>
-                  <div className="bg-surface-container-low p-6 rounded-xl overflow-hidden relative group h-full flex flex-col justify-center">
-                    <div className="relative z-10">
-                      <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">
-                        Tổng xuất kho {filterDateFrom || filterDateTo ? `(${filterDateFrom || '...'} → ${filterDateTo || '...'})` : '(Tất cả)'}
-                      </p>
-                      <h4 className="text-3xl font-black text-on-surface">{filteredOutboundStats.qty.toLocaleString('en-US')} <span className="text-sm font-medium">Units</span></h4>
-                      <div className="mt-4 flex items-center gap-2 text-sm font-medium text-primary bg-primary/10 w-fit px-3 py-1.5 rounded-lg">
-                        <span className="material-symbols-outlined text-sm">receipt_long</span>
-                        <span>Từ <span className="font-bold">{filteredOutboundStats.count.toLocaleString('en-US')}</span> phiếu xuất</span>
-                      </div>
-                      <div className="mt-8 p-4 bg-secondary-container/30 rounded-xl">
-                        <div className="flex items-start gap-3">
-                          <span className="material-symbols-outlined text-secondary text-xl">info</span>
-                          <p className="text-xs text-on-secondary-container leading-relaxed font-medium">
-                            <strong>Lưu ý:</strong> Hệ thống thiết lập trạng thái mặc định là "Chờ xuất". Bạn cần xác nhận ở bảng danh sách để trừ số lượng trong kho.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500 pointer-events-none">
-                      <span className="material-symbols-outlined text-[150px]">analytics</span>
-                    </div>
-                  </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelBatch}
+                    className="bg-surface-container-highest text-on-surface px-6 py-2.5 rounded-xl font-bold hover:bg-surface-container-high transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBatchSubmit}
+                    disabled={!canEdit || outboundRows.filter(r => r.erpCode.trim() !== '' && Math.round(parseFloat(r.qty)) > 0).length === 0}
+                    className="bg-primary text-on-primary px-8 py-2.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none disabled:hover:shadow-md"
+                  >
+                    Tạo Các Phiếu Này
+                  </button>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4 relative z-10 w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="overflow-x-auto border border-outline-variant/20 rounded-xl max-h-[500px] overflow-y-auto no-scrollbar">
-                  <table className="w-full text-left border-collapse min-w-[700px]">
-                    <thead className="sticky top-0 bg-surface-container-highest z-20 shadow-sm border-b border-outline-variant/20">
-                      <tr>
-                        <th className="px-2 py-3 text-xs font-bold text-on-surface-variant uppercase text-center w-10">#</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Mã Phiếu Xuất</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã NV</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên Người Nhận (*)</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã Bộ Phận</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên Bộ Phận</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">Số BPM</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[180px]">Mã ERP (*)</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên SP</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Số lượng (*)</th>
-                        <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Ngày cần xuất</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-outline-variant/10 text-sm bg-surface-container-lowest">
-                      {outboundRows.map((row, idx) => {
-                        const item = inventoryItems.find(i => i.erp === row.erpCode);
-                        return (
-                          <tr key={idx} className="hover:bg-surface-container-low focus-within:bg-secondary-container/20 transition-colors group">
-                            <td className="px-2 py-2 text-center text-on-surface-variant/50 text-[10px] font-bold select-none">{idx + 1}</td>
-                            <td className="p-0 border-r border-outline-variant/5">
-                              <input 
-                                type="text" 
-                                value={row.outboundId}
-                                onChange={(e) => handleRowChange(idx, 'outboundId', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'outboundId')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                                placeholder="..."
-                              />
-                            </td>
-                            <td className="p-0 border-r border-outline-variant/5">
-                              <input
-                                type="text"
-                                value={row.recipientId || ''}
-                                onChange={(e) => handleRowChange(idx, 'recipientId', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'recipientId')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                                placeholder="Mã NV"
-                              />
-                            </td>
-                            <td className="p-0 border-r border-outline-variant/5">
-                              <input
-                                type="text"
-                                value={row.recipientName || ''}
-                                onChange={(e) => handleRowChange(idx, 'recipientName', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'recipientName')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                                placeholder="Tên người nhận..."
-                              />
-                            </td>
-                            <td className="p-0 border-r border-outline-variant/5">
-                              <input
-                                type="text"
-                                value={row.deptCode || ''}
-                                onChange={(e) => handleRowChange(idx, 'deptCode', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'deptCode')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                                placeholder="Mã BP"
-                              />
-                            </td>
-                            <td className="p-0 border-r border-outline-variant/5">
-                              <input
-                                type="text"
-                                value={row.deptName || ''}
-                                onChange={(e) => handleRowChange(idx, 'deptName', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'deptName')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                                placeholder="Tên bộ phận..."
-                              />
-                            </td>
-                            <td className="p-0 border-r border-outline-variant/5">
-                              <input
-                                type="text"
-                                value={row.bpm || ''}
-                                onChange={(e) => handleRowChange(idx, 'bpm', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'bpm')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                                placeholder="BPM / No BPM"
-                              />
-                            </td>
-                            <td className="p-0 border-r border-outline-variant/5 relative">
-                              <input
-                                list="outbound-erp-options"
-                                type="text" 
-                                value={row.erpCode}
-                                onChange={(e) => handleRowChange(idx, 'erpCode', e.target.value)}
-                                onBlur={(e) => handleErpLookup(e.target.value, idx)}
-                                onPaste={(e) => handlePaste(e, idx, 'erpCode')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-bold text-primary"
-                                placeholder="Nhập/Chọn ERP"
-                              />
-                            </td>
-                            <td className="p-0 border-r border-outline-variant/5 bg-on-surface/5">
-                              <div className="w-full px-4 py-2 text-[10px] font-medium text-on-surface-variant select-none h-full min-h-[60px]" title={item?.name || ''}>
-                                {item ? (
-                                  <div className="space-y-0.5">
-                                    <div className="font-bold text-on-surface line-clamp-1">{item.name}</div>
-                                    {item.name_zh && <div className="text-[9px] opacity-60 line-clamp-1">{item.name_zh}</div>}
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-[9px] bg-secondary/10 text-secondary px-1 py-0.5 rounded">QC: {item.spec || '-'}</span>
-                                      <span className="text-[9px] font-bold text-primary">Tồn: {item.end_stock.toLocaleString('en-US')}</span>
-                                    </div>
-                                  </div>
-                                ) : <span className="text-outline-variant/50 italic">-</span>}
-                              </div>
-                            </td>
-                            <td className="p-0 border-r border-outline-variant/5">
-                              <input 
-                                type="number" 
-                                value={row.qty}
-                                onChange={(e) => handleRowChange(idx, 'qty', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'qty')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-bold"
-                                placeholder="0"
-                                min="0.01" step="0.01"
-                              />
-                            </td>
-                            <td className="p-0">
-                              <input 
-                                type="date" 
-                                value={row.requiredDate}
-                                onChange={(e) => handleRowChange(idx, 'requiredDate', e.target.value)}
-                                onPaste={(e) => handlePaste(e, idx, 'requiredDate')}
-                                className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium text-on-surface-variant"
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="flex justify-between items-center bg-surface-container-low p-4 rounded-xl border border-outline-variant/20 mt-4">
-                  <div className="text-sm font-medium text-on-surface-variant flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary">info</span>
-                    Sẽ lưu <strong className="text-primary">{outboundRows.filter(r => r.erpCode.trim() !== '' && Math.round(parseFloat(r.qty)) > 0).length}</strong> phiếu xuất hợp lệ.
-                  </div>
-                  <div className="flex gap-2">
-                    <button 
-                      type="button" 
-                      onClick={handleCancelBatch}
-                      className="bg-surface-container-highest text-on-surface px-6 py-2.5 rounded-xl font-bold hover:bg-surface-container-high transition-colors"
-                    >
-                      Hủy
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={handleBatchSubmit}
-                      disabled={!canEdit || outboundRows.filter(r => r.erpCode.trim() !== '' && Math.round(parseFloat(r.qty)) > 0).length === 0}
-                      className="bg-primary text-on-primary px-8 py-2.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none disabled:hover:shadow-md"
-                    >
-                      Tạo Các Phiếu Này
-                    </button>
-                  </div>
-                </div>
-                <datalist id="outbound-erp-options">
-                  {inventoryItems.map((item, idx) => (
-                    <option key={item.erp || `bulk-erp-${idx}`} value={item.erp || ''}>
-                      {item.name} {item.name_zh ? `(${item.name_zh})` : ''} - Tồn: {item.end_stock.toLocaleString('en-US')}
-                    </option>
-                  ))}
-                </datalist>
-              </div>
-            )}
+              <datalist id="outbound-erp-options">
+                {inventoryItems.map((item, idx) => (
+                  <option key={item.erp || `bulk-erp-${idx}`} value={item.erp || ''}>
+                    {item.name} {item.name_zh ? `(${item.name_zh})` : ''} - Tồn: {item.end_stock.toLocaleString('en-US')}
+                  </option>
+                ))}
+              </datalist>
+            </div>
           </div>
         </section>
 

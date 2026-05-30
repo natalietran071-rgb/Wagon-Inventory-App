@@ -59,6 +59,7 @@ const Outbound = () => {
   const listRef = useRef<HTMLDivElement>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const syncingRef = useRef(false);
+  const [dbOutboundTotal, setDbOutboundTotal] = useState<number | null>(null);
 
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [errorLog, setErrorLog] = useState<string>('');
@@ -206,12 +207,19 @@ const Outbound = () => {
     }
   };
 
+  const fetchDbOutboundTotal = async () => {
+    const { data, error } = await supabase.rpc('get_inventory_stats_by_date');
+    if (!error && data) {
+      setDbOutboundTotal(Number((data as any).tong_xuat) || 0);
+    }
+  };
+
   const handleSync = async () => {
     if (syncingRef.current) return;
     syncingRef.current = true;
     setIsSyncing(true);
     try {
-      await Promise.all([loadOutboundRecords(), fetchPendingOutbound()]);
+      await Promise.all([loadOutboundRecords(), fetchPendingOutbound(), fetchDbOutboundTotal()]);
     } finally {
       setIsSyncing(false);
       syncingRef.current = false;
@@ -305,7 +313,7 @@ const Outbound = () => {
           return allInv;
         };
 
-        const [inv, outbound] = await Promise.all([fetchInventory(), fetchOutboundRecords()]);
+        const [inv, outbound] = await Promise.all([fetchInventory(), fetchOutboundRecords(), fetchDbOutboundTotal()]);
         setInventoryItems(inv);
         setOutboundRecords(outbound);
       } catch (err) {
@@ -975,11 +983,14 @@ const Outbound = () => {
 
   const selectedItemStock = selectedItemDetails ? (selectedItemDetails.end_stock || 0) : 0;
 
+  const isFiltered = !!(filterDateFrom || filterDateTo || filterStatus !== 'all' || filterNoBpm || searchQuery.trim());
+
   const filteredOutboundStats = useMemo(() => {
     const totalQty = filteredOutbound.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
     const uniqueItems = new Set(filteredOutbound.map(item => item.erp_code));
-    return { count: filteredOutbound.length, qty: totalQty, uniqueSKU: uniqueItems.size };
-  }, [filteredOutbound]);
+    const displayQty = !isFiltered && dbOutboundTotal !== null ? dbOutboundTotal : totalQty;
+    return { count: filteredOutbound.length, qty: displayQty, uniqueSKU: uniqueItems.size };
+  }, [filteredOutbound, isFiltered, dbOutboundTotal]);
 
   const exportOutboundToExcel = async () => {
     setLoading(true);
@@ -987,14 +998,19 @@ const Outbound = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      const { data: dataToExport, error } = await (supabase.rpc('export_outbound', {
+      const { data: dataToExport, error } = await supabase.rpc('export_outbound', {
         p_search: searchQuery || '',
         p_status: filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
         p_from_date: filterDateFrom || null,
-        p_to_date: filterDateTo || null
-      }) as any).setHeader('Prefer', 'return=representation');
+        p_to_date: filterDateTo || null,
+        p_date_type: filterDateType,
+      });
 
-      if (error || !dataToExport) throw error || new Error('No data found');
+      if (error) throw error;
+      if (!dataToExport || (dataToExport as any[]).length === 0) {
+        showToast('Không có dữ liệu để xuất.', true);
+        return;
+      }
 
       const filteredExport = filterNoBpm
         ? (dataToExport || []).filter((item: any) => !item.bpm_number || item.bpm_number === 'No BPM')

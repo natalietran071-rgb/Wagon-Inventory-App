@@ -57,23 +57,12 @@ const Outbound = () => {
   }, [location.state?.scannedErp]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncingRef = useRef(false);
 
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [errorLog, setErrorLog] = useState<string>('');
   const [editHistory, setEditHistory] = useState<any[]>([]);
-
-  // Shipment confirmation counts (badge)
-  const [shipmentCounts, setShipmentCounts] = useState<{ pending: number; rejected: number }>({ pending: 0, rejected: 0 });
-
-  useEffect(() => {
-    const fetchShipmentCounts = async () => {
-      try {
-        const { data } = await supabase.rpc('get_shipment_counts');
-        if (data) setShipmentCounts({ pending: data.pending || 0, rejected: data.rejected || 0 });
-      } catch (_) {}
-    };
-    fetchShipmentCounts();
-  }, []);
 
   // Pending tab
   const [outboundTab, setOutboundTab] = useState<'list' | 'pending'>('list');
@@ -214,6 +203,18 @@ const Outbound = () => {
       setOutboundRecords(data);
     } catch (error) {
       console.error('Error fetching outbound records:', error);
+    }
+  };
+
+  const handleSync = async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    setIsSyncing(true);
+    try {
+      await Promise.all([loadOutboundRecords(), fetchPendingOutbound()]);
+    } finally {
+      setIsSyncing(false);
+      syncingRef.current = false;
     }
   };
 
@@ -624,59 +625,7 @@ const Outbound = () => {
       return;
     }
 
-    // Check against existing DB records to prevent double-upload
-    const dbCheckKeys = uniqueValidRows.map(r =>
-      `${r.outboundId.trim()}|${r.erpCode.trim()}|${Math.round(parseFloat(r.qty))}`
-    );
-    const uniqueOutboundIds = [...new Set(uniqueValidRows.map(r => r.outboundId.trim()).filter(Boolean))];
-    let existingKeys = new Set<string>();
-    if (uniqueOutboundIds.length > 0) {
-      const CHUNK = 200;
-      for (let i = 0; i < uniqueOutboundIds.length; i += CHUNK) {
-        const { data: existing } = await supabase
-          .from('outbound_records')
-          .select('outbound_id, erp_code, qty')
-          .in('outbound_id', uniqueOutboundIds.slice(i, i + CHUNK));
-        if (existing) {
-          existing.forEach((r: any) => existingKeys.add(`${r.outbound_id}|${r.erp_code}|${r.qty}`));
-        }
-      }
-    }
-
-    const dbDupRows = uniqueValidRows.filter((row, idx) =>
-      dbCheckKeys[idx] && existingKeys.has(dbCheckKeys[idx])
-    );
-    const finalValidRows = uniqueValidRows.filter((row, idx) =>
-      !dbCheckKeys[idx] || !existingKeys.has(dbCheckKeys[idx])
-    );
-
-    if (dbDupRows.length > 0) {
-      const dbDupPayload = dbDupRows.map(row => ({
-        outbound_id:    row.outboundId || null,
-        erp_code:       row.erpCode.trim(),
-        partner:        [(row.recipientName || '').trim(), (row.deptName || '').trim()].filter(Boolean).join(' / ') || null,
-        recipient_name: (row.recipientName || '').trim() || null,
-        recipient_id:   (row.recipientId  || '').trim() || null,
-        dept_name:      (row.deptName     || '').trim() || null,
-        dept_code:      (row.deptCode     || '').trim() || null,
-        bpm_number:     row.bpm || null,
-        qty:            row.qty || '0',
-        required_date:  row.requiredDate || null,
-        reason:         'Đã tồn tại trong hệ thống (tải lên trùng)',
-      }));
-      const { error: dbDupErr } = await supabase.from('outbound_pending').insert(dbDupPayload);
-      if (!dbDupErr) {
-        setPendingOutboundCount(c => c + dbDupPayload.length);
-        showToast(`⚠️ ${dbDupPayload.length} dòng đã tồn tại trong DB → tab Chờ xử lý`, true);
-      }
-    }
-
-    if (finalValidRows.length === 0) {
-      setLoading(false);
-      return;
-    }
-
-    const payload = finalValidRows.map(row => {
+    const payload = uniqueValidRows.map(row => {
       const recipientName = (row.recipientName || row.partner || '').trim() || 'Nội bộ';
       const recipientId = (row.recipientId || '').trim();
       const deptName = (row.deptName || '').trim();
@@ -887,51 +836,50 @@ const Outbound = () => {
     }
 
     const requestedQty = Math.round(parseFloat(editingRecord.qty));
-    if (!editingRecord.erp_code?.trim()) { showToast('Vui lòng nhập Mã ERP.', true); return; }
-    if (!requestedQty || requestedQty <= 0) { showToast('Số lượng không hợp lệ.', true); return; }
-
-    const recipientName = editingRecord.recipient_name || editingRecord.partner || 'Nội bộ';
-    const partnerDisplay = [recipientName, editingRecord.dept_name].filter(Boolean).join(' / ');
-    const initials = recipientName.split(' ').map((n: string) => n[0] || '').join('').toUpperCase().slice(0, 2) || 'NB';
+    const selectedItem = inventoryItems.find(i => i.erp === editingRecord.erp_code);
+    
+    if (!selectedItem) {
+      showToast('Vui lòng chọn mã vật tư hợp lệ.', true);
+      return;
+    }
+    
+    // Nếu trạng thái là Chưa Xuất thì mới giới hạn tồn kho. Nếu đã xuất thì số lượng tồn kho đã bị trừ từ trước, 
+    // cần tính khoảng chênh lệch nếu muốn check tồn kho, tạm thời giản lược cảnh báo cho dễ sửa.
+    
+    const initials = editingRecord.partner.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
     const originalRecord = outboundRecords.find(r => r.id === editingRecord.id);
     const oldQty = originalRecord ? originalRecord.qty : null;
 
     const { error } = await supabase
       .from('outbound_records')
       .update({
-        erp_code:       editingRecord.erp_code.trim().toUpperCase(),
-        partner:        partnerDisplay,
-        recipient_name: editingRecord.recipient_name || null,
-        recipient_id:   editingRecord.recipient_id || null,
-        dept_name:      editingRecord.dept_name || null,
-        dept_code:      editingRecord.dept_code || null,
-        bpm_number:     editingRecord.bpm_number || null,
-        qty:            requestedQty,
-        initials:       initials,
-        date:           editingRecord.date || null,
-        required_date:  editingRecord.required_date || null,
-        location:       editingRecord.location || null,
+        erp_code: editingRecord.erp_code,
+        partner: editingRecord.partner,
+        qty: requestedQty,
+        initials: initials,
+        required_date: editingRecord.required_date
       })
       .eq('id', editingRecord.id);
 
     if (error) {
       showToast('Lỗi khi cập nhật phiếu xuất: ' + error.message, true);
     } else {
-      await supabase.from('edit_history_outbound').insert([{
+      // Log edit history
+      const { error: historyError } = await supabase.from('edit_history_outbound').insert([{
         outbound_id: editingRecord.outbound_id,
-        erp_code:    editingRecord.erp_code,
-        partner:     partnerDisplay,
-        old_qty:     oldQty,
-        new_qty:     requestedQty,
-        reason:      editingRecord.editReason || 'Sửa thông tin phiếu',
-        edited_by:   profile?.full_name || profile?.email || user?.email || 'Unknown'
-      }]).then(({ error: e }) => { if (e) console.error('Edit history log error:', e); });
+        erp_code: editingRecord.erp_code,
+        partner: editingRecord.partner,
+        old_qty: oldQty,
+        new_qty: requestedQty,
+        reason: editingRecord.editReason || (editingRecord.status === 'Đã Xuất' ? 'Không có lý do' : 'Sửa phiếu chờ xuất'),
+        edited_by: profile?.full_name || profile?.email || user?.email || 'Unknown'
+      }]);
 
-      setOutboundRecords(prev => prev.map(item =>
-        String(item.id) === String(editingRecord.id)
-          ? { ...item, ...editingRecord, partner: partnerDisplay, initials }
-          : item
-      ));
+      if (historyError) {
+        console.error('Error logging edit history:', historyError);
+      }
+
+      setOutboundRecords(prev => prev.map(item => String(item.id) === String(editingRecord.id) ? { ...item, ...editingRecord, initials } : item));
       setEditingRecord(null);
       showToast('Cập nhật lệnh xuất kho thành công!');
     }
@@ -1038,43 +986,38 @@ const Outbound = () => {
     showToast('Đang xuất dữ liệu...');
     try {
       const today = new Date().toISOString().split('T')[0];
-
-      const { data: dataToExport, error } = await supabase.rpc('export_outbound', {
-        p_search:    searchQuery || '',
-        p_status:    filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
+      
+      const { data: dataToExport, error } = await (supabase.rpc('export_outbound', {
+        p_search: searchQuery || '',
+        p_status: filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
         p_from_date: filterDateFrom || null,
-        p_to_date:   filterDateTo   || null,
-        p_date_type: filterDateType,
-      });
+        p_to_date: filterDateTo || null
+      }) as any).setHeader('Prefer', 'return=representation');
 
-      if (error) throw error;
-      if (!dataToExport || (dataToExport as any[]).length === 0) {
-        showToast('Không có dữ liệu để xuất.', true);
-        return;
-      }
+      if (error || !dataToExport) throw error || new Error('No data found');
 
-      const rows = filterNoBpm
-        ? (dataToExport as any[]).filter(item => !item.bpm_number || item.bpm_number === 'No BPM')
-        : (dataToExport as any[]);
+      const filteredExport = filterNoBpm
+        ? (dataToExport || []).filter((item: any) => !item.bpm_number || item.bpm_number === 'No BPM')
+        : (dataToExport || []);
 
-      const exportData = rows.map(item => {
+      const exportData = filteredExport.map(item => {
         const inv = inventoryMap.get(item.erp_code);
         return {
-          'Mã Phiếu':    item.outbound_id,
-          'Mã NV':       item.recipient_id   || '',
-          'Người Nhận':  item.recipient_name || item.partner || '',
-          'Mã Bộ Phận':  item.dept_code      || '',
-          'Bộ Phận Nhận':item.dept_name      || '',
-          'Số BPM':      item.bpm_number     || '',
-          'Mã ERP':      item.erp_code,
-          'Tên Vật Tư':  inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : (item.item_name || ''),
-          'Quy Cách':    inv?.spec           || '',
-          'Số Lượng':    item.qty,
-          'Ngày Yêu Cầu':item.required_date  || item.date,
-          'Ngày Tạo':    item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '',
-          'Trạng Thái':  item.status,
-          'Vị Trí':      item.location       || '',
-          'Người xử lý': item.initials        || '',
+          'Mã Phiếu': item.outbound_id,
+          'Mã NV': item.recipient_id || '',
+          'Người Nhận': item.recipient_name || item.partner || '',
+          'Mã Bộ Phận': item.dept_code || '',
+          'Bộ Phận Nhận': item.dept_name || '',
+          'Số BPM': item.bpm_number || '',
+          'Mã ERP': item.erp_code,
+          'Tên Vật Tư': inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : (item.item_name || ''),
+          'Quy Cách': inv?.spec || '',
+          'Số Lượng': item.qty,
+          'Ngày Yêu Cầu': item.required_date || item.date,
+          'Ngày Tạo': new Date(item.created_at).toLocaleString(),
+          'Trạng Thái': item.status,
+          'Vị Trí': item.location || '',
+          'Người xử lý': item.initials
         };
       });
 
@@ -1082,12 +1025,12 @@ const Outbound = () => {
         ? `_${filterDateFrom || '...'}_to_${filterDateTo || '...'}`
         : '';
       const fileName = `xuat-kho${rangeTag || `_${today}`}.xlsx`;
-
+        
       const sheets = exportToExcelMultiSheet(exportData, fileName, 'Xuất Kho');
       showToast(`✅ Đã xuất ${exportData.length.toLocaleString()} dòng — ${sheets} sheet!`);
     } catch (err: any) {
       console.error('Export error:', err);
-      showToast('Lỗi xuất Excel: ' + err.message, true);
+      showToast('Lỗi: ' + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -1168,35 +1111,19 @@ const Outbound = () => {
           <p className="text-xs md:text-sm text-on-surface-variant font-medium opacity-70">Tạo phiếu và quản lý luồng hàng hóa xuất kho.</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          {(shipmentCounts.pending > 0 || shipmentCounts.rejected > 0) && (
-            <a href="#/shipment" className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 rounded-xl transition-all duration-200 flex items-center gap-2 text-xs md:text-sm font-bold border">
-              {shipmentCounts.pending > 0 && (
-                <span className="flex items-center gap-1 text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-                  <span className="material-symbols-outlined text-base">pending</span>
-                  {shipmentCounts.pending} chờ xác nhận
-                </span>
-              )}
-              {shipmentCounts.rejected > 0 && (
-                <span className="flex items-center gap-1 text-error bg-error/5 border border-error/20 rounded-lg px-3 py-1.5">
-                  <span className="material-symbols-outlined text-base">cancel</span>
-                  {shipmentCounts.rejected} bị từ chối
-                </span>
-              )}
-            </a>
-          )}
-          <button
+          <button 
             onClick={() => setShowEditHistory(true)}
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-base"
           >
             <span className="material-symbols-outlined text-lg">history</span>
             <span>Lịch sử</span>
           </button>
-          <button 
-            onClick={loadOutboundRecords}
-            disabled={loading}
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-base disabled:opacity-50"
           >
-            <span className={`material-symbols-outlined text-lg ${loading ? 'animate-spin' : ''}`}>sync</span>
+            <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
             <span>Đồng bộ</span>
           </button>
           <button 
@@ -1832,18 +1759,37 @@ const Outbound = () => {
                                 onChange={() => setSelectedOutboundPendingIds(prev => prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id])}
                               />
                             </td>
-                            <td className="px-3 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp_code || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
-                            <td className="px-3 py-3 text-xs">{p.qty}</td>
-                            <td className="px-3 py-3 hidden md:table-cell text-xs text-on-surface-variant">{p.recipient_name || '—'}</td>
-                            <td className="px-3 py-3 hidden lg:table-cell text-xs text-on-surface-variant">{p.dept_name || '—'}</td>
-                            <td className="px-3 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs font-semibold">{p.reason}</span></td>
-                            <td className="px-3 py-3 text-right">
-                              <div className="flex gap-1 justify-end">
-                                <button onClick={() => setEditingOutboundPending({...p})} className="p-1.5 rounded hover:bg-primary/10 text-outline-variant hover:text-primary transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
-                                <button onClick={() => approvePendingOutbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
-                                <button onClick={async () => { if (safeConfirm('Xóa lệnh này khỏi tab chờ xử lý?')) { await supabase.from('outbound_pending').delete().eq('id', p.id); fetchPendingOutbound(); } }} className="p-1.5 rounded hover:bg-error/10 text-outline-variant hover:text-error transition-colors" title="Xóa"><span className="material-symbols-outlined text-base">delete</span></button>
-                              </div>
-                            </td>
+                            {editingOutboundPending?.id === p.id ? (
+                              <>
+                                <td className="px-2 py-2"><input value={editingOutboundPending.erp_code} onChange={e => setEditingOutboundPending((x: any) => ({...x, erp_code: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded text-xs font-mono border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                                <td className="px-2 py-2"><input value={editingOutboundPending.qty} onChange={e => setEditingOutboundPending((x: any) => ({...x, qty: e.target.value}))} className="w-16 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                                <td className="px-2 py-2 hidden md:table-cell"><input value={editingOutboundPending.recipient_name || ''} onChange={e => setEditingOutboundPending((x: any) => ({...x, recipient_name: e.target.value}))} className="w-28 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                                <td className="px-2 py-2 hidden lg:table-cell"><input value={editingOutboundPending.dept_name || ''} onChange={e => setEditingOutboundPending((x: any) => ({...x, dept_name: e.target.value}))} className="w-24 px-2 py-1 bg-surface-container rounded text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
+                                <td className="px-2 py-2"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs">{p.reason}</span></td>
+                                <td className="px-2 py-2 text-right">
+                                  <div className="flex gap-1 justify-end flex-wrap">
+                                    <button onClick={async () => { await supabase.from('outbound_pending').update(editingOutboundPending).eq('id', p.id); setEditingOutboundPending(null); fetchPendingOutbound(); }} className="px-2 py-1 bg-primary text-on-primary rounded text-xs font-bold">Lưu</button>
+                                    <button onClick={() => approvePendingOutbound(editingOutboundPending)} className="px-2 py-1 bg-amber-500 text-white rounded text-xs font-bold">Xác nhận</button>
+                                    <button onClick={() => setEditingOutboundPending(null)} className="px-2 py-1 bg-surface-container rounded text-xs">Hủy</button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp_code || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
+                                <td className="px-3 py-3 text-xs">{p.qty}</td>
+                                <td className="px-3 py-3 hidden md:table-cell text-xs text-on-surface-variant">{p.recipient_name || '—'}</td>
+                                <td className="px-3 py-3 hidden lg:table-cell text-xs text-on-surface-variant">{p.dept_name || '—'}</td>
+                                <td className="px-3 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs font-semibold">{p.reason}</span></td>
+                                <td className="px-3 py-3 text-right">
+                                  <div className="flex gap-1 justify-end">
+                                    <button onClick={() => setEditingOutboundPending({...p})} className="p-1.5 rounded hover:bg-primary/10 text-outline-variant hover:text-primary transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
+                                    <button onClick={() => approvePendingOutbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
+                                    <button onClick={async () => { if (safeConfirm('Xóa lệnh này khỏi tab chờ xử lý?')) { await supabase.from('outbound_pending').delete().eq('id', p.id); fetchPendingOutbound(); } }} className="p-1.5 rounded hover:bg-error/10 text-outline-variant hover:text-error transition-colors" title="Xóa"><span className="material-symbols-outlined text-base">delete</span></button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -2066,166 +2012,6 @@ const Outbound = () => {
         </section>
       </div>
 
-      {/* Pending Edit Modal */}
-      <AnimatePresence>
-        {editingOutboundPending && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 16 }}
-              className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]"
-            >
-              <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center bg-amber-500/10 flex-shrink-0">
-                <div>
-                  <h3 className="text-lg font-black text-on-surface">Sửa lệnh chờ xử lý</h3>
-                  <p className="text-xs text-amber-700 font-medium mt-0.5">Lý do: {editingOutboundPending.reason}</p>
-                </div>
-                <button onClick={() => setEditingOutboundPending(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors rounded-xl">
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              </div>
-              <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                {/* Số BPM */}
-                <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Số BPM</label>
-                  <input
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-bold"
-                    type="text"
-                    placeholder="Nhập số BPM..."
-                    value={editingOutboundPending.bpm_number || ''}
-                    onChange={e => setEditingOutboundPending((x: any) => ({...x, bpm_number: e.target.value}))}
-                  />
-                </div>
-                {/* Người nhận */}
-                <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                      type="text"
-                      placeholder="Mã nhân viên"
-                      value={editingOutboundPending.recipient_id || ''}
-                      onChange={e => setEditingOutboundPending((x: any) => ({...x, recipient_id: e.target.value}))}
-                    />
-                    <input
-                      className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                      type="text"
-                      placeholder="Tên người nhận"
-                      value={editingOutboundPending.recipient_name || ''}
-                      onChange={e => setEditingOutboundPending((x: any) => ({...x, recipient_name: e.target.value}))}
-                    />
-                  </div>
-                </div>
-                {/* Bộ phận */}
-                <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Bộ Phận Nhận</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                      type="text"
-                      placeholder="Mã bộ phận"
-                      value={editingOutboundPending.dept_code || ''}
-                      onChange={e => setEditingOutboundPending((x: any) => ({...x, dept_code: e.target.value}))}
-                    />
-                    <input
-                      className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                      type="text"
-                      placeholder="Tên bộ phận"
-                      value={editingOutboundPending.dept_name || ''}
-                      onChange={e => setEditingOutboundPending((x: any) => ({...x, dept_name: e.target.value}))}
-                    />
-                  </div>
-                </div>
-                {/* ERP + Qty */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
-                    <input
-                      className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono font-bold"
-                      type="text"
-                      placeholder="Mã ERP"
-                      value={editingOutboundPending.erp_code || ''}
-                      onChange={e => setEditingOutboundPending((x: any) => ({...x, erp_code: e.target.value}))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Số lượng</label>
-                    <input
-                      className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                      type="number" min="1"
-                      value={editingOutboundPending.qty || ''}
-                      onChange={e => setEditingOutboundPending((x: any) => ({...x, qty: e.target.value}))}
-                    />
-                  </div>
-                </div>
-                {/* Date + Outbound ID */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Ngày yêu cầu</label>
-                    <input
-                      className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                      type="date"
-                      value={editingOutboundPending.required_date || ''}
-                      onChange={e => setEditingOutboundPending((x: any) => ({...x, required_date: e.target.value}))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Mã phiếu xuất</label>
-                    <input
-                      className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono"
-                      type="text"
-                      placeholder="Mã phiếu xuất"
-                      value={editingOutboundPending.outbound_id || ''}
-                      onChange={e => setEditingOutboundPending((x: any) => ({...x, outbound_id: e.target.value}))}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="px-6 py-4 border-t border-outline-variant/10 flex gap-3 justify-between flex-shrink-0 bg-surface-container-low/30">
-                <button
-                  onClick={() => approvePendingOutbound(editingOutboundPending)}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white font-black rounded-xl shadow-md hover:bg-amber-600 transition-all"
-                >
-                  <span className="material-symbols-outlined text-base">check_circle</span>
-                  Xác nhận xuất
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setEditingOutboundPending(null)}
-                    className="px-5 py-2.5 bg-surface-container-high text-on-surface font-bold rounded-xl hover:bg-surface-container-highest transition-colors"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const { error } = await supabase.from('outbound_pending').update({
-                        erp_code: editingOutboundPending.erp_code,
-                        qty: editingOutboundPending.qty,
-                        recipient_id: editingOutboundPending.recipient_id,
-                        recipient_name: editingOutboundPending.recipient_name,
-                        dept_code: editingOutboundPending.dept_code,
-                        dept_name: editingOutboundPending.dept_name,
-                        bpm_number: editingOutboundPending.bpm_number,
-                        required_date: editingOutboundPending.required_date,
-                        outbound_id: editingOutboundPending.outbound_id,
-                      }).eq('id', editingOutboundPending.id);
-                      if (error) { showToast('Lỗi: ' + error.message, true); return; }
-                      setEditingOutboundPending(null);
-                      fetchPendingOutbound();
-                      showToast('Đã lưu thay đổi!');
-                    }}
-                    className="px-5 py-2.5 bg-primary text-on-primary font-black rounded-xl shadow-md hover:shadow-primary/30 transition-all"
-                  >
-                    Lưu thay đổi
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       {/* View Modal */}
       {viewingRecord && (() => {
         const viewItemDetails = inventoryItems.find(i => i.erp === viewingRecord.erp_code);
@@ -2293,157 +2079,87 @@ const Outbound = () => {
       {/* Edit Modal */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low flex-shrink-0">
-              <div>
-                <h3 className="text-lg font-black text-on-surface">Sửa thông tin phiếu xuất</h3>
-                <p className="text-xs text-on-surface-variant font-medium mt-0.5">Phiếu #{editingRecord.outbound_id}</p>
-              </div>
-              <button onClick={() => setEditingRecord(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors rounded-xl">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-on-surface">Sửa thông tin phiếu xuất</h3>
+              <button onClick={() => setEditingRecord(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form onSubmit={handleUpdateOutbound} className="p-6 space-y-4 overflow-y-auto flex-1">
-
-              {/* Số BPM */}
+            <form onSubmit={handleUpdateOutbound} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Số BPM (Lệnh xuất)</label>
-                <input
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-bold"
-                  type="text"
-                  placeholder="Nhập số BPM..."
-                  value={editingRecord.bpm_number || ''}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, bpm_number: e.target.value })}
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
+                <input 
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
+                  type="text" 
+                  value={editingRecord.partner}
+                  onChange={(e) => setEditingRecord({ ...editingRecord, partner: e.target.value })}
+                  required
                 />
               </div>
-
-              {/* Người nhận */}
               <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="text"
-                    placeholder="Mã nhân viên"
-                    value={editingRecord.recipient_id || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, recipient_id: e.target.value })}
-                  />
-                  <input
-                    className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="text"
-                    placeholder="Tên người nhận"
-                    value={editingRecord.recipient_name || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, recipient_name: e.target.value })}
-                  />
-                </div>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
+                <input 
+                  list="edit-erp-options"
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
+                  value={editingRecord.erp_code}
+                  onChange={(e) => setEditingRecord({ ...editingRecord, erp_code: e.target.value })}
+                  required
+                />
+                <datalist id="edit-erp-options">
+                  {inventoryItems.map((item, idx) => (
+                    <option key={item.erp || `edit-erp-${idx}`} value={item.erp || ''}>
+                      {item.name} {item.name_zh ? `(${item.name_zh})` : ''}
+                    </option>
+                  ))}
+                </datalist>
               </div>
-
-              {/* Bộ phận */}
-              <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Bộ Phận Nhận</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="text"
-                    placeholder="Mã bộ phận"
-                    value={editingRecord.dept_code || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, dept_code: e.target.value })}
-                  />
-                  <input
-                    className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="text"
-                    placeholder="Tên bộ phận"
-                    value={editingRecord.dept_name || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, dept_name: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {/* ERP + Qty */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
-                  <input
-                    list="edit-erp-options"
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono"
-                    value={editingRecord.erp_code}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, erp_code: e.target.value })}
-                    required
-                  />
-                  <datalist id="edit-erp-options">
-                    {inventoryItems.map((item, idx) => (
-                      <option key={item.erp || `edit-erp-${idx}`} value={item.erp || ''}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </datalist>
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Số lượng</label>
-                  <input
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="number" min="1"
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số lượng</label>
+                  <input 
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
+                    type="number" 
                     value={editingRecord.qty}
                     onChange={(e) => setEditingRecord({ ...editingRecord, qty: e.target.value })}
                     required
                   />
                 </div>
-              </div>
-
-              {/* Dates + Location */}
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Ngày xuất</label>
-                  <input
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="date"
-                    value={editingRecord.date || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, date: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Ngày yêu cầu</label>
-                  <input
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="date"
-                    value={editingRecord.required_date || ''}
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Ngày cần xuất</label>
+                  <input 
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
+                    type="date" 
+                    value={editingRecord.required_date || editingRecord.date}
                     onChange={(e) => setEditingRecord({ ...editingRecord, required_date: e.target.value })}
+                    required
                   />
                 </div>
               </div>
-
+              
               <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Vị trí kho</label>
-                <input
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                  type="text"
-                  placeholder="Vị trí lấy hàng..."
-                  value={editingRecord.location || ''}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, location: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">
-                  Lý do sửa đổi {editingRecord.status === 'Đã Xuất' && <span className="text-error">*</span>}
-                </label>
-                <textarea
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                  placeholder="Nhập lý do thay đổi..."
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Lý do sửa đổi <span className="text-error">*</span></label>
+                <textarea 
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm outline-none" 
+                  placeholder="Nhập lý do thay đổi..." 
                   rows={2}
                   value={editingRecord.editReason || ''}
                   onChange={(e) => setEditingRecord({ ...editingRecord, editReason: e.target.value })}
                   required={editingRecord.status === 'Đã Xuất'}
                 />
               </div>
-
-              <div className="pt-2 flex justify-end gap-3 flex-shrink-0">
-                <button type="button" onClick={() => setEditingRecord(null)}
-                  className="px-6 py-2.5 bg-surface-container-high text-on-surface font-bold rounded-xl hover:bg-surface-container-highest transition-colors">
+              <div className="pt-4 flex justify-end gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setEditingRecord(null)}
+                  className="px-6 py-2 bg-surface-container-high text-on-surface font-bold rounded-xl hover:bg-surface-container-highest transition-colors"
+                >
                   Hủy
                 </button>
-                <button type="submit"
-                  className="px-6 py-2.5 bg-primary text-on-primary font-black rounded-xl shadow-md hover:shadow-primary/30 transition-all">
+                <button 
+                  type="submit"
+                  className="px-6 py-2 bg-primary text-on-primary font-bold rounded-xl shadow-md hover:bg-primary-dim transition-colors"
+                >
                   Lưu Thay Đổi
                 </button>
               </div>

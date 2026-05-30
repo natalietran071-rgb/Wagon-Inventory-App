@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -34,6 +34,8 @@ const Inbound = () => {
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncingRef = useRef(false);
 
   useEffect(() => {
     if (location.state?.scannedErp) {
@@ -91,6 +93,37 @@ const Inbound = () => {
       setInboundRecords(data);
     } catch (error) {
       console.error('Error fetching inbound records:', error);
+    }
+  };
+
+  const handleSync = async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    setIsSyncing(true);
+    try {
+      const fetchInventoryLocal = async (): Promise<any[]> => {
+        const PAGE = 1000;
+        let allInv: any[] = [];
+        let pg = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('inventory')
+            .select('erp, name, name_zh, unit, pos, spec, in_qty, end_stock')
+            .order('erp', { ascending: true })
+            .range(pg * PAGE, (pg + 1) * PAGE - 1);
+          if (error) { console.error('Inventory fetch error:', error); break; }
+          if (data && data.length > 0) { allInv = allInv.concat(data); hasMore = data.length === PAGE; pg++; }
+          else { hasMore = false; }
+        }
+        return allInv;
+      };
+      const [inv, inbound] = await Promise.all([fetchInventoryLocal(), fetchInboundRecords()]);
+      setInventoryItems(inv);
+      setInboundRecords(inbound);
+    } finally {
+      setIsSyncing(false);
+      syncingRef.current = false;
     }
   };
 
@@ -693,24 +726,13 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      // Fetch all pages to bypass PostgREST's 1,000-row default cap
-      const PAGE = 1000;
-      let allRecords: any[] = [];
-      let page = 0;
-      while (true) {
-        const { data: chunk, error } = await supabase.rpc('export_inbound', {
-          p_search: searchQuery || '',
-          p_from_date: fromDate || null,
-          p_to_date: toDate || null
-        }).range(page * PAGE, (page + 1) * PAGE - 1);
-        if (error) throw error;
-        if (!chunk || chunk.length === 0) break;
-        allRecords = allRecords.concat(chunk);
-        if (chunk.length < PAGE) break;
-        page++;
-      }
-      const dataToExport = allRecords;
-      if (!dataToExport.length) throw new Error('No data found');
+      const { data: dataToExport, error } = await (supabase.rpc('export_inbound', {
+        p_search: searchQuery || '',
+        p_from_date: fromDate || null,
+        p_to_date: toDate || null
+      }) as any).setHeader('Prefer', 'return=representation');
+
+      if (error || !dataToExport) throw error || new Error('No data found');
 
       const exportData = (dataToExport || []).map(item => {
         const inv = inventoryMap.get(item.erp_code);
@@ -1287,7 +1309,15 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   Xóa ({selectedRows.length})
                 </button>
               )}
-              <button 
+              <button
+                onClick={handleSync}
+                disabled={isSyncing}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-surface-container-high text-on-surface-variant px-3 md:px-4 py-2 rounded-xl hover:bg-surface-container-highest transition-colors font-bold text-[10px] md:text-xs disabled:opacity-50"
+              >
+                <span className={`material-symbols-outlined text-sm ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
+                Đồng bộ
+              </button>
+              <button
                 onClick={exportToExcel}
                 disabled={loading}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-surface-container-high px-3 md:px-4 py-2 rounded-xl text-primary hover:bg-primary-container hover:text-on-primary-container transition-colors font-bold text-[10px] md:text-xs disabled:opacity-50"

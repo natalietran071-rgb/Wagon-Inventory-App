@@ -186,10 +186,12 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
           {/* Shipment info */}
           <div className="bg-surface-container-low rounded-2xl p-4 space-y-2 border border-outline-variant/10">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono font-black text-primary text-sm">{shipment.outbound_id}</span>
-              {shipment.bpm_number && (
-                <span className="text-xs text-on-surface-variant font-bold bg-surface-container px-2 py-0.5 rounded-lg">BPM: {shipment.bpm_number}</span>
+              {shipment.bpm_number ? (
+                <span className="font-mono font-black text-primary text-sm">BPM: {shipment.bpm_number}</span>
+              ) : (
+                <span className="font-mono font-black text-on-surface-variant text-sm">Phiếu #{shipment.outbound_id}</span>
               )}
+              {shipment.bpm_number && <span className="text-[10px] text-on-surface-variant/60">#{shipment.outbound_id}</span>}
               <StatusBadge status={shipment.status} />
             </div>
             <div className="text-sm text-on-surface-variant font-medium">
@@ -306,12 +308,18 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
         {/* Left: IDs */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="font-mono font-black text-primary text-sm tracking-tight bg-primary/5 px-2.5 py-0.5 rounded-lg border border-primary/10">
-              {shipment.outbound_id}
-            </span>
-            {shipment.bpm_number && (
-              <span className="text-xs font-bold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-lg border border-outline-variant/10">
+            {shipment.bpm_number ? (
+              <span className="font-mono font-black text-primary text-sm tracking-tight bg-primary/5 px-2.5 py-0.5 rounded-lg border border-primary/10">
                 BPM: {shipment.bpm_number}
+              </span>
+            ) : (
+              <span className="font-mono font-black text-on-surface-variant text-sm tracking-tight bg-surface-container px-2.5 py-0.5 rounded-lg border border-outline-variant/10">
+                Phiếu #{shipment.outbound_id}
+              </span>
+            )}
+            {shipment.bpm_number && (
+              <span className="text-[10px] font-medium text-on-surface-variant/60">
+                #{shipment.outbound_id}
               </span>
             )}
             <StatusBadge status={shipment.status} />

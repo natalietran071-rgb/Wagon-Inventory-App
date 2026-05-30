@@ -983,14 +983,19 @@ const Outbound = () => {
 
   const selectedItemStock = selectedItemDetails ? (selectedItemDetails.end_stock || 0) : 0;
 
-  const isFiltered = !!(filterDateFrom || filterDateTo || filterStatus !== 'all' || filterNoBpm || searchQuery.trim());
+  // dbOutboundTotal = SUM(qty) WHERE status='Đã Xuất' — use it whenever no
+  // date/search/NoBPM filters are active and status is 'all' or 'Đã Xuất'
+  const canUseDbTotal = dbOutboundTotal !== null
+    && !filterDateFrom && !filterDateTo
+    && !filterNoBpm && !searchQuery.trim()
+    && (filterStatus === 'all' || filterStatus === 'Đã Xuất');
 
   const filteredOutboundStats = useMemo(() => {
     const totalQty = filteredOutbound.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
     const uniqueItems = new Set(filteredOutbound.map(item => item.erp_code));
-    const displayQty = !isFiltered && dbOutboundTotal !== null ? dbOutboundTotal : totalQty;
+    const displayQty = canUseDbTotal ? dbOutboundTotal! : totalQty;
     return { count: filteredOutbound.length, qty: displayQty, uniqueSKU: uniqueItems.size };
-  }, [filteredOutbound, isFiltered, dbOutboundTotal]);
+  }, [filteredOutbound, canUseDbTotal, dbOutboundTotal]);
 
   const exportOutboundToExcel = async () => {
     setLoading(true);

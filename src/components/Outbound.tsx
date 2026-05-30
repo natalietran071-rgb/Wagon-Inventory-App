@@ -843,30 +843,53 @@ const Outbound = () => {
       return;
     }
 
-    const requestedQty = Math.round(parseFloat(editingRecord.qty));
-    const selectedItem = inventoryItems.find(i => i.erp === editingRecord.erp_code);
-    
-    if (!selectedItem) {
-      showToast('Vui lòng chọn mã vật tư hợp lệ.', true);
+    const erpCode = (editingRecord.erp_code || '').trim();
+    const recipientName = (editingRecord.recipient_name || '').trim();
+    const recipientId = (editingRecord.recipient_id || '').trim();
+    const deptName = (editingRecord.dept_name || '').trim();
+    const deptCode = (editingRecord.dept_code || '').trim();
+
+    if (!recipientName) {
+      showToast('Vui lòng nhập tên người nhận.', true);
       return;
     }
-    
-    // Nếu trạng thái là Chưa Xuất thì mới giới hạn tồn kho. Nếu đã xuất thì số lượng tồn kho đã bị trừ từ trước, 
-    // cần tính khoảng chênh lệch nếu muốn check tồn kho, tạm thời giản lược cảnh báo cho dễ sửa.
-    
-    const initials = editingRecord.partner.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+    if (!erpCode) {
+      showToast('Vui lòng nhập mã ERP.', true);
+      return;
+    }
+
+    const requestedQty = Math.round(parseFloat(editingRecord.qty));
+    if (!requestedQty || requestedQty <= 0) {
+      showToast('Số lượng không hợp lệ.', true);
+      return;
+    }
+
+    // partner = hiển thị gộp "Tên người nhận / Tên bộ phận" để tương thích với module Giao Hàng
+    const partnerDisplay = [recipientName, deptName].filter(Boolean).join(' / ') || recipientName;
+    const initials = recipientName.split(' ').map((n: string) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
+    const bpmValue = editingRecord.noBpm
+      ? 'No BPM'
+      : ((editingRecord.bpm_number || '').trim() || null);
+
     const originalRecord = outboundRecords.find(r => r.id === editingRecord.id);
     const oldQty = originalRecord ? originalRecord.qty : null;
 
+    const updatedFields = {
+      erp_code: erpCode,
+      partner: partnerDisplay,
+      recipient_name: recipientName || null,
+      recipient_id: recipientId || null,
+      dept_name: deptName || null,
+      dept_code: deptCode || null,
+      bpm_number: bpmValue,
+      qty: requestedQty,
+      initials,
+      required_date: editingRecord.required_date,
+    };
+
     const { error } = await supabase
       .from('outbound_records')
-      .update({
-        erp_code: editingRecord.erp_code,
-        partner: editingRecord.partner,
-        qty: requestedQty,
-        initials: initials,
-        required_date: editingRecord.required_date
-      })
+      .update(updatedFields)
       .eq('id', editingRecord.id);
 
     if (error) {
@@ -875,8 +898,8 @@ const Outbound = () => {
       // Log edit history
       const { error: historyError } = await supabase.from('edit_history_outbound').insert([{
         outbound_id: editingRecord.outbound_id,
-        erp_code: editingRecord.erp_code,
-        partner: editingRecord.partner,
+        erp_code: erpCode,
+        partner: partnerDisplay,
         old_qty: oldQty,
         new_qty: requestedQty,
         reason: editingRecord.editReason || (editingRecord.status === 'Đã Xuất' ? 'Không có lý do' : 'Sửa phiếu chờ xuất'),
@@ -887,7 +910,7 @@ const Outbound = () => {
         console.error('Error logging edit history:', historyError);
       }
 
-      setOutboundRecords(prev => prev.map(item => String(item.id) === String(editingRecord.id) ? { ...item, ...editingRecord, initials } : item));
+      setOutboundRecords(prev => prev.map(item => String(item.id) === String(editingRecord.id) ? { ...item, ...updatedFields } : item));
       setEditingRecord(null);
       showToast('Cập nhật lệnh xuất kho thành công!');
     }
@@ -1970,7 +1993,7 @@ const Outbound = () => {
                           {canEdit && (
                             <>
                               <button 
-                                onClick={() => setEditingRecord({ ...order, editReason: '' })}
+                                onClick={() => setEditingRecord({ ...order, editReason: '', noBpm: order.bpm_number === 'No BPM', bpm_number: order.bpm_number === 'No BPM' ? '' : order.bpm_number })}
                                 className="p-1 md:p-2 text-on-surface-variant hover:text-secondary transition-colors bg-surface-container-high rounded-lg hover:bg-secondary-container hover:text-on-secondary-container"
                                 title="Sửa thông tin"
                               >
@@ -2100,30 +2123,83 @@ const Outbound = () => {
       {/* Edit Modal */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center flex-shrink-0">
               <h3 className="text-lg font-bold text-on-surface">Sửa thông tin phiếu xuất</h3>
               <button onClick={() => setEditingRecord(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form onSubmit={handleUpdateOutbound} className="p-6 space-y-4">
+            <form onSubmit={handleUpdateOutbound} className="p-6 space-y-4 overflow-y-auto">
+              {/* NGƯỜI NHẬN */}
               <div>
                 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
-                <input 
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
-                  type="text" 
-                  value={editingRecord.partner}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, partner: e.target.value })}
-                  required
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    type="text"
+                    placeholder="Mã nhân viên"
+                    value={editingRecord.recipient_id || ''}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, recipient_id: e.target.value })}
+                  />
+                  <input
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    type="text"
+                    placeholder="Tên nhân viên *"
+                    value={editingRecord.recipient_name || ''}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, recipient_name: e.target.value })}
+                    required
+                  />
+                </div>
               </div>
+              {/* BỘ PHẬN NHẬN */}
               <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
-                <input 
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Bộ Phận Nhận</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    type="text"
+                    placeholder="Mã bộ phận"
+                    value={editingRecord.dept_code || ''}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, dept_code: e.target.value })}
+                  />
+                  <input
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    type="text"
+                    placeholder="Tên bộ phận"
+                    value={editingRecord.dept_name || ''}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, dept_name: e.target.value })}
+                  />
+                </div>
+              </div>
+              {/* SỐ BPM */}
+              <div>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số BPM</label>
+                <input
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm disabled:opacity-50"
+                  type="text"
+                  placeholder="Nhập số BPM..."
+                  value={editingRecord.noBpm ? '' : (editingRecord.bpm_number || '')}
+                  disabled={editingRecord.noBpm}
+                  onChange={(e) => setEditingRecord({ ...editingRecord, bpm_number: e.target.value })}
+                />
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-outline-variant/30 text-primary focus:ring-primary/20"
+                    checked={!!editingRecord.noBpm}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, noBpm: e.target.checked })}
+                  />
+                  <span className="text-sm text-on-surface-variant">No BPM</span>
+                </label>
+              </div>
+              {/* MÃ ERP */}
+              <div>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP <span className="text-error">*</span></label>
+                <input
                   list="edit-erp-options"
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
-                  value={editingRecord.erp_code}
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                  value={editingRecord.erp_code || ''}
                   onChange={(e) => setEditingRecord({ ...editingRecord, erp_code: e.target.value })}
                   required
                 />
@@ -2137,10 +2213,10 @@ const Outbound = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số lượng</label>
-                  <input 
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
-                    type="number" 
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số lượng <span className="text-error">*</span></label>
+                  <input
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    type="number"
                     value={editingRecord.qty}
                     onChange={(e) => setEditingRecord({ ...editingRecord, qty: e.target.value })}
                     required
@@ -2148,21 +2224,21 @@ const Outbound = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Ngày cần xuất</label>
-                  <input 
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
-                    type="date" 
+                  <input
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    type="date"
                     value={editingRecord.required_date || editingRecord.date}
                     onChange={(e) => setEditingRecord({ ...editingRecord, required_date: e.target.value })}
                     required
                   />
                 </div>
               </div>
-              
+
               <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Lý do sửa đổi <span className="text-error">*</span></label>
-                <textarea 
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm outline-none" 
-                  placeholder="Nhập lý do thay đổi..." 
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Lý do sửa đổi {editingRecord.status === 'Đã Xuất' && <span className="text-error">*</span>}</label>
+                <textarea
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm outline-none"
+                  placeholder="Nhập lý do thay đổi..."
                   rows={2}
                   value={editingRecord.editReason || ''}
                   onChange={(e) => setEditingRecord({ ...editingRecord, editReason: e.target.value })}

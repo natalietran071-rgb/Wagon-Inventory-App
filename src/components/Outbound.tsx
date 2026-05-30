@@ -57,23 +57,12 @@ const Outbound = () => {
   }, [location.state?.scannedErp]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncingRef = useRef(false);
 
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [errorLog, setErrorLog] = useState<string>('');
   const [editHistory, setEditHistory] = useState<any[]>([]);
-
-  // Shipment confirmation counts (badge)
-  const [shipmentCounts, setShipmentCounts] = useState<{ pending: number; rejected: number }>({ pending: 0, rejected: 0 });
-
-  useEffect(() => {
-    const fetchShipmentCounts = async () => {
-      try {
-        const { data } = await supabase.rpc('get_shipment_counts');
-        if (data) setShipmentCounts({ pending: data.pending || 0, rejected: data.rejected || 0 });
-      } catch (_) {}
-    };
-    fetchShipmentCounts();
-  }, []);
 
   // Pending tab
   const [outboundTab, setOutboundTab] = useState<'list' | 'pending'>('list');
@@ -214,6 +203,18 @@ const Outbound = () => {
       setOutboundRecords(data);
     } catch (error) {
       console.error('Error fetching outbound records:', error);
+    }
+  };
+
+  const handleSync = async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    setIsSyncing(true);
+    try {
+      await Promise.all([loadOutboundRecords(), fetchPendingOutbound()]);
+    } finally {
+      setIsSyncing(false);
+      syncingRef.current = false;
     }
   };
 
@@ -835,51 +836,50 @@ const Outbound = () => {
     }
 
     const requestedQty = Math.round(parseFloat(editingRecord.qty));
-    if (!editingRecord.erp_code?.trim()) { showToast('Vui lòng nhập Mã ERP.', true); return; }
-    if (!requestedQty || requestedQty <= 0) { showToast('Số lượng không hợp lệ.', true); return; }
-
-    const recipientName = editingRecord.recipient_name || editingRecord.partner || 'Nội bộ';
-    const partnerDisplay = [recipientName, editingRecord.dept_name].filter(Boolean).join(' / ');
-    const initials = recipientName.split(' ').map((n: string) => n[0] || '').join('').toUpperCase().slice(0, 2) || 'NB';
+    const selectedItem = inventoryItems.find(i => i.erp === editingRecord.erp_code);
+    
+    if (!selectedItem) {
+      showToast('Vui lòng chọn mã vật tư hợp lệ.', true);
+      return;
+    }
+    
+    // Nếu trạng thái là Chưa Xuất thì mới giới hạn tồn kho. Nếu đã xuất thì số lượng tồn kho đã bị trừ từ trước, 
+    // cần tính khoảng chênh lệch nếu muốn check tồn kho, tạm thời giản lược cảnh báo cho dễ sửa.
+    
+    const initials = editingRecord.partner.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
     const originalRecord = outboundRecords.find(r => r.id === editingRecord.id);
     const oldQty = originalRecord ? originalRecord.qty : null;
 
     const { error } = await supabase
       .from('outbound_records')
       .update({
-        erp_code:       editingRecord.erp_code.trim().toUpperCase(),
-        partner:        partnerDisplay,
-        recipient_name: editingRecord.recipient_name || null,
-        recipient_id:   editingRecord.recipient_id || null,
-        dept_name:      editingRecord.dept_name || null,
-        dept_code:      editingRecord.dept_code || null,
-        bpm_number:     editingRecord.bpm_number || null,
-        qty:            requestedQty,
-        initials:       initials,
-        date:           editingRecord.date || null,
-        required_date:  editingRecord.required_date || null,
-        location:       editingRecord.location || null,
+        erp_code: editingRecord.erp_code,
+        partner: editingRecord.partner,
+        qty: requestedQty,
+        initials: initials,
+        required_date: editingRecord.required_date
       })
       .eq('id', editingRecord.id);
 
     if (error) {
       showToast('Lỗi khi cập nhật phiếu xuất: ' + error.message, true);
     } else {
-      await supabase.from('edit_history_outbound').insert([{
+      // Log edit history
+      const { error: historyError } = await supabase.from('edit_history_outbound').insert([{
         outbound_id: editingRecord.outbound_id,
-        erp_code:    editingRecord.erp_code,
-        partner:     partnerDisplay,
-        old_qty:     oldQty,
-        new_qty:     requestedQty,
-        reason:      editingRecord.editReason || 'Sửa thông tin phiếu',
-        edited_by:   profile?.full_name || profile?.email || user?.email || 'Unknown'
-      }]).then(({ error: e }) => { if (e) console.error('Edit history log error:', e); });
+        erp_code: editingRecord.erp_code,
+        partner: editingRecord.partner,
+        old_qty: oldQty,
+        new_qty: requestedQty,
+        reason: editingRecord.editReason || (editingRecord.status === 'Đã Xuất' ? 'Không có lý do' : 'Sửa phiếu chờ xuất'),
+        edited_by: profile?.full_name || profile?.email || user?.email || 'Unknown'
+      }]);
 
-      setOutboundRecords(prev => prev.map(item =>
-        String(item.id) === String(editingRecord.id)
-          ? { ...item, ...editingRecord, partner: partnerDisplay, initials }
-          : item
-      ));
+      if (historyError) {
+        console.error('Error logging edit history:', historyError);
+      }
+
+      setOutboundRecords(prev => prev.map(item => String(item.id) === String(editingRecord.id) ? { ...item, ...editingRecord, initials } : item));
       setEditingRecord(null);
       showToast('Cập nhật lệnh xuất kho thành công!');
     }
@@ -1111,35 +1111,19 @@ const Outbound = () => {
           <p className="text-xs md:text-sm text-on-surface-variant font-medium opacity-70">Tạo phiếu và quản lý luồng hàng hóa xuất kho.</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          {(shipmentCounts.pending > 0 || shipmentCounts.rejected > 0) && (
-            <a href="#/shipment" className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 rounded-xl transition-all duration-200 flex items-center gap-2 text-xs md:text-sm font-bold border">
-              {shipmentCounts.pending > 0 && (
-                <span className="flex items-center gap-1 text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-                  <span className="material-symbols-outlined text-base">pending</span>
-                  {shipmentCounts.pending} chờ xác nhận
-                </span>
-              )}
-              {shipmentCounts.rejected > 0 && (
-                <span className="flex items-center gap-1 text-error bg-error/5 border border-error/20 rounded-lg px-3 py-1.5">
-                  <span className="material-symbols-outlined text-base">cancel</span>
-                  {shipmentCounts.rejected} bị từ chối
-                </span>
-              )}
-            </a>
-          )}
-          <button
+          <button 
             onClick={() => setShowEditHistory(true)}
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-base"
           >
             <span className="material-symbols-outlined text-lg">history</span>
             <span>Lịch sử</span>
           </button>
-          <button 
-            onClick={loadOutboundRecords}
-            disabled={loading}
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-base disabled:opacity-50"
           >
-            <span className={`material-symbols-outlined text-lg ${loading ? 'animate-spin' : ''}`}>sync</span>
+            <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
             <span>Đồng bộ</span>
           </button>
           <button 
@@ -2095,157 +2079,87 @@ const Outbound = () => {
       {/* Edit Modal */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low flex-shrink-0">
-              <div>
-                <h3 className="text-lg font-black text-on-surface">Sửa thông tin phiếu xuất</h3>
-                <p className="text-xs text-on-surface-variant font-medium mt-0.5">Phiếu #{editingRecord.outbound_id}</p>
-              </div>
-              <button onClick={() => setEditingRecord(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors rounded-xl">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-on-surface">Sửa thông tin phiếu xuất</h3>
+              <button onClick={() => setEditingRecord(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form onSubmit={handleUpdateOutbound} className="p-6 space-y-4 overflow-y-auto flex-1">
-
-              {/* Số BPM */}
+            <form onSubmit={handleUpdateOutbound} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Số BPM (Lệnh xuất)</label>
-                <input
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-bold"
-                  type="text"
-                  placeholder="Nhập số BPM..."
-                  value={editingRecord.bpm_number || ''}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, bpm_number: e.target.value })}
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
+                <input 
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
+                  type="text" 
+                  value={editingRecord.partner}
+                  onChange={(e) => setEditingRecord({ ...editingRecord, partner: e.target.value })}
+                  required
                 />
               </div>
-
-              {/* Người nhận */}
               <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="text"
-                    placeholder="Mã nhân viên"
-                    value={editingRecord.recipient_id || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, recipient_id: e.target.value })}
-                  />
-                  <input
-                    className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="text"
-                    placeholder="Tên người nhận"
-                    value={editingRecord.recipient_name || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, recipient_name: e.target.value })}
-                  />
-                </div>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
+                <input 
+                  list="edit-erp-options"
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
+                  value={editingRecord.erp_code}
+                  onChange={(e) => setEditingRecord({ ...editingRecord, erp_code: e.target.value })}
+                  required
+                />
+                <datalist id="edit-erp-options">
+                  {inventoryItems.map((item, idx) => (
+                    <option key={item.erp || `edit-erp-${idx}`} value={item.erp || ''}>
+                      {item.name} {item.name_zh ? `(${item.name_zh})` : ''}
+                    </option>
+                  ))}
+                </datalist>
               </div>
-
-              {/* Bộ phận */}
-              <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Bộ Phận Nhận</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="text"
-                    placeholder="Mã bộ phận"
-                    value={editingRecord.dept_code || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, dept_code: e.target.value })}
-                  />
-                  <input
-                    className="bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="text"
-                    placeholder="Tên bộ phận"
-                    value={editingRecord.dept_name || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, dept_name: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {/* ERP + Qty */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
-                  <input
-                    list="edit-erp-options"
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono"
-                    value={editingRecord.erp_code}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, erp_code: e.target.value })}
-                    required
-                  />
-                  <datalist id="edit-erp-options">
-                    {inventoryItems.map((item, idx) => (
-                      <option key={item.erp || `edit-erp-${idx}`} value={item.erp || ''}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </datalist>
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Số lượng</label>
-                  <input
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="number" min="1"
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số lượng</label>
+                  <input 
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
+                    type="number" 
                     value={editingRecord.qty}
                     onChange={(e) => setEditingRecord({ ...editingRecord, qty: e.target.value })}
                     required
                   />
                 </div>
-              </div>
-
-              {/* Dates + Location */}
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Ngày xuất</label>
-                  <input
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="date"
-                    value={editingRecord.date || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, date: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Ngày yêu cầu</label>
-                  <input
-                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                    type="date"
-                    value={editingRecord.required_date || ''}
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Ngày cần xuất</label>
+                  <input 
+                    className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm" 
+                    type="date" 
+                    value={editingRecord.required_date || editingRecord.date}
                     onChange={(e) => setEditingRecord({ ...editingRecord, required_date: e.target.value })}
+                    required
                   />
                 </div>
               </div>
-
+              
               <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Vị trí kho</label>
-                <input
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                  type="text"
-                  placeholder="Vị trí lấy hàng..."
-                  value={editingRecord.location || ''}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, location: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">
-                  Lý do sửa đổi {editingRecord.status === 'Đã Xuất' && <span className="text-error">*</span>}
-                </label>
-                <textarea
-                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 outline-none text-sm"
-                  placeholder="Nhập lý do thay đổi..."
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Lý do sửa đổi <span className="text-error">*</span></label>
+                <textarea 
+                  className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm outline-none" 
+                  placeholder="Nhập lý do thay đổi..." 
                   rows={2}
                   value={editingRecord.editReason || ''}
                   onChange={(e) => setEditingRecord({ ...editingRecord, editReason: e.target.value })}
                   required={editingRecord.status === 'Đã Xuất'}
                 />
               </div>
-
-              <div className="pt-2 flex justify-end gap-3 flex-shrink-0">
-                <button type="button" onClick={() => setEditingRecord(null)}
-                  className="px-6 py-2.5 bg-surface-container-high text-on-surface font-bold rounded-xl hover:bg-surface-container-highest transition-colors">
+              <div className="pt-4 flex justify-end gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setEditingRecord(null)}
+                  className="px-6 py-2 bg-surface-container-high text-on-surface font-bold rounded-xl hover:bg-surface-container-highest transition-colors"
+                >
                   Hủy
                 </button>
-                <button type="submit"
-                  className="px-6 py-2.5 bg-primary text-on-primary font-black rounded-xl shadow-md hover:shadow-primary/30 transition-all">
+                <button 
+                  type="submit"
+                  className="px-6 py-2 bg-primary text-on-primary font-bold rounded-xl shadow-md hover:bg-primary-dim transition-colors"
+                >
                   Lưu Thay Đổi
                 </button>
               </div>

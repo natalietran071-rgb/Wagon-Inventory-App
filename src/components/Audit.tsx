@@ -27,6 +27,8 @@ const Audit = () => {
   
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncingRef = useRef(false);
   const [activeTab, setActiveTab] = useState<'audit' | 'draft' | 'pending' | 'history'>('audit');
 
   // Session State
@@ -139,6 +141,23 @@ const Audit = () => {
   const canEdit = isAdmin || profile?.role === 'editor';
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleSync = async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    setIsSyncing(true);
+    try {
+      const sid = currentSession?.id;
+      await Promise.all([
+        fetchDraftRecords(sid),
+        fetchPendingRecords(sid),
+        ...(hasSearched ? [fetchPendingAuditItems(sid)] : []),
+      ]);
+    } finally {
+      setIsSyncing(false);
+      syncingRef.current = false;
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -945,7 +964,7 @@ const Audit = () => {
       </section>
 
       {/* TABS */}
-      <div className="flex gap-4 border-b border-outline-variant/10 mb-2 overflow-x-auto no-scrollbar">
+      <div className="flex gap-4 border-b border-outline-variant/10 mb-2 overflow-x-auto no-scrollbar items-center">
         <button 
           onClick={() => setActiveTab('audit')}
           className={`px-6 py-4 font-black text-sm transition-all relative flex-shrink-0 ${activeTab === 'audit' ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface opacity-60'}`}
@@ -976,6 +995,17 @@ const Audit = () => {
           LỊCH SỬ PHÊ DUYỆT
           {activeTab === 'history' && <motion.div layoutId="tab-underline" className="absolute bottom-[-1px] left-0 right-0 h-1 bg-primary rounded-full" />}
         </button>
+        <div className="ml-auto flex-shrink-0 pb-1">
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all disabled:opacity-50"
+            title="Đồng bộ dữ liệu"
+          >
+            <span className={`material-symbols-outlined text-sm ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
+            Đồng bộ
+          </button>
+        </div>
       </div>
 
       {activeTab === 'audit' && (

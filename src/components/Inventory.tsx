@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -47,6 +47,8 @@ const Inventory = () => {
   const [totalFilteredCount, setTotalFilteredCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isLowStockModalOpen, setIsLowStockModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncingRef = useRef(false);
 
   // Select & bulk delete
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
@@ -122,6 +124,18 @@ const Inventory = () => {
     showToast(`Đã cập nhật ${item.erp}`);
     setEditingIncomplete(null);
     fetchIncompleteItems();
+  };
+
+  const handleSync = async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    setIsSyncing(true);
+    try {
+      await fetchInventory();
+    } finally {
+      setIsSyncing(false);
+      syncingRef.current = false;
+    }
   };
 
   const fetchInventory = async () => {
@@ -573,28 +587,15 @@ const Inventory = () => {
           allData = allData.filter(item => dupSet.has(item.erp));
         }
 
-        // Aggregate in/out from records tables — paginate to bypass PostgREST 1,000-row cap
-        const fetchAllPages = async (query: any) => {
-          const PGSIZE = 1000;
-          let all: any[] = [];
-          let p = 0;
-          while (true) {
-            const { data, error } = await query.range(p * PGSIZE, (p + 1) * PGSIZE - 1);
-            if (error || !data || data.length === 0) break;
-            all = all.concat(data);
-            if (data.length < PGSIZE) break;
-            p++;
-          }
-          return all;
-        };
-        const [inboundRows, outboundRows] = await Promise.all([
-          fetchAllPages(supabase.from('inbound_records').select('erp_code, qty')),
-          fetchAllPages(supabase.from('outbound_records').select('erp_code, qty').eq('status', 'Đã Xuất')),
+        // Aggregate in/out from records tables (same source as dashboard)
+        const [inboundAgg, outboundAgg] = await Promise.all([
+          supabase.from('inbound_records').select('erp_code, qty'),
+          supabase.from('outbound_records').select('erp_code, qty').eq('status', 'Đã Xuất')
         ]);
         const inMap = new Map<string, number>();
-        inboundRows.forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
+        (inboundAgg.data || []).forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
         const outMap = new Map<string, number>();
-        outboundRows.forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
+        (outboundAgg.data || []).forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
         allData = allData.map(item => ({ ...item, _in_agg: inMap.get(item.erp) || 0, _out_agg: outMap.get(item.erp) || 0 }));
       }
 
@@ -667,13 +668,20 @@ const Inventory = () => {
             <span className="material-symbols-outlined text-lg">delete_history</span>
             Lịch sử Hủy
           </button>
-          <button 
-            onClick={fetchInventory}
-            disabled={loading}
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
             className="flex-1 md:flex-none px-4 md:px-6 py-2 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all disabled:opacity-50 text-xs md:text-sm"
           >
-            <span className={`material-symbols-outlined text-lg ${loading ? 'animate-spin' : ''}`}>sync</span>
+            <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
             Đồng bộ
+          </button>
+          <button 
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            className={`flex-1 md:flex-none px-4 md:px-6 py-2 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-xs md:text-sm ${isFilterOpen ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'}`}
+          >
+            <span className="material-symbols-outlined text-lg">{isFilterOpen ? 'filter_list_off' : 'filter_list'}</span>
+            Bộ lọc
           </button>
           <button 
             onClick={exportInventoryToExcel}
@@ -764,6 +772,101 @@ const Inventory = () => {
           Trùng ERP
         </button>
       </div>
+
+      <AnimatePresence>
+        {isFilterOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="bg-surface-container-low p-8 rounded-[2rem] border border-outline-variant/10 grid grid-cols-1 md:grid-cols-2 gap-6 relative" style={{ zIndex: 40 }}>
+              <div className="space-y-2 relative">
+                <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-1">Phân loại (Category)</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')}
+                    className="w-full bg-surface-container-lowest border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 flex justify-between items-center text-on-surface"
+                  >
+                    <span>{selectedCategory === 'All' ? 'Tất cả phân loại' : selectedCategory}</span>
+                    <span className={`material-symbols-outlined text-[20px] transition-transform ${openDropdown === 'category' ? 'rotate-180' : ''}`}>expand_more</span>
+                  </button>
+                  <AnimatePresence>
+                    {openDropdown === 'category' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute z-50 w-full mt-2 bg-surface-container-highest border border-outline-variant/10 rounded-xl shadow-lg max-h-60 overflow-hidden flex flex-col pointer-events-auto"
+                      >
+                       <div className="overflow-y-auto w-full max-h-60 custom-scrollbar">
+                        {categories.map(cat => (
+                          <button
+                            key={cat}
+                            className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors hover:bg-surface-container-low ${selectedCategory === cat ? 'bg-primary-container/20 text-primary' : 'text-on-surface'}`}
+                            onClick={() => { setSelectedCategory(cat); setOpenDropdown(null); }}
+                          >
+                            {cat === 'All' ? 'Tất cả phân loại' : cat}
+                          </button>
+                        ))}
+                       </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+              <div className="space-y-2 relative">
+                <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-1">Khu vực (Zone)</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenDropdown(openDropdown === 'location' ? null : 'location')}
+                    className="w-full bg-surface-container-lowest border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 flex justify-between items-center text-on-surface"
+                  >
+                    <span>{selectedLocation === 'All' ? 'Tất cả khu vực' : `Khu vực ${selectedLocation}`}</span>
+                    <span className={`material-symbols-outlined text-[20px] transition-transform ${openDropdown === 'location' ? 'rotate-180' : ''}`}>expand_more</span>
+                  </button>
+                  <AnimatePresence>
+                    {openDropdown === 'location' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute z-50 w-full mt-2 bg-surface-container-highest border border-outline-variant/10 rounded-xl shadow-lg max-h-60 overflow-hidden flex flex-col pointer-events-auto"
+                      >
+                       <div className="overflow-y-auto w-full max-h-60 custom-scrollbar">
+                        {locations.map(loc => (
+                          <button
+                            key={loc}
+                            className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors hover:bg-surface-container-low ${selectedLocation === loc ? 'bg-primary-container/20 text-primary' : 'text-on-surface'}`}
+                            onClick={() => { setSelectedLocation(loc); setOpenDropdown(null); }}
+                          >
+                            {loc === 'All' ? 'Tất cả khu vực' : `Khu vực ${loc}`}
+                          </button>
+                        ))}
+                       </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+              <div className="md:col-span-2 flex justify-end gap-3 pt-2">
+                <button 
+                  onClick={() => setShowClearConfirm(true)}
+                  className="text-xs font-bold text-on-surface-variant hover:text-error transition-colors"
+                >
+                  Xóa tất cả bộ lọc
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showClearConfirm && (
@@ -974,7 +1077,7 @@ const Inventory = () => {
                 <option key={loc} value={loc}>Khu vực {loc}</option>
               ))}
             </select>
-            <select
+            <select 
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
               className="bg-surface-container-low border-none rounded-xl text-[10px] md:text-xs font-bold px-3 md:px-4 py-2 focus:ring-primary/20 cursor-pointer"
@@ -984,16 +1087,7 @@ const Inventory = () => {
               <option value="stock_desc">Sắp xếp: Tồn Cuối (Giảm)</option>
               <option value="stock_asc">Sắp xếp: Tồn Cuối (Tăng)</option>
             </select>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="bg-surface-container-low border-none rounded-xl text-[10px] md:text-xs font-bold px-3 md:px-4 py-2 focus:ring-primary/20 cursor-pointer"
-            >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat === 'All' ? 'Tất cả phân loại' : cat}</option>
-              ))}
-            </select>
-
+            
             <div className="flex items-center gap-1.5 md:gap-2 bg-surface-container-low rounded-xl px-2 border border-outline-variant/10 focus-within:border-primary/50 transition-colors">
                <span className="material-symbols-outlined text-sm text-primary pl-1">calendar_month</span>
                <input 

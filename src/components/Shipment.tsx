@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -488,6 +488,8 @@ const Shipment: React.FC = () => {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncingRef = useRef(false);
 
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
@@ -520,6 +522,18 @@ const Shipment: React.FC = () => {
   useEffect(() => {
     fetchShipments();
   }, [fetchShipments]);
+
+  const handleSync = async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    setIsSyncing(true);
+    try {
+      await fetchShipments();
+    } finally {
+      setIsSyncing(false);
+      syncingRef.current = false;
+    }
+  };
 
   // ── Filtered list ──
   const filtered = useMemo(() => {
@@ -689,11 +703,11 @@ const Shipment: React.FC = () => {
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <button
-            onClick={fetchShipments}
-            disabled={loading}
+            onClick={handleSync}
+            disabled={isSyncing}
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-sm disabled:opacity-50"
           >
-            <span className={`material-symbols-outlined text-lg ${loading ? 'animate-spin' : ''}`}>sync</span>
+            <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
             <span>Đồng bộ</span>
           </button>
           <button

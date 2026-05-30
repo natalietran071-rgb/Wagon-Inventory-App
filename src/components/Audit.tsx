@@ -121,6 +121,11 @@ const Audit = () => {
   const [locationInput, setLocationInput] = useState('');
   const [noteInput, setNoteInput] = useState('');
 
+  // Preview popup before approval
+  const [previewRecord, setPreviewRecord] = useState<any | null>(null);
+  // Filter for pending tab: show only items with discrepancy
+  const [showChangedOnly, setShowChangedOnly] = useState(false);
+
   // History filtering
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
@@ -740,15 +745,18 @@ const Audit = () => {
   };
 
   const filteredPendingRecords = useMemo(() => {
-    if (!pendingSearch.trim()) return pendingRecords;
+    let records = pendingRecords;
+    if (showChangedOnly) records = records.filter(r => r.difference !== 0);
+    if (!pendingSearch.trim()) return records;
     const q = pendingSearch.toLowerCase();
-    return pendingRecords.filter(r =>
+    return records.filter(r =>
       (r.erp_code && r.erp_code.toLowerCase().includes(q)) ||
+      (r.item_name && r.item_name.toLowerCase().includes(q)) ||
       (r.name && r.name.toLowerCase().includes(q)) ||
       (r.location && r.location.toLowerCase().includes(q)) ||
       (r.auditor && r.auditor.toLowerCase().includes(q))
     );
-  }, [pendingRecords, pendingSearch]);
+  }, [pendingRecords, pendingSearch, showChangedOnly]);
 
   const filteredInventoryItems = useMemo(() => {
     if (!searchQuery) return [];
@@ -1104,7 +1112,8 @@ const Audit = () => {
                         <tr key={item.id} className="hover:bg-primary/5 transition-colors">
                           <td className="px-8 py-5">
                              <div className="font-black text-sm text-primary font-mono tracking-tight">{item.erp_code}</div>
-                             <div className="text-xs font-bold text-on-surface line-clamp-1 opacity-80">{item.name}</div>
+                             <div className="text-xs font-bold text-on-surface line-clamp-1 opacity-80">{item.item_name || item.name}</div>
+                             {item.spec && <div className="text-[10px] text-on-surface-variant line-clamp-1 opacity-60 mt-0.5">{item.spec}</div>}
                           </td>
                           <td className="px-8 py-5 text-center">
                              <span className="bg-surface-container-high px-3 py-1 rounded-lg text-[10px] font-black border border-outline-variant/10">{item.location}</span>
@@ -1187,12 +1196,29 @@ const Audit = () => {
                    </div>
                  )}
               </div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-on-surface-variant">Tổng chờ duyệt:</span>
                   <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-black">{pendingRecords.length}</span>
+                  {/* Filter chip: Có thay đổi */}
+                  {pendingRecords.some(r => r.difference !== 0) && (
+                    <button
+                      onClick={() => setShowChangedOnly(v => !v)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border transition-colors ${
+                        showChangedOnly
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'bg-white text-amber-600 border-amber-300 hover:border-amber-500'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[13px]">swap_vert</span>
+                      Có thay đổi
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${showChangedOnly ? 'bg-white/25 text-white' : 'bg-amber-500/10 text-amber-600'}`}>
+                        {pendingRecords.filter(r => r.difference !== 0).length}
+                      </span>
+                    </button>
+                  )}
                 </div>
-                {pendingSearch.trim() && (
+                {(pendingSearch.trim() || showChangedOnly) && (
                   <span className="text-xs text-on-surface-variant">
                     Đang lọc: <strong className="text-primary">{filteredPendingRecords.length}</strong> / {pendingRecords.length}
                   </span>
@@ -1247,7 +1273,8 @@ const Audit = () => {
                         </td>
                         <td className="px-6 py-4">
                            <div className="font-black text-sm text-primary font-mono">{item.erp_code}</div>
-                           <div className="text-xs font-bold text-on-surface line-clamp-1">{item.name}</div>
+                           <div className="text-xs font-bold text-on-surface line-clamp-1">{item.item_name || item.name}</div>
+                           {item.spec && <div className="text-[10px] text-on-surface-variant line-clamp-1 opacity-60 mt-0.5">{item.spec}</div>}
                         </td>
                         <td className="px-6 py-4">
                            <span className="bg-surface-container px-2 py-0.5 rounded text-[10px] font-black">{item.location}</span>
@@ -1262,14 +1289,14 @@ const Audit = () => {
                         <td className="px-6 py-4 text-[10px] font-bold text-on-surface-variant italic">{new Date(item.created_at).toLocaleDateString('vi-VN')}</td>
                         <td className="px-6 py-4 text-right">
                            <div className="flex justify-end gap-2 text-xs">
-                              <button 
-                                onClick={() => handleApprove(item.id)}
+                              <button
+                                onClick={() => setPreviewRecord(item)}
                                 className="p-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:scale-105 transition-transform"
-                                title="Phê duyệt"
+                                title="Xem trước & Phê duyệt"
                               >
                                  <span className="material-symbols-outlined text-sm">check_circle</span>
                               </button>
-                              <button 
+                              <button
                                 onClick={() => handleUndo(item.id)}
                                 className="p-2 bg-red-600 text-white rounded-lg shadow-sm hover:scale-105 transition-transform"
                                 title="Hủy/Hoàn tác"
@@ -1511,6 +1538,69 @@ const Audit = () => {
           </div>
         </div>
       )}
+
+      {/* Preview popup before approval */}
+      <AnimatePresence>
+        {previewRecord && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setPreviewRecord(null)}
+              className="absolute inset-0 bg-on-surface/30 backdrop-blur-sm"
+            />
+            <motion.div initial={{ scale: 0.92, opacity: 0, y: 16 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 16 }}
+              className="relative bg-surface-container-lowest rounded-3xl shadow-2xl max-w-md w-full border border-outline-variant/10 overflow-hidden"
+            >
+              <div className="px-8 pt-8 pb-5 border-b border-outline-variant/10">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">Xác nhận phê duyệt</p>
+                    <div className="font-black text-primary font-mono text-lg">{previewRecord.erp_code}</div>
+                    <div className="text-sm font-bold text-on-surface mt-0.5">{previewRecord.item_name || previewRecord.name}</div>
+                    {previewRecord.spec && <div className="text-xs text-on-surface-variant mt-0.5 line-clamp-2">{previewRecord.spec}</div>}
+                  </div>
+                  <button onClick={() => setPreviewRecord(null)} className="p-2 hover:bg-surface-container rounded-xl transition-colors flex-shrink-0">
+                    <span className="material-symbols-outlined text-on-surface-variant">close</span>
+                  </button>
+                </div>
+              </div>
+              <div className="px-8 py-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-surface-container-low rounded-2xl p-4 text-center">
+                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">Hệ Thống</p>
+                    <p className="text-2xl font-black text-on-surface">{(previewRecord.system_qty ?? 0).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-2xl p-4 text-center">
+                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">Thực Tế</p>
+                    <p className="text-2xl font-black text-on-surface">{(previewRecord.actual_qty ?? 0).toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between bg-surface-container-low rounded-2xl px-5 py-4">
+                  <span className="text-xs font-black text-on-surface-variant uppercase tracking-wider">Chênh lệch</span>
+                  <span className={`text-xl font-black px-3 py-1 rounded-full ${previewRecord.difference === 0 ? 'bg-surface-container text-on-surface-variant' : previewRecord.difference > 0 ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error'}`}>
+                    {previewRecord.difference > 0 ? `+${previewRecord.difference}` : previewRecord.difference}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-on-surface-variant">
+                  <div><span className="font-black">Vị trí:</span> {previewRecord.location || '—'}</div>
+                  <div><span className="font-black">Người kiểm:</span> {previewRecord.auditor || '—'}</div>
+                  {previewRecord.note && <div className="col-span-2"><span className="font-black">Ghi chú:</span> {previewRecord.note}</div>}
+                </div>
+              </div>
+              <div className="px-8 pb-8 grid grid-cols-2 gap-3">
+                <button onClick={() => setPreviewRecord(null)} className="py-3.5 rounded-2xl text-sm font-black bg-surface-container hover:bg-surface-container-high transition-colors">Hủy</button>
+                <button onClick={() => { handleApprove(previewRecord.id); setPreviewRecord(null); }}
+                  className="py-3.5 rounded-2xl text-sm font-black bg-emerald-600 text-white shadow-lg shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all">
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined text-base">check_circle</span>
+                    Xác nhận duyệt
+                  </span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -693,13 +693,24 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      const { data: dataToExport, error } = await (supabase.rpc('export_inbound', {
-        p_search: searchQuery || '',
-        p_from_date: fromDate || null,
-        p_to_date: toDate || null
-      }) as any).setHeader('Prefer', 'return=representation');
-
-      if (error || !dataToExport) throw error || new Error('No data found');
+      // Fetch all pages to bypass PostgREST's 1,000-row default cap
+      const PAGE = 1000;
+      let allRecords: any[] = [];
+      let page = 0;
+      while (true) {
+        const { data: chunk, error } = await supabase.rpc('export_inbound', {
+          p_search: searchQuery || '',
+          p_from_date: fromDate || null,
+          p_to_date: toDate || null
+        }).range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        if (!chunk || chunk.length === 0) break;
+        allRecords = allRecords.concat(chunk);
+        if (chunk.length < PAGE) break;
+        page++;
+      }
+      const dataToExport = allRecords;
+      if (!dataToExport.length) throw new Error('No data found');
 
       const exportData = (dataToExport || []).map(item => {
         const inv = inventoryMap.get(item.erp_code);

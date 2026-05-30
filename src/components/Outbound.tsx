@@ -62,6 +62,19 @@ const Outbound = () => {
   const [errorLog, setErrorLog] = useState<string>('');
   const [editHistory, setEditHistory] = useState<any[]>([]);
 
+  // Shipment confirmation counts (badge)
+  const [shipmentCounts, setShipmentCounts] = useState<{ pending: number; rejected: number }>({ pending: 0, rejected: 0 });
+
+  useEffect(() => {
+    const fetchShipmentCounts = async () => {
+      try {
+        const { data } = await supabase.rpc('get_shipment_counts');
+        if (data) setShipmentCounts({ pending: data.pending || 0, rejected: data.rejected || 0 });
+      } catch (_) {}
+    };
+    fetchShipmentCounts();
+  }, []);
+
   // Pending tab
   const [outboundTab, setOutboundTab] = useState<'list' | 'pending'>('list');
   const [pendingOutbound, setPendingOutbound] = useState<any[]>([]);
@@ -1097,7 +1110,23 @@ const Outbound = () => {
           <p className="text-xs md:text-sm text-on-surface-variant font-medium opacity-70">Tạo phiếu và quản lý luồng hàng hóa xuất kho.</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <button 
+          {(shipmentCounts.pending > 0 || shipmentCounts.rejected > 0) && (
+            <a href="#/shipment" className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 rounded-xl transition-all duration-200 flex items-center gap-2 text-xs md:text-sm font-bold border">
+              {shipmentCounts.pending > 0 && (
+                <span className="flex items-center gap-1 text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                  <span className="material-symbols-outlined text-base">pending</span>
+                  {shipmentCounts.pending} chờ xác nhận
+                </span>
+              )}
+              {shipmentCounts.rejected > 0 && (
+                <span className="flex items-center gap-1 text-error bg-error/5 border border-error/20 rounded-lg px-3 py-1.5">
+                  <span className="material-symbols-outlined text-base">cancel</span>
+                  {shipmentCounts.rejected} bị từ chối
+                </span>
+              )}
+            </a>
+          )}
+          <button
             onClick={() => setShowEditHistory(true)}
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-base"
           >

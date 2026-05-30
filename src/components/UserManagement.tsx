@@ -7,9 +7,11 @@ interface UserProfile {
   id: string;
   username: string;
   full_name: string;
-  role: 'admin' | 'editor' | 'viewer';
+  role: 'admin' | 'editor' | 'viewer' | 'dept_user';
   is_active: boolean;
   email: string;
+  dept_code?: string;
+  dept_name?: string;
   last_sign_in_at?: string;
   created_at: string;
 }
@@ -30,7 +32,9 @@ const UserManagement: React.FC = () => {
     is_active: true,
     email: '',
     password: '',
-    username: ''
+    username: '',
+    dept_code: '',
+    dept_name: '',
   });
 
   const [newPassword, setNewPassword] = useState('');
@@ -80,13 +84,19 @@ const UserManagement: React.FC = () => {
       is_active: true,
       email: '',
       password: '',
-      username: ''
+      username: '',
+      dept_code: '',
+      dept_name: '',
     });
     setIsAddModalOpen(true);
   };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.role === 'dept_user' && !formData.dept_code.trim()) {
+      alert('Vui lòng nhập Mã bộ phận cho tài khoản Dept User.');
+      return;
+    }
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('admin_create_user', {
@@ -99,6 +109,14 @@ const UserManagement: React.FC = () => {
 
       if (error) throw error;
       if (data && data.status === 'error') throw new Error(data.error);
+
+      // Update dept fields if dept_user
+      if (formData.role === 'dept_user' && data?.user_id) {
+        await supabase.from('profiles').update({
+          dept_code: formData.dept_code.trim(),
+          dept_name: formData.dept_name.trim() || formData.dept_code.trim(),
+        }).eq('id', data.user_id);
+      }
 
       await fetchUsers();
       setIsAddModalOpen(false);
@@ -119,7 +137,9 @@ const UserManagement: React.FC = () => {
       is_active: user.is_active,
       email: user.email,
       password: '',
-      username: user.username || ''
+      username: user.username || '',
+      dept_code: user.dept_code || '',
+      dept_name: user.dept_name || '',
     });
     setIsEditModalOpen(true);
   };
@@ -127,7 +147,10 @@ const UserManagement: React.FC = () => {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
-    
+    if (formData.role === 'dept_user' && !formData.dept_code.trim()) {
+      alert('Vui lòng nhập Mã bộ phận cho tài khoản Dept User.');
+      return;
+    }
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('admin_update_user', {
@@ -142,9 +165,15 @@ const UserManagement: React.FC = () => {
 
       if (error) throw error;
       if (data && data.status === 'error') throw new Error(data.error);
-      
-      setIsEditModalOpen(false); // Close modal first
-      await fetchUsers(); // Reload list
+
+      // Update dept fields
+      await supabase.from('profiles').update({
+        dept_code: formData.role === 'dept_user' ? formData.dept_code.trim() : null,
+        dept_name: formData.role === 'dept_user' ? (formData.dept_name.trim() || formData.dept_code.trim()) : null,
+      }).eq('id', selectedUser.id);
+
+      setIsEditModalOpen(false);
+      await fetchUsers();
       alert('✅ Cập nhật người dùng thành công!');
     } catch (err: any) {
       console.error('Error updating user:', err);
@@ -306,10 +335,12 @@ const UserManagement: React.FC = () => {
                     <td className="px-8 py-6 text-sm font-medium text-on-surface-variant">{user.email}</td>
                     <td className="px-8 py-6">
                       <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
-                        user.role === 'admin' ? 'bg-error/10 text-error' : 
-                        user.role === 'editor' ? 'bg-primary/10 text-primary' : 'bg-surface-container-highest text-on-surface-variant'
+                        user.role === 'admin' ? 'bg-error/10 text-error' :
+                        user.role === 'editor' ? 'bg-primary/10 text-primary' :
+                        user.role === 'dept_user' ? 'bg-amber-500/10 text-amber-600' :
+                        'bg-surface-container-highest text-on-surface-variant'
                       }`}>
-                        {user.role}
+                        {user.role === 'dept_user' ? `Dept: ${user.dept_code || '—'}` : user.role}
                       </span>
                     </td>
                     <td className="px-8 py-6 text-sm font-medium text-on-surface-variant">
@@ -431,7 +462,7 @@ const UserManagement: React.FC = () => {
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-3">Vai trò</label>
                   <div className="relative">
-                    <select 
+                    <select
                       className="w-full bg-surface-container-low border-none rounded-2xl py-4 px-6 text-sm font-bold shadow-inner focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer"
                       value={formData.role}
                       onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as any }))}
@@ -439,13 +470,39 @@ const UserManagement: React.FC = () => {
                       <option value="viewer">Viewer (Chỉ xem)</option>
                       <option value="editor">Editor (Chỉnh sửa/Nhập xuất)</option>
                       <option value="admin">Admin (Quản trị viên)</option>
+                      <option value="dept_user">Dept User (Bộ phận — Giao hàng)</option>
                     </select>
                     <span className="absolute right-6 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none text-on-surface-variant">expand_more</span>
                   </div>
                 </div>
 
+                {formData.role === 'dept_user' && (
+                  <div className="grid grid-cols-2 gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">Mã bộ phận *</label>
+                      <input
+                        type="text" required
+                        className="w-full bg-white border border-amber-200 rounded-xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-300 outline-none"
+                        placeholder="VD: BP001"
+                        value={formData.dept_code}
+                        onChange={(e) => setFormData(prev => ({ ...prev, dept_code: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">Tên bộ phận</label>
+                      <input
+                        type="text"
+                        className="w-full bg-white border border-amber-200 rounded-xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-300 outline-none"
+                        placeholder="VD: Sản xuất"
+                        value={formData.dept_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, dept_name: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-4 bg-surface-container-low p-5 rounded-2xl border border-outline-variant/5">
-                  <input 
+                  <input
                     type="checkbox"
                     id="is_active_edit"
                     className="w-6 h-6 rounded-lg border-none bg-surface-container-highest text-primary focus:ring-primary/20 cursor-pointer"
@@ -542,7 +599,7 @@ const UserManagement: React.FC = () => {
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-2">Vai trò</label>
                   <div className="relative">
-                    <select 
+                    <select
                       className="w-full bg-surface-container border-none rounded-2xl py-4 px-6 text-sm font-bold shadow-inner appearance-none cursor-pointer"
                       value={formData.role}
                       onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as any }))}
@@ -550,10 +607,36 @@ const UserManagement: React.FC = () => {
                       <option value="viewer">Viewer</option>
                       <option value="editor">Editor (Chỉnh sửa)</option>
                       <option value="admin">Admin</option>
+                      <option value="dept_user">Dept User (Bộ phận)</option>
                     </select>
                     <span className="absolute right-6 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none text-on-surface-variant">expand_more</span>
                   </div>
                 </div>
+
+                {formData.role === 'dept_user' && (
+                  <div className="grid grid-cols-2 gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">Mã bộ phận *</label>
+                      <input
+                        type="text" required
+                        className="w-full bg-white border border-amber-200 rounded-xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-300 outline-none"
+                        placeholder="VD: BP001"
+                        value={formData.dept_code}
+                        onChange={(e) => setFormData(prev => ({ ...prev, dept_code: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">Tên bộ phận</label>
+                      <input
+                        type="text"
+                        className="w-full bg-white border border-amber-200 rounded-xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-300 outline-none"
+                        placeholder="VD: Sản xuất"
+                        value={formData.dept_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, dept_name: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-4 pt-6">
                   <button 

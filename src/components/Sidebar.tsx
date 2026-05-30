@@ -7,18 +7,35 @@ import { supabase } from '../lib/supabase';
 const Sidebar = ({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }) => {
   const { t } = useLanguage();
   const { signOut, profile } = useAuth();
-  const warehouseName = 'Inventory Hub';
+  const [shipmentCounts, setShipmentCounts] = useState<{ pending: number; rejected: number }>({ pending: 0, rejected: 0 });
 
   useEffect(() => {
-    // app_settings removed as requested
+    const fetchCounts = async () => {
+      try {
+        const { data } = await supabase.rpc('get_shipment_counts');
+        if (data) setShipmentCounts({ pending: data.pending || 0, rejected: data.rejected || 0 });
+      } catch (_) {}
+    };
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 60000);
+    return () => clearInterval(interval);
   }, []);
-  
+
+  const isDeptUser = profile?.role === 'dept_user';
+
   const navItems = [
     { name: t('inventory'), icon: 'inventory_2', path: '/inventory' },
     { name: t('inbound'), icon: 'input', path: '/inbound' },
-    { name: t('outbound'), icon: 'output', path: '/outbound' },
+    { name: t('outbound'), icon: 'output', path: '/outbound', badge: !isDeptUser && (shipmentCounts.pending + shipmentCounts.rejected) > 0 ? shipmentCounts.pending + shipmentCounts.rejected : 0, badgeColor: 'bg-amber-500' },
     { name: t('audit'), icon: 'fact_check', path: '/audit' },
-    { name: 'Master ERP', icon: 'database', path: '/master-erp' },
+    {
+      name: 'Giao Hàng',
+      icon: 'local_shipping',
+      path: '/shipment',
+      badge: isDeptUser ? shipmentCounts.pending : 0,
+      badgeColor: 'bg-primary',
+    },
+    { name: 'Master ERP', icon: 'database', path: '/master-erp', roles: ['admin', 'editor'] },
     { name: t('users'), icon: 'manage_accounts', path: '/users', roles: ['admin'] },
   ];
 
@@ -54,14 +71,23 @@ const Sidebar = ({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }
               }`
             }
           >
-            <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 0" }}>{item.icon}</span>
-            <span>{item.name}</span>
+            {({ isActive }) => (
+              <>
+                <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 0" }}>{item.icon}</span>
+                <span className="flex-1">{item.name}</span>
+                {(item as any).badge > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none ${isActive ? 'bg-white/25 text-white' : `${(item as any).badgeColor} text-white`}`}>
+                    {(item as any).badge}
+                  </span>
+                )}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
       <div className="mt-auto px-4 space-y-1 border-t border-outline-variant/10 pt-6">
-        <button 
+        <button
           onClick={signOut}
           className="w-full flex items-center gap-4 text-on-surface-variant py-3 px-5 hover:text-error transition-colors text-[13px] font-bold tracking-tight"
         >

@@ -11,6 +11,7 @@ import Audit from './components/Audit';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import MasterERP from './components/MasterERP';
+import Shipment from './components/Shipment';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, loading, error } = useAuth();
@@ -30,10 +31,8 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
           <span className="material-symbols-outlined text-3xl">error</span>
         </div>
         <h2 className="text-xl font-black text-on-surface mb-2">Lỗi kết nối hệ thống</h2>
-        <p className="text-on-surface-variant text-sm mb-8 max-w-md leading-relaxed">
-          {error}
-        </p>
-        <button 
+        <p className="text-on-surface-variant text-sm mb-8 max-w-md leading-relaxed">{error}</p>
+        <button
           onClick={() => window.location.reload()}
           className="bg-primary text-on-primary px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
         >
@@ -43,25 +42,33 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (!session) {
-    return <Navigate to="/login" replace />;
-  }
-
+  if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
+};
+
+const DefaultRedirect = () => {
+  const { profile } = useAuth();
+  if (profile?.role === 'dept_user') return <Navigate to="/shipment" replace />;
+  return <Navigate to="/inventory" replace />;
+};
+
+const MasterERPRoute = () => {
+  const { profile } = useAuth();
+  if (profile?.role === 'dept_user') return <Navigate to="/shipment" replace />;
+  return <MasterERP />;
 };
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  
+
   const getTitle = (path: string) => {
     switch (path) {
-      case '/': return 'Dashboard';
       case '/inventory': return 'Tồn Kho';
       case '/inbound': return 'Nhập Kho';
       case '/outbound': return 'Xuất Kho';
       case '/audit': return 'Kiểm Kê';
-      case '/new-item': return 'Thêm Mới';
+      case '/shipment': return 'Giao Hàng';
       case '/users': return 'Người dùng';
       case '/master-erp': return 'Master ERP';
       default: return 'Wagon Inventory Hub';
@@ -71,13 +78,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="min-h-screen bg-surface">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      
-      {/* Mobile Backdrop */}
+
       {sidebarOpen && (
-        <div 
-          className="lg:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="lg:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)} />
       )}
 
       <div className="lg:pl-64 transition-all duration-300">
@@ -117,13 +120,14 @@ function App() {
               <PrivateRoute>
                 <Layout>
                   <Routes>
-                    <Route path="/" element={<Navigate to="/inventory" replace />} />
+                    <Route path="/" element={<DefaultRedirect />} />
                     <Route path="/inventory" element={<Inventory />} />
                     <Route path="/inbound" element={<Inbound />} />
                     <Route path="/outbound" element={<Outbound />} />
                     <Route path="/audit" element={<Audit />} />
+                    <Route path="/shipment" element={<Shipment />} />
                     <Route path="/users" element={<UserManagement />} />
-                    <Route path="/master-erp" element={<MasterERP />} />
+                    <Route path="/master-erp" element={<MasterERPRoute />} />
                   </Routes>
                 </Layout>
               </PrivateRoute>

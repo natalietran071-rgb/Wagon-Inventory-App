@@ -624,7 +624,59 @@ const Outbound = () => {
       return;
     }
 
-    const payload = uniqueValidRows.map(row => {
+    // Check against existing DB records to prevent double-upload
+    const dbCheckKeys = uniqueValidRows.map(r =>
+      `${r.outboundId.trim()}|${r.erpCode.trim()}|${Math.round(parseFloat(r.qty))}`
+    );
+    const uniqueOutboundIds = [...new Set(uniqueValidRows.map(r => r.outboundId.trim()).filter(Boolean))];
+    let existingKeys = new Set<string>();
+    if (uniqueOutboundIds.length > 0) {
+      const CHUNK = 200;
+      for (let i = 0; i < uniqueOutboundIds.length; i += CHUNK) {
+        const { data: existing } = await supabase
+          .from('outbound_records')
+          .select('outbound_id, erp_code, qty')
+          .in('outbound_id', uniqueOutboundIds.slice(i, i + CHUNK));
+        if (existing) {
+          existing.forEach((r: any) => existingKeys.add(`${r.outbound_id}|${r.erp_code}|${r.qty}`));
+        }
+      }
+    }
+
+    const dbDupRows = uniqueValidRows.filter((row, idx) =>
+      dbCheckKeys[idx] && existingKeys.has(dbCheckKeys[idx])
+    );
+    const finalValidRows = uniqueValidRows.filter((row, idx) =>
+      !dbCheckKeys[idx] || !existingKeys.has(dbCheckKeys[idx])
+    );
+
+    if (dbDupRows.length > 0) {
+      const dbDupPayload = dbDupRows.map(row => ({
+        outbound_id:    row.outboundId || null,
+        erp_code:       row.erpCode.trim(),
+        partner:        [(row.recipientName || '').trim(), (row.deptName || '').trim()].filter(Boolean).join(' / ') || null,
+        recipient_name: (row.recipientName || '').trim() || null,
+        recipient_id:   (row.recipientId  || '').trim() || null,
+        dept_name:      (row.deptName     || '').trim() || null,
+        dept_code:      (row.deptCode     || '').trim() || null,
+        bpm_number:     row.bpm || null,
+        qty:            row.qty || '0',
+        required_date:  row.requiredDate || null,
+        reason:         'Đã tồn tại trong hệ thống (tải lên trùng)',
+      }));
+      const { error: dbDupErr } = await supabase.from('outbound_pending').insert(dbDupPayload);
+      if (!dbDupErr) {
+        setPendingOutboundCount(c => c + dbDupPayload.length);
+        showToast(`⚠️ ${dbDupPayload.length} dòng đã tồn tại trong DB → tab Chờ xử lý`, true);
+      }
+    }
+
+    if (finalValidRows.length === 0) {
+      setLoading(false);
+      return;
+    }
+
+    const payload = finalValidRows.map(row => {
       const recipientName = (row.recipientName || row.partner || '').trim() || 'Nội bộ';
       const recipientId = (row.recipientId || '').trim();
       const deptName = (row.deptName || '').trim();
@@ -986,38 +1038,43 @@ const Outbound = () => {
     showToast('Đang xuất dữ liệu...');
     try {
       const today = new Date().toISOString().split('T')[0];
-      
-      const { data: dataToExport, error } = await (supabase.rpc('export_outbound', {
-        p_search: searchQuery || '',
-        p_status: filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
+
+      const { data: dataToExport, error } = await supabase.rpc('export_outbound', {
+        p_search:    searchQuery || '',
+        p_status:    filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
         p_from_date: filterDateFrom || null,
-        p_to_date: filterDateTo || null
-      }) as any).setHeader('Prefer', 'return=representation');
+        p_to_date:   filterDateTo   || null,
+        p_date_type: filterDateType,
+      });
 
-      if (error || !dataToExport) throw error || new Error('No data found');
+      if (error) throw error;
+      if (!dataToExport || (dataToExport as any[]).length === 0) {
+        showToast('Không có dữ liệu để xuất.', true);
+        return;
+      }
 
-      const filteredExport = filterNoBpm
-        ? (dataToExport || []).filter((item: any) => !item.bpm_number || item.bpm_number === 'No BPM')
-        : (dataToExport || []);
+      const rows = filterNoBpm
+        ? (dataToExport as any[]).filter(item => !item.bpm_number || item.bpm_number === 'No BPM')
+        : (dataToExport as any[]);
 
-      const exportData = filteredExport.map(item => {
+      const exportData = rows.map(item => {
         const inv = inventoryMap.get(item.erp_code);
         return {
-          'Mã Phiếu': item.outbound_id,
-          'Mã NV': item.recipient_id || '',
-          'Người Nhận': item.recipient_name || item.partner || '',
-          'Mã Bộ Phận': item.dept_code || '',
-          'Bộ Phận Nhận': item.dept_name || '',
-          'Số BPM': item.bpm_number || '',
-          'Mã ERP': item.erp_code,
-          'Tên Vật Tư': inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : (item.item_name || ''),
-          'Quy Cách': inv?.spec || '',
-          'Số Lượng': item.qty,
-          'Ngày Yêu Cầu': item.required_date || item.date,
-          'Ngày Tạo': new Date(item.created_at).toLocaleString(),
-          'Trạng Thái': item.status,
-          'Vị Trí': item.location || '',
-          'Người xử lý': item.initials
+          'Mã Phiếu':    item.outbound_id,
+          'Mã NV':       item.recipient_id   || '',
+          'Người Nhận':  item.recipient_name || item.partner || '',
+          'Mã Bộ Phận':  item.dept_code      || '',
+          'Bộ Phận Nhận':item.dept_name      || '',
+          'Số BPM':      item.bpm_number     || '',
+          'Mã ERP':      item.erp_code,
+          'Tên Vật Tư':  inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : (item.item_name || ''),
+          'Quy Cách':    inv?.spec           || '',
+          'Số Lượng':    item.qty,
+          'Ngày Yêu Cầu':item.required_date  || item.date,
+          'Ngày Tạo':    item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '',
+          'Trạng Thái':  item.status,
+          'Vị Trí':      item.location       || '',
+          'Người xử lý': item.initials        || '',
         };
       });
 
@@ -1025,12 +1082,12 @@ const Outbound = () => {
         ? `_${filterDateFrom || '...'}_to_${filterDateTo || '...'}`
         : '';
       const fileName = `xuat-kho${rangeTag || `_${today}`}.xlsx`;
-        
+
       const sheets = exportToExcelMultiSheet(exportData, fileName, 'Xuất Kho');
       showToast(`✅ Đã xuất ${exportData.length.toLocaleString()} dòng — ${sheets} sheet!`);
     } catch (err: any) {
       console.error('Export error:', err);
-      showToast('Lỗi: ' + err.message, true);
+      showToast('Lỗi xuất Excel: ' + err.message, true);
     } finally {
       setLoading(false);
     }

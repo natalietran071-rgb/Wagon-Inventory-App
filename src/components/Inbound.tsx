@@ -35,6 +35,7 @@ const Inbound = () => {
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const syncingRef = useRef(false);
 
   useEffect(() => {
@@ -717,8 +718,13 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
           nameMatch;
       });
     }
+    result = [...result].sort((a, b) => {
+      const da = (a.date || '') + (a.created_at || '');
+      const db = (b.date || '') + (b.created_at || '');
+      return sortOrder === 'desc' ? db.localeCompare(da) : da.localeCompare(db);
+    });
     return result;
-  }, [inboundRecords, fromDate, toDate, searchQuery, inventoryMap]);
+  }, [inboundRecords, fromDate, toDate, searchQuery, inventoryMap, sortOrder]);
 
   const exportToExcel = async () => {
     setLoading(true);
@@ -1299,6 +1305,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 <button onClick={() => { setFromDate(''); setToDate(''); }} className="material-symbols-outlined text-[14px] hover:text-error transition-colors ml-1 shrink-0">close</button>
               )}
             </div>
+            <button
+              onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
+              className="flex items-center gap-1.5 bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10 text-[10px] md:text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors whitespace-nowrap"
+              title={sortOrder === 'desc' ? 'Đang xem: Mới nhất trước' : 'Đang xem: Cũ nhất trước'}
+            >
+              <span className="material-symbols-outlined text-sm">{sortOrder === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span>
+              {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
+            </button>
             <div className="flex gap-2 flex-wrap w-full sm:w-auto">
               {selectedRows.length > 0 && canEdit && (
                 <button 

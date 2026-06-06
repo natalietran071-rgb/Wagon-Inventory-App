@@ -317,17 +317,22 @@ const Inbound = () => {
     if (showEditHistory) {
       const fetchEditHistory = async () => {
         try {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          
-          const { data, error } = await supabase
-            .from('edit_history_inbound')
-            .select('*')
-            .gte('edited_at', thirtyDaysAgo.toISOString())
-            .order('edited_at', { ascending: false });
-            
-          if (error) throw error;
-          if (data) setEditHistory(data);
+          let all: any[] = [];
+          let from = 0;
+          const PAGE = 1000;
+          while (true) {
+            const { data, error } = await supabase
+              .from('edit_history_inbound')
+              .select('*')
+              .order('edited_at', { ascending: false })
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            all = all.concat(data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+          }
+          setEditHistory(all);
         } catch (err: any) {
           console.error('Error fetching edit history:', err);
         }
@@ -1693,7 +1698,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 </div>
                 <div>
                   <h3 className="text-xl font-bold font-manrope text-on-surface">Lịch sử sửa phiếu nhập</h3>
-                  <p className="text-on-surface-variant text-xs font-medium">Theo dõi các thay đổi trong 30 ngày qua.</p>
+                  <p className="text-on-surface-variant text-xs font-medium">Toàn bộ lịch sử chỉnh sửa phiếu nhập.</p>
                 </div>
               </div>
               <button 
@@ -1755,7 +1760,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                       <td colSpan={6} className="py-24 text-center">
                         <div className="flex flex-col items-center gap-4 opacity-40">
                           <span className="material-symbols-outlined text-6xl">history_toggle_off</span>
-                          <p className="text-sm font-bold italic tracking-wide">Không có dữ liệu chỉnh sửa trong 30 ngày qua.</p>
+                          <p className="text-sm font-bold italic tracking-wide">Không có dữ liệu chỉnh sửa.</p>
                         </div>
                       </td>
                     </tr>
@@ -1765,12 +1770,38 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
             </div>
             <div className="px-8 py-6 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
                <span>Tổng cộng {editHistory.length} lần điều chỉnh</span>
-               <button 
-                onClick={() => setShowEditHistory(false)}
-                className="px-8 py-3 bg-primary text-on-primary rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
-               >
-                 Đóng cửa sổ
-               </button>
+               <div className="flex items-center gap-3">
+                 <button
+                   onClick={() => {
+                     import('xlsx').then(XLSX => {
+                       const rows = editHistory.map(item => ({
+                         'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
+                         'Mã phiếu': item.order_id || '',
+                         'Mã ERP': item.erp_code || '',
+                         'SL Cũ': item.old_qty ?? '',
+                         'Biến động': Number(item.new_qty) - Number(item.old_qty || 0),
+                         'SL Mới': item.new_qty ?? '',
+                         'Lý do': item.reason || '',
+                         'Người thực hiện': item.edited_by || '',
+                       }));
+                       const ws = XLSX.utils.json_to_sheet(rows);
+                       const wb = XLSX.utils.book_new();
+                       XLSX.utils.book_append_sheet(wb, ws, 'Lich Su Nhap');
+                       XLSX.writeFile(wb, `Lich_Su_Chinh_Sua_Nhap_Kho_${new Date().toISOString().split('T')[0]}.xlsx`);
+                     });
+                   }}
+                   className="flex items-center gap-1.5 px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow hover:bg-emerald-700 transition-colors"
+                 >
+                   <span className="material-symbols-outlined text-sm">download</span>
+                   Xuất Excel
+                 </button>
+                 <button
+                  onClick={() => setShowEditHistory(false)}
+                  className="px-8 py-3 bg-primary text-on-primary rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                 >
+                   Đóng cửa sổ
+                 </button>
+               </div>
             </div>
           </motion.div>
         </div>

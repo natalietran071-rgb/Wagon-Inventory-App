@@ -1588,13 +1588,22 @@ const Inventory = () => {
                   <div className="pt-4 border-t border-outline-variant/10 flex justify-center">
                     <button 
                       onClick={async () => {
-                        const { data } = await supabase
-                          .from('edit_history_inventory')
-                          .select('*')
-                          .eq('erp_code', selectedItemDetail.erp)
-                          .order('edited_at', { ascending: false });
-                        
-                        if (data) setItemEditHistory(data);
+                        let all: any[] = [];
+                        let from = 0;
+                        const PAGE = 1000;
+                        while (true) {
+                          const { data } = await supabase
+                            .from('edit_history_inventory')
+                            .select('*')
+                            .eq('erp_code', selectedItemDetail.erp)
+                            .order('edited_at', { ascending: false })
+                            .range(from, from + PAGE - 1);
+                          if (!data || data.length === 0) break;
+                          all = all.concat(data);
+                          if (data.length < PAGE) break;
+                          from += PAGE;
+                        }
+                        setItemEditHistory(all);
                         setShowItemEditHistory(true);
                       }}
                       className="text-primary text-xs font-bold hover:underline flex items-center gap-1"
@@ -1750,6 +1759,37 @@ const Inventory = () => {
                     )}
                   </tbody>
                 </table>
+              </div>
+              <div className="px-4 py-3 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
+                <span>Tổng cộng {itemEditHistory.length} lần điều chỉnh</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      import('xlsx').then(XLSX => {
+                        const rows = itemEditHistory.map(item => ({
+                          'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
+                          'Mã ERP': item.erp_code || '',
+                          'Trường': item.field_name || '',
+                          'Giá trị cũ': item.old_value || '',
+                          'Giá trị mới': item.new_value || '',
+                          'Ghi chú': item.reason || '',
+                          'Người sửa': item.edited_by || '',
+                        }));
+                        const ws = XLSX.utils.json_to_sheet(rows);
+                        const wb = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(wb, ws, 'Lich Su');
+                        XLSX.writeFile(wb, `Lich_Su_Chinh_Sua_${selectedItemDetail?.erp || 'Item'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+                      });
+                    }}
+                    className="flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-[10px] shadow hover:bg-emerald-700 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">download</span>
+                    Xuất Excel
+                  </button>
+                  <button onClick={() => setShowItemEditHistory(false)} className="px-4 py-2 bg-primary text-on-primary rounded-xl font-bold text-[10px] shadow hover:opacity-90 transition-all">
+                    Đóng
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

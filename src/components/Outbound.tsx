@@ -229,17 +229,22 @@ const Outbound = () => {
     if (showEditHistory) {
       const fetchEditHistory = async () => {
         try {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          
-          const { data, error } = await supabase
-            .from('edit_history_outbound')
-            .select('*')
-            .gte('edited_at', thirtyDaysAgo.toISOString())
-            .order('edited_at', { ascending: false });
-            
-          if (error) throw error;
-          if (data) setEditHistory(data);
+          let all: any[] = [];
+          let from = 0;
+          const PAGE = 1000;
+          while (true) {
+            const { data, error } = await supabase
+              .from('edit_history_outbound')
+              .select('*')
+              .order('edited_at', { ascending: false })
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            all = all.concat(data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+          }
+          setEditHistory(all);
         } catch (err: any) {
           console.error('Error fetching edit history:', err);
           showToast('Lỗi khi tải lịch sử: ' + err.message, true);
@@ -2046,11 +2051,47 @@ const Outbound = () => {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-on-surface-variant italic">Không có dữ liệu sửa đổi trong 30 ngày qua.</td>
+                      <td colSpan={6} className="py-12 text-center text-on-surface-variant italic">Không có dữ liệu chỉnh sửa.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="px-6 py-4 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
+              <span>Tổng cộng {editHistory.length} lần điều chỉnh</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    import('xlsx').then(XLSX => {
+                      const rows = editHistory.map(item => ({
+                        'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
+                        'Mã phiếu xuất': item.outbound_id || '',
+                        'Mã ERP': item.erp_code || '',
+                        'Đối tác': item.partner || '',
+                        'SL Cũ': item.old_qty ?? '',
+                        'Biến động': Number(item.new_qty) - Number(item.old_qty || 0),
+                        'SL Mới': item.new_qty ?? '',
+                        'Lý do': item.reason || '',
+                        'Người thực hiện': item.edited_by || '',
+                      }));
+                      const ws = XLSX.utils.json_to_sheet(rows);
+                      const wb = XLSX.utils.book_new();
+                      XLSX.utils.book_append_sheet(wb, ws, 'Lich Su Xuat');
+                      XLSX.writeFile(wb, `Lich_Su_Chinh_Sua_Xuat_Kho_${new Date().toISOString().split('T')[0]}.xlsx`);
+                    });
+                  }}
+                  className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow hover:bg-emerald-700 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">download</span>
+                  Xuất Excel
+                </button>
+                <button
+                  onClick={() => setShowEditHistory(false)}
+                  className="px-6 py-2.5 bg-primary text-on-primary rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                >
+                  Đóng cửa sổ
+                </button>
+              </div>
             </div>
           </div>
         </div>

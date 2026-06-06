@@ -151,7 +151,7 @@ const MasterERP = () => {
     showToast('Đang xuất dữ liệu...');
     try {
       const XLSX = await import('xlsx');
-      const CHUNK = 3000;
+      const CHUNK = 1000;
 
       // Fetch all master_erp (no filter, no search)
       let allMaster: any[] = [];

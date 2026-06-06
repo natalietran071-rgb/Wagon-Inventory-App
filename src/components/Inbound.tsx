@@ -56,11 +56,16 @@ const Inbound = () => {
   // Form state
   const createEmptyRow = () => ({
     orderId: '',
+    poNumber: '',
     erpCode: '',
+    qcCheckNo: '',
     qty: '',
     unit: 'Kiện (Pallet)',
+    deptCode: '',
+    deptName: '',
     location: '',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    remark: '',
   });
 
   const [inboundRows, setInboundRows] = useState(Array.from({ length: 5 }, createEmptyRow));
@@ -159,7 +164,7 @@ const Inbound = () => {
       e.preventDefault();
       
       const newRows = [...inboundRows];
-      const fields = ['orderId', 'erpCode', 'ignored_name', 'ignored_spec', 'qty', 'unit', 'location', 'date'];
+      const fields = ['orderId', 'poNumber', 'erpCode', 'ignored_name', 'ignored_spec', 'qcCheckNo', 'qty', 'unit', 'deptCode', 'deptName', 'location', 'date', 'remark'];
       const fieldIdx = fields.indexOf(startField);
       
       let currentRowIdx = startIdx;
@@ -377,10 +382,15 @@ const Inbound = () => {
     try {
       const recordsToInsert = validRows.map(row => ({
         order_id: row.orderId,
+        po_number: row.poNumber || null,
         erp_code: row.erpCode,
+        qc_check_no: row.qcCheckNo || null,
         qty: Math.round(parseFloat(row.qty)) || 0,
         unit: row.unit,
+        dept_code: row.deptCode || null,
+        dept_name: row.deptName || null,
         location: row.location,
+        remark: row.remark || null,
         status: 'Stocked',
         date: row.date || new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString()
@@ -1024,14 +1034,19 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   <thead className="sticky top-0 bg-surface-container-highest z-20 shadow-sm border-b border-outline-variant/20">
                     <tr>
                       <th className="px-2 py-3 text-xs font-bold text-on-surface-variant uppercase text-center w-10">#</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Order ID</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">BPM Number</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">PO Number</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[200px]">{t('erpCode')}</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên SP</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Quy cách</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">QC Check No</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Số lượng</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">{t('unit')}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">Mã BP</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên BP</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{t('location')}</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Ngày nhập</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Remark</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/10 text-sm bg-surface-container-lowest">
@@ -1041,13 +1056,23 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                         <tr key={idx} className="hover:bg-surface-container-low focus-within:bg-secondary-container/20 transition-colors group">
                           <td className="px-2 py-2 text-center text-on-surface-variant/50 text-[10px] font-bold select-none">{idx + 1}</td>
                           <td className="p-0 border-r border-outline-variant/5">
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               value={row.orderId}
                               onChange={(e) => handleRowChange(idx, 'orderId', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'orderId')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Mã Order"
+                              placeholder="BPM Number"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.poNumber}
+                              onChange={(e) => handleRowChange(idx, 'poNumber', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'poNumber')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="PO Number"
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5 relative">
@@ -1081,8 +1106,18 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                             </div>
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
-                            <input 
-                              type="number" 
+                            <input
+                              type="text"
+                              value={row.qcCheckNo}
+                              onChange={(e) => handleRowChange(idx, 'qcCheckNo', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'qcCheckNo')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="QC Check No"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="number"
                               value={row.qty}
                               onChange={(e) => handleRowChange(idx, 'qty', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'qty')}
@@ -1091,9 +1126,9 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5 relative">
-                            <input 
+                            <input
                               list="inbound-unit-options"
-                              type="text" 
+                              type="text"
                               value={row.unit}
                               onChange={(e) => handleRowChange(idx, 'unit', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'unit')}
@@ -1102,8 +1137,28 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
+                              value={row.deptCode}
+                              onChange={(e) => handleRowChange(idx, 'deptCode', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'deptCode')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Mã BP"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.deptName}
+                              onChange={(e) => handleRowChange(idx, 'deptName', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'deptName')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Tên bộ phận"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
                               value={row.location}
                               onChange={(e) => handleRowChange(idx, 'location', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'location')}
@@ -1111,13 +1166,23 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                               placeholder="Vị trí"
                             />
                           </td>
-                          <td className="p-0">
-                            <input 
-                              type="date" 
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="date"
                               value={row.date}
                               onChange={(e) => handleRowChange(idx, 'date', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'date')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-xs font-medium cursor-pointer"
+                            />
+                          </td>
+                          <td className="p-0">
+                            <input
+                              type="text"
+                              value={row.remark}
+                              onChange={(e) => handleRowChange(idx, 'remark', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'remark')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Ghi chú"
                             />
                           </td>
                         </tr>

@@ -201,7 +201,7 @@ const OnTheWay = () => {
     if (!arrivingRecord) return;
     try {
       const inboundRecord = {
-        order_id: arrivingRecord.bpm_number || arrivingRecord.po_number || null,
+        order_id: arrivingRecord.bpm_number || arrivingRecord.po_number || `OTW-${arrivingRecord.id}`,
         erp_code: arrivingRecord.erp_code,
         qty: arrivingRecord.qty,
         unit: arrivingRecord.unit || 'Cái',

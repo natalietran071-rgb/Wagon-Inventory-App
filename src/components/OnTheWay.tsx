@@ -41,6 +41,7 @@ const OnTheWay = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [editingRecord, setEditingRecord] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
   const [arrivingRecord, setArrivingRecord] = useState<any | null>(null);
   const [arrivingDate, setArrivingDate] = useState(new Date().toISOString().split('T')[0]);
   const [arrivingLocation, setArrivingLocation] = useState('');
@@ -258,6 +259,48 @@ const OnTheWay = () => {
     const { error } = await supabase.from('on_the_way').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { showToast('Lỗi: ' + error.message, true); return; }
     showToast('Đã huỷ đơn hàng');
+    await loadRecords();
+  };
+
+  // ── edit OTW record ────────────────────────────────────────
+  const openEditModal = (r: any) => {
+    setEditingRecord(r);
+    setEditForm({
+      bpm_number: r.bpm_number || '',
+      po_number: r.po_number || '',
+      erp_code: r.erp_code || '',
+      qc_check_no: r.qc_check_no || '',
+      qty: r.qty ?? '',
+      unit: r.unit || 'Cái',
+      dept_code: r.dept_code || '',
+      dept_name: r.dept_name || '',
+      location: r.location || '',
+      expected_date: r.expected_date || '',
+      remark: r.remark || '',
+    });
+  };
+
+  const handleEditSave = async () => {
+    if (!editingRecord) return;
+    if (!editForm.erp_code?.trim()) { showToast('Mã ERP không được để trống', true); return; }
+    if (!Number(editForm.qty) || Number(editForm.qty) <= 0) { showToast('Số lượng phải > 0', true); return; }
+    const { error } = await supabase.from('on_the_way').update({
+      bpm_number: editForm.bpm_number.trim() || null,
+      po_number: editForm.po_number.trim() || null,
+      erp_code: editForm.erp_code.trim().toUpperCase(),
+      qc_check_no: editForm.qc_check_no.trim() || null,
+      qty: Number(editForm.qty),
+      unit: editForm.unit || 'Cái',
+      dept_code: editForm.dept_code.trim() || null,
+      dept_name: editForm.dept_name.trim() || null,
+      location: editForm.location.trim() || null,
+      expected_date: editForm.expected_date || null,
+      remark: editForm.remark.trim() || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', editingRecord.id);
+    if (error) { showToast('Lỗi: ' + error.message, true); return; }
+    showToast('✅ Đã cập nhật đơn hàng');
+    setEditingRecord(null);
     await loadRecords();
   };
 
@@ -524,7 +567,9 @@ const OnTheWay = () => {
                         {r.po_number && <div className="text-[10px] text-on-surface-variant font-medium">PO: {r.po_number}</div>}
                         {!r.bpm_number && !r.po_number && <span className="opacity-30 italic text-xs">-</span>}
                       </td>
-                      <td className="py-3 px-4 font-bold text-primary text-xs">{r.erp_code}</td>
+                      <td className="py-3 px-4">
+                        <button onClick={() => openEditModal(r)} className="font-bold text-primary text-xs hover:underline hover:opacity-80 transition-opacity cursor-pointer text-left" title="Bấm để sửa đơn hàng">{r.erp_code}</button>
+                      </td>
                       <td className="py-3 px-4 max-w-[180px]">
                         <div className="font-medium text-on-surface text-xs line-clamp-2">{item?.name || <span className="italic opacity-40">-</span>}</div>
                         {item?.name_zh && <div className="text-[9px] opacity-50">{item.name_zh}</div>}
@@ -591,6 +636,74 @@ const OnTheWay = () => {
           Hiển thị {filtered.length} / {records.length} đơn
         </div>
       </section>
+
+      {/* ── Edit OTW record modal ── */}
+      <AnimatePresence>
+        {editingRecord && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-scrim/40 backdrop-blur-sm" onClick={() => setEditingRecord(null)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-surface-container-lowest rounded-3xl shadow-2xl w-full max-w-2xl border border-outline-variant/10 overflow-hidden">
+              <div className="flex items-center gap-3 px-8 py-6 border-b border-outline-variant/10 bg-surface-container-low">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700">
+                  <span className="material-symbols-outlined text-xl">edit</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Chỉnh sửa đơn hàng</h3>
+                  <p className="text-xs text-on-surface-variant">Cập nhật thông tin đơn On the Way</p>
+                </div>
+                <button onClick={() => setEditingRecord(null)} className="ml-auto p-2 rounded-full hover:bg-surface-container-high transition-colors">
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+              <div className="p-8 grid grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto">
+                {[
+                  { label: 'BPM Number', field: 'bpm_number', type: 'text' },
+                  { label: 'PO Number', field: 'po_number', type: 'text' },
+                  { label: 'Mã ERP (*)', field: 'erp_code', type: 'text' },
+                  { label: 'QC Check No', field: 'qc_check_no', type: 'text' },
+                  { label: 'Số lượng (*)', field: 'qty', type: 'number' },
+                  { label: 'Đơn vị', field: 'unit', type: 'text' },
+                  { label: 'Mã BP', field: 'dept_code', type: 'text' },
+                  { label: 'Tên BP', field: 'dept_name', type: 'text' },
+                  { label: 'Vị trí', field: 'location', type: 'text' },
+                  { label: 'Ngày dự kiến', field: 'expected_date', type: 'date' },
+                ].map(({ label, field, type }) => (
+                  <div key={field} className="space-y-1">
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">{label}</label>
+                    <input
+                      type={type}
+                      value={(editForm as any)[field]}
+                      onChange={e => setEditForm((f: any) => ({ ...f, [field]: e.target.value }))}
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+                ))}
+                <div className="col-span-2 space-y-1">
+                  <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">Remark</label>
+                  <input
+                    type="text"
+                    value={editForm.remark}
+                    onChange={e => setEditForm((f: any) => ({ ...f, remark: e.target.value }))}
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none"
+                    placeholder="Ghi chú..."
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 px-8 py-5 border-t border-outline-variant/10">
+                <button onClick={() => setEditingRecord(null)}
+                  className="flex-1 py-3 bg-surface-container-high text-on-surface rounded-xl font-bold text-sm hover:bg-surface-container-highest transition-colors">
+                  Huỷ
+                </button>
+                <button onClick={handleEditSave}
+                  className="flex-1 py-3 bg-amber-600 text-white rounded-xl font-bold text-sm shadow hover:bg-amber-700 transition-all">
+                  ✅ Lưu thay đổi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── Arrive confirmation modal ── */}
       <AnimatePresence>

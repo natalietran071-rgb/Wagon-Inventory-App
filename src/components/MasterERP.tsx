@@ -124,7 +124,7 @@ const MasterERP = () => {
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(pg * PAGE_SIZE, (pg + 1) * PAGE_SIZE - 1);
-      if (search.trim()) { const s = search.trim().replace(/"/g, ''); q = q.or(`erp.ilike."%${s}%",name.ilike."%${s}%"`); }
+      if (search.trim()) { const s = search.trim().replace(/"/g, ''); q = q.or(`erp.ilike."%${s}%",name.ilike."%${s}%",name_zh.ilike."%${s}%"`); }
       const { data, error, count } = await q;
       if (error) throw error;
       setPendingItems(data || []);

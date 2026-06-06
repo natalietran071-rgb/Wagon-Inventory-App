@@ -381,10 +381,10 @@ const OnTheWay = () => {
                             onPaste={e => handlePaste(e, idx, 'qcCheckNo')}
                             className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-medium" placeholder="..." />
                         </td>
-                        <td className="p-0 border-r border-outline-variant/5">
+                        <td className={`p-0 border-r border-outline-variant/5 ${row.erpCode.trim() && !Number(row.qty) ? 'bg-amber-50' : ''}`}>
                           <input type="number" value={row.qty} onChange={e => handleRowChange(idx, 'qty', e.target.value)}
                             onPaste={e => handlePaste(e, idx, 'qty')}
-                            className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-bold" placeholder="0" min="0" />
+                            className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-bold" placeholder="Nhập SL" min="1" />
                         </td>
                         <td className="p-0 border-r border-outline-variant/5">
                           <input type="text" value={row.unit} onChange={e => handleRowChange(idx, 'unit', e.target.value)}
@@ -421,12 +421,19 @@ const OnTheWay = () => {
             <div className="flex justify-between items-center mt-4 bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
               <div className="text-sm font-medium text-on-surface-variant flex items-center gap-2">
                 <span className="material-symbols-outlined text-amber-600">info</span>
-                Sẽ lưu <strong className="text-amber-600">{rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0).length}</strong> đơn hợp lệ.
+                {(() => {
+                  const valid = rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0).length;
+                  const hasErpNoQty = rows.filter(r => r.erpCode.trim() && !Number(r.qty)).length;
+                  if (valid > 0) return <span>Sẽ lưu <strong className="text-amber-600">{valid}</strong> đơn hợp lệ.</span>;
+                  if (hasErpNoQty > 0) return <span className="text-amber-700">Đã có Mã ERP — vui lòng nhập <strong>Số lượng &gt; 0</strong> để kích hoạt nút.</span>;
+                  return <span>Nhập <strong>Mã ERP</strong> + <strong>Số lượng &gt; 0</strong> để kích hoạt nút.</span>;
+                })()}
               </div>
               <div className="flex gap-2">
                 <button onClick={handleCancel} className="bg-surface-container-highest text-on-surface px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors">Huỷ</button>
                 <button onClick={handleBatchSubmit} disabled={!canEdit || rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0).length === 0}
-                  className="bg-amber-600 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-amber-700 transition-all disabled:opacity-50">
+                  className="bg-amber-600 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0).length === 0 ? 'Cần nhập Mã ERP + Số lượng > 0' : ''}>
                   Thêm vào On the Way
                 </button>
               </div>

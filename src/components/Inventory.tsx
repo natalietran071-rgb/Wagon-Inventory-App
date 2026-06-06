@@ -165,7 +165,7 @@ const Inventory = () => {
           .select('*', { count: 'exact' });
         
         if (searchName) {
-          query = query.or(`erp.ilike.%${searchName}%,name.ilike.%${searchName}%,name_zh.ilike.%${searchName}%`);
+          if (/[()]/.test(searchName)) query = query.ilike('erp', `%${searchName}%`); else query = query.or(`erp.ilike.%${searchName}%,name.ilike.%${searchName}%,name_zh.ilike.%${searchName}%`);
         }
         
         if (selectedCategory !== 'All') {
@@ -547,7 +547,7 @@ const Inventory = () => {
             .range(page * PAGE, (page + 1) * PAGE - 1);
 
           if (searchName) {
-            query = query.or(`erp.ilike.%${searchName}%,name.ilike.%${searchName}%,name_zh.ilike.%${searchName}%`);
+            if (/[()]/.test(searchName)) query = query.ilike('erp', `%${searchName}%`); else query = query.or(`erp.ilike.%${searchName}%,name.ilike.%${searchName}%,name_zh.ilike.%${searchName}%`);
           }
           if (selectedCategory !== 'All') {
             query = query.eq('category', selectedCategory);

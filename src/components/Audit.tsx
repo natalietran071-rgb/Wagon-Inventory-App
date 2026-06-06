@@ -84,7 +84,7 @@ const Audit = () => {
       const { data, error } = await supabase
         .from('inventory')
         .select('*')
-        .or(`erp.ilike.%${query}%,name.ilike.%${query}%,pos.ilike.%${query}%`)
+        .or(/[()]/.test(query) ? `erp.ilike.%${query}%` : `erp.ilike.%${query}%,name.ilike.%${query}%,pos.ilike.%${query}%`)
         .limit(100);
       
       if (data) {

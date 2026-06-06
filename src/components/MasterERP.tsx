@@ -101,7 +101,7 @@ const MasterERP = () => {
         .select('*', { count: 'exact' })
         .order('erp', { ascending: true })
         .range(pg * PAGE_SIZE, (pg + 1) * PAGE_SIZE - 1);
-      if (search.trim()) q = q.or(`erp.ilike.%${search}%,name.ilike.%${search}%,name_zh.ilike.%${search}%,spec.ilike.%${search}%`);
+      if (search.trim()) { const s = search.trim(); if (/[()]/.test(s)) q = q.ilike('erp', `%${s}%`); else q = q.or(`erp.ilike.%${s}%,name.ilike.%${s}%,name_zh.ilike.%${s}%,spec.ilike.%${s}%`); }
       if (filter === 'no_name') q = q.is('name', null);
       if (filter === 'no_spec') q = q.is('spec', null);
       const { data, error, count } = await q;
@@ -124,7 +124,7 @@ const MasterERP = () => {
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(pg * PAGE_SIZE, (pg + 1) * PAGE_SIZE - 1);
-      if (search.trim()) q = q.or(`erp.ilike.%${search}%,name.ilike.%${search}%`);
+      if (search.trim()) { const s = search.trim(); if (/[()]/.test(s)) q = q.ilike('erp', `%${s}%`); else q = q.or(`erp.ilike.%${s}%,name.ilike.%${s}%`); }
       const { data, error, count } = await q;
       if (error) throw error;
       setPendingItems(data || []);

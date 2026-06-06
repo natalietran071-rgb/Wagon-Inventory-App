@@ -26,6 +26,7 @@ const Sidebar = ({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }
   const navItems = [
     { name: t('inventory'), icon: 'inventory_2', path: '/inventory' },
     { name: t('inbound'), icon: 'input', path: '/inbound' },
+    { name: 'On The Way', icon: 'local_shipping', path: '/on-the-way', roles: ['admin', 'editor'] },
     { name: t('outbound'), icon: 'output', path: '/outbound', badge: !isDeptUser && (shipmentCounts.pending + shipmentCounts.rejected) > 0 ? shipmentCounts.pending + shipmentCounts.rejected : 0, badgeColor: 'bg-amber-500' },
     { name: t('audit'), icon: 'fact_check', path: '/audit' },
     {

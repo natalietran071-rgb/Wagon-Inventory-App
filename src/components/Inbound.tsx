@@ -787,14 +787,19 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
   const exportTemplate = () => {
     import('xlsx').then(XLSX => {
       const templateData = [{
-        'Order ID': '',
+        'BPM Number': '',
+        'PO Number': '',
         'Mã ERP': '',
         'Tên SP (Hiển thị tự động, không nhập)': '',
         'Quy cách (Hiển thị tự động, không nhập)': '',
+        'QC Check No': '',
         'Số lượng': '',
         'Đơn vị': '',
+        'Mã BP': '',
+        'Tên BP': '',
         'Vị trí': '',
-        'Ngày nhập (YYYY-MM-DD)': ''
+        'Ngày nhập (YYYY-MM-DD)': '',
+        'Remark': ''
       }];
 
       const ws = XLSX.utils.json_to_sheet(templateData);

@@ -46,6 +46,8 @@ const Outbound = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [outboundRecords, setOutboundRecords] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  // Danh sách bộ phận đã đăng ký (lấy từ các tài khoản dept_user) — dùng cho dropdown chọn Mã BP
+  const [departments, setDepartments] = useState<{ dept_code: string; dept_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -303,9 +305,26 @@ const Outbound = () => {
           return allInv;
         };
 
-        const [inv, outbound] = await Promise.all([fetchInventory(), fetchOutboundRecords(), fetchDbOutboundTotal()]);
+        const fetchDepartments = async (): Promise<{ dept_code: string; dept_name: string }[]> => {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('dept_code, dept_name')
+            .eq('role', 'dept_user')
+            .not('dept_code', 'is', null);
+          if (error) { console.error('Departments fetch error:', error); return []; }
+          // Khử trùng lặp theo dept_code
+          const map = new Map<string, { dept_code: string; dept_name: string }>();
+          (data || []).forEach((d: any) => {
+            const code = (d.dept_code || '').trim();
+            if (code && !map.has(code)) map.set(code, { dept_code: code, dept_name: (d.dept_name || '').trim() });
+          });
+          return Array.from(map.values()).sort((a, b) => a.dept_code.localeCompare(b.dept_code));
+        };
+
+        const [inv, outbound, , depts] = await Promise.all([fetchInventory(), fetchOutboundRecords(), fetchDbOutboundTotal(), fetchDepartments()]);
         setInventoryItems(inv);
         setOutboundRecords(outbound);
+        setDepartments(depts);
       } catch (err) {
         console.error('Error fetching data:', err);
       } finally {
@@ -396,6 +415,15 @@ const Outbound = () => {
   const handleRowChange = (index: number, field: string, value: string) => {
     const newRows = [...outboundRows];
     newRows[index][field as keyof ReturnType<typeof createEmptyOutboundRow>] = value;
+    setOutboundRows(newRows);
+  };
+
+  // Đổi Mã BP trong form tạo: nếu mã trùng bộ phận đã đăng ký thì tự điền Tên BP tương ứng
+  const handleRowDeptCodeChange = (index: number, value: string) => {
+    const match = departments.find(d => d.dept_code === value.trim());
+    const newRows = [...outboundRows];
+    newRows[index].deptCode = value;
+    if (match) newRows[index].deptName = match.dept_name;
     setOutboundRows(newRows);
   };
 
@@ -1264,6 +1292,13 @@ const Outbound = () => {
               </div>
             </div>
 
+            {/* Danh sách bộ phận đã đăng ký — dùng chung cho ô Mã BP (form tạo + popup sửa) */}
+            <datalist id="dept-options">
+              {departments.map(d => (
+                <option key={d.dept_code} value={d.dept_code}>{d.dept_name}</option>
+              ))}
+            </datalist>
+
             <div className="space-y-4 relative z-10 w-full">
               <div className="overflow-x-auto border border-outline-variant/20 rounded-xl max-h-[500px] overflow-y-auto no-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[700px]">
@@ -1322,11 +1357,12 @@ const Outbound = () => {
                           <td className="p-0 border-r border-outline-variant/5">
                             <input
                               type="text"
+                              list="dept-options"
                               value={row.deptCode || ''}
-                              onChange={(e) => handleRowChange(idx, 'deptCode', e.target.value)}
+                              onChange={(e) => handleRowDeptCodeChange(idx, e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'deptCode')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Mã BP"
+                              placeholder="Chọn mã BP"
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1899,9 +1935,14 @@ const Outbound = () => {
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                     type="text"
-                    placeholder="Mã bộ phận"
+                    list="dept-options"
+                    placeholder="Chọn mã bộ phận"
                     value={editingRecord.dept_code || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, dept_code: e.target.value })}
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      const match = departments.find(d => d.dept_code === code.trim());
+                      setEditingRecord({ ...editingRecord, dept_code: code, ...(match ? { dept_name: match.dept_name } : {}) });
+                    }}
                   />
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"

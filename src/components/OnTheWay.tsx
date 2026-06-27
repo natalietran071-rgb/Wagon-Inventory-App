@@ -43,6 +43,7 @@ const OnTheWay = () => {
   const [editingRecord, setEditingRecord] = useState<any | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [arrivingRecord, setArrivingRecord] = useState<any | null>(null);
+  const [isArriving, setIsArriving] = useState(false); // chống bấm "Xác nhận nhập kho" 2 lần
   const [arrivingDate, setArrivingDate] = useState(new Date().toISOString().split('T')[0]);
   const [arrivingLocation, setArrivingLocation] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -199,6 +200,8 @@ const OnTheWay = () => {
   // ── arrive: transfer to inbound ────────────────────────────
   const handleArriveConfirm = async () => {
     if (!arrivingRecord) return;
+    if (isArriving) return; // đang xử lý → bỏ qua cú bấm thừa (tránh tạo 2 phiếu nhập)
+    setIsArriving(true);
     try {
       const inboundRecord = {
         order_id: arrivingRecord.bpm_number || arrivingRecord.po_number || `OTW-${arrivingRecord.id}`,
@@ -258,6 +261,8 @@ const OnTheWay = () => {
       await loadRecords();
     } catch (err: any) {
       showToast('Lỗi: ' + err.message, true);
+    } finally {
+      setIsArriving(false);
     }
   };
 
@@ -742,12 +747,14 @@ const OnTheWay = () => {
               </div>
               <div className="flex gap-3 mt-8">
                 <button onClick={() => setArrivingRecord(null)}
-                  className="flex-1 py-3 bg-surface-container-high text-on-surface rounded-xl font-bold text-sm hover:bg-surface-container-highest transition-colors">
+                  disabled={isArriving}
+                  className="flex-1 py-3 bg-surface-container-high text-on-surface rounded-xl font-bold text-sm hover:bg-surface-container-highest transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                   Huỷ
                 </button>
                 <button onClick={handleArriveConfirm}
-                  className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow hover:bg-emerald-700 transition-all">
-                  ✅ Xác nhận nhập kho
+                  disabled={isArriving}
+                  className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                  {isArriving ? 'Đang xử lý...' : '✅ Xác nhận nhập kho'}
                 </button>
               </div>
             </motion.div>

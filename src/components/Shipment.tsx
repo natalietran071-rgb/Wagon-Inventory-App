@@ -506,7 +506,7 @@ const Shipment: React.FC = () => {
     try {
       const { data, error } = await supabase.rpc('get_shipments', {
         p_dept_code: deptCode,
-        p_status: null,
+        p_status: 'all',
         p_from_date: filterFrom || null,
         p_to_date: filterTo || null,
       });

@@ -747,15 +747,25 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      const { data: dataToExport, error } = await (supabase.rpc('export_inbound', {
-        p_search: searchQuery || '',
-        p_from_date: fromDate || null,
-        p_to_date: toDate || null
-      }) as any).setHeader('Prefer', 'return=representation');
+      // Phân trang để lấy HẾT dòng — PostgREST giới hạn mỗi response RPC tối đa 1000 dòng
+      const PAGE = 1000;
+      let dataToExport: any[] = [];
+      let pg = 0;
+      while (true) {
+        const { data, error } = await (supabase.rpc('export_inbound', {
+          p_search: searchQuery || '',
+          p_from_date: fromDate || null,
+          p_to_date: toDate || null
+        }) as any).range(pg * PAGE, (pg + 1) * PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        dataToExport = dataToExport.concat(data);
+        if (data.length < PAGE) break;
+        pg++;
+      }
+      if (dataToExport.length === 0) throw new Error('No data found');
 
-      if (error || !dataToExport) throw error || new Error('No data found');
-
-      const exportData = (dataToExport || []).map(item => {
+      const exportData = dataToExport.map(item => {
         const inv = inventoryMap.get(item.erp_code);
         return {
           'Thời gian': `${item.date} ${item.time || ''}`,

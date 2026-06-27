@@ -499,13 +499,21 @@ const Inventory = () => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const { data } = await supabase
-      .from('deleted_items')
-      .select('*')
-      .gte('deleted_at', thirtyDaysAgo.toISOString())
-      .order('deleted_at', { ascending: false });
-      
-    if (data) setDeletedItems(data);
+    // Phân trang để lấy HẾT dòng — PostgREST cắt mỗi response ở 1000 dòng
+    const P = 1000; let all: any[] = []; let p = 0;
+    while (true) {
+      const { data } = await supabase
+        .from('deleted_items')
+        .select('*')
+        .gte('deleted_at', thirtyDaysAgo.toISOString())
+        .order('deleted_at', { ascending: false })
+        .range(p * P, (p + 1) * P - 1);
+      if (!data || data.length === 0) break;
+      all = all.concat(data);
+      if (data.length < P) break;
+      p++;
+    }
+    setDeletedItems(all);
   };
 
   const exportDeletedItemsToExcel = () => {
@@ -544,16 +552,24 @@ const Inventory = () => {
 
       if (reportFromDate && reportToDate) {
         // Use RPC for date-range view (same as fetchInventory)
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_inventory_by_date', {
-          p_from_date: reportFromDate,
-          p_to_date: reportToDate,
-          p_search: searchName,
-          p_location: tableLocation === 'All' ? '' : tableLocation,
-          p_limit: 100000,
-          p_offset: 0
-        });
-        if (rpcError) throw rpcError;
-        allData = rpcData || [];
+        // Phân trang qua p_offset — PostgREST cắt mỗi response RPC ở 1000 dòng
+        const P = 1000;
+        let pgDate = 0;
+        while (true) {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('get_inventory_by_date', {
+            p_from_date: reportFromDate,
+            p_to_date: reportToDate,
+            p_search: searchName,
+            p_location: tableLocation === 'All' ? '' : tableLocation,
+            p_limit: P,
+            p_offset: pgDate * P
+          });
+          if (rpcError) throw rpcError;
+          const rows = rpcData || [];
+          allData = allData.concat(rows);
+          if (rows.length < P) break;
+          pgDate++;
+        }
       } else {
         // Regular pagination with ALL active filters
         const PAGE = 1000;
@@ -607,14 +623,28 @@ const Inventory = () => {
         }
 
         // Aggregate in/out from records tables (same source as dashboard)
-        const [inboundAgg, outboundAgg] = await Promise.all([
-          supabase.from('inbound_records').select('erp_code, qty'),
-          supabase.from('outbound_records').select('erp_code, qty').eq('status', 'Đã Xuất')
+        // Phải lấy HẾT dòng — PostgREST cắt mỗi response ở 1000 dòng → cộng dồn bị thiếu
+        const fetchAllQty = async (table: string, status?: string) => {
+          const P = 1000; let all: any[] = []; let p = 0;
+          while (true) {
+            let q = supabase.from(table).select('erp_code, qty').order('id', { ascending: true });
+            if (status) q = q.eq('status', status);
+            const { data } = await q.range(p * P, (p + 1) * P - 1);
+            if (!data || data.length === 0) break;
+            all = all.concat(data);
+            if (data.length < P) break;
+            p++;
+          }
+          return all;
+        };
+        const [inboundRows, outboundRows] = await Promise.all([
+          fetchAllQty('inbound_records'),
+          fetchAllQty('outbound_records', 'Đã Xuất')
         ]);
         const inMap = new Map<string, number>();
-        (inboundAgg.data || []).forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
+        inboundRows.forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
         const outMap = new Map<string, number>();
-        (outboundAgg.data || []).forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
+        outboundRows.forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
         allData = allData.map(item => ({ ...item, _in_agg: inMap.get(item.erp) || 0, _out_agg: outMap.get(item.erp) || 0 }));
       }
 

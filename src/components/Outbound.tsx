@@ -982,23 +982,33 @@ const Outbound = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      const { data: dataToExport, error } = await supabase.rpc('export_outbound', {
-        p_search: searchQuery || '',
-        p_status: filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
-        p_from_date: filterDateFrom || null,
-        p_to_date: filterDateTo || null,
-        p_date_type: filterDateType,
-      });
+      // Phân trang để lấy HẾT dòng — PostgREST giới hạn mỗi response RPC tối đa 1000 dòng
+      const PAGE = 1000;
+      let dataToExport: any[] = [];
+      let pg = 0;
+      while (true) {
+        const { data, error } = await (supabase.rpc('export_outbound', {
+          p_search: searchQuery || '',
+          p_status: filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
+          p_from_date: filterDateFrom || null,
+          p_to_date: filterDateTo || null,
+          p_date_type: filterDateType,
+        }) as any).range(pg * PAGE, (pg + 1) * PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        dataToExport = dataToExport.concat(data);
+        if (data.length < PAGE) break;
+        pg++;
+      }
 
-      if (error) throw error;
-      if (!dataToExport || (dataToExport as any[]).length === 0) {
+      if (dataToExport.length === 0) {
         showToast('Không có dữ liệu để xuất.', true);
         return;
       }
 
       const filteredExport = filterNoBpm
-        ? (dataToExport || []).filter((item: any) => !item.bpm_number || item.bpm_number === 'No BPM')
-        : (dataToExport || []);
+        ? dataToExport.filter((item: any) => !item.bpm_number || item.bpm_number === 'No BPM')
+        : dataToExport;
 
       const exportData = filteredExport.map(item => {
         const inv = inventoryMap.get(item.erp_code);

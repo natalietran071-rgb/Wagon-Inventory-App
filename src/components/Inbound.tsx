@@ -417,7 +417,9 @@ const Inbound = () => {
         await supabase.from('movements').insert(chunk);
       }
 
-      // 2. Update inventory table — group qty by ERP, update in_qty + end_stock
+      // 2. Tồn kho cho ERP ĐÃ tồn tại được trigger trg_update_inventory_inbound tự cộng
+      //    ngay khi insert inbound_records ở trên. Ở đây CHỈ tạo dòng tồn kho mới cho
+      //    những ERP chưa có trong inventory (trigger không tự tạo dòng mới).
       const erpList = Array.from(new Set(validRows.map(r => r.erpCode)));
       
       // Fetch in chunks to avoid .in() limit
@@ -435,20 +437,14 @@ const Inbound = () => {
          qtyByErp[row.erpCode] = (qtyByErp[row.erpCode] || 0) + (Math.round(parseFloat(row.qty)) || 0);
       }
 
-      const invUpdates = [];
+      const invInserts = [];
       for (const erp of Object.keys(qtyByErp)) {
+         // ERP đã có trong inventory: trigger đã cộng tồn → KHÔNG cộng lại ở JS (tránh cộng đôi)
+         if (existingMap.has(erp)) continue;
          const qty = qtyByErp[erp];
-         const existingItem = existingMap.get(erp);
          const rowEx = validRows.find(r => r.erpCode === erp);
-         
-         if (existingItem) {
-           invUpdates.push({
-             ...existingItem,
-             in_qty: (existingItem.in_qty || 0) + qty,
-             end_stock: (existingItem.end_stock || 0) + qty
-           });
-         } else if (rowEx) {
-            invUpdates.push({
+         if (rowEx) {
+            invInserts.push({
              erp: erp,
              name: '',
              unit: rowEx.unit,
@@ -462,9 +458,9 @@ const Inbound = () => {
          }
       }
 
-      if (invUpdates.length > 0) {
-        for (let i = 0; i < invUpdates.length; i += chunkSize) {
-          const chunk = invUpdates.slice(i, i + chunkSize);
+      if (invInserts.length > 0) {
+        for (let i = 0; i < invInserts.length; i += chunkSize) {
+          const chunk = invInserts.slice(i, i + chunkSize);
           await supabase.from('inventory').upsert(chunk, { onConflict: 'erp' });
         }
       }
@@ -611,19 +607,23 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       };
       await supabase.from('movements').insert([movementToInsert]);
 
-      const { data: existingData } = await supabase.from('inventory').select('*').eq('erp', singleRow.erpCode).single();
-      
-      const invUpdate = {
-        erp: singleRow.erpCode,
-        in_qty: (existingData?.in_qty || 0) + (Math.round(parseFloat(singleRow.qty)) || 0),
-        end_stock: (existingData?.end_stock || 0) + (Math.round(parseFloat(singleRow.qty)) || 0),
-        pos: singleRow.location || existingData?.pos || '',
-        name: existingData?.name || '',
-        unit: singleRow.unit || existingData?.unit || '',
-        updated_at: new Date().toISOString()
-      };
-      
-      await supabase.from('inventory').upsert([invUpdate], { onConflict: 'erp' });
+      // Tồn kho cho ERP đã tồn tại được trigger trg_update_inventory_inbound tự cộng khi
+      // insert inbound_records ở trên. Chỉ tạo dòng tồn kho mới nếu ERP chưa có trong inventory.
+      const { data: existingData } = await supabase.from('inventory').select('erp').eq('erp', singleRow.erpCode).single();
+      if (!existingData) {
+        const qty = Math.round(parseFloat(singleRow.qty)) || 0;
+        await supabase.from('inventory').insert([{
+          erp: singleRow.erpCode,
+          name: '',
+          unit: singleRow.unit || '',
+          pos: singleRow.location || '',
+          start_stock: 0,
+          in_qty: qty,
+          out_qty: 0,
+          end_stock: qty,
+          critical: false
+        }]);
+      }
 
       setSingleRow(createEmptyRow());
       alert('Nhập kho thành công!');

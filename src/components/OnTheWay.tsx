@@ -225,18 +225,25 @@ const OnTheWay = () => {
         .single();
       if (inboundErr) throw inboundErr;
 
-      // Update inventory in_qty + end_stock
+      // Tồn kho cho ERP đã tồn tại được trigger trg_update_inventory_inbound tự cộng khi
+      // insert inbound_records ở trên. Chỉ tạo dòng tồn kho mới nếu ERP chưa có trong inventory.
       const { data: inv } = await supabase
         .from('inventory')
-        .select('in_qty, end_stock')
+        .select('erp')
         .eq('erp', arrivingRecord.erp_code)
         .single();
-      if (inv) {
-        await supabase.from('inventory').update({
-          in_qty: (Number(inv.in_qty) || 0) + Number(arrivingRecord.qty),
-          end_stock: (Number(inv.end_stock) || 0) + Number(arrivingRecord.qty),
-          updated_at: new Date().toISOString(),
-        }).eq('erp', arrivingRecord.erp_code);
+      if (!inv) {
+        await supabase.from('inventory').insert([{
+          erp: arrivingRecord.erp_code,
+          name: '',
+          unit: arrivingRecord.unit || 'Cái',
+          pos: arrivingLocation || arrivingRecord.location || '',
+          start_stock: 0,
+          in_qty: Number(arrivingRecord.qty),
+          out_qty: 0,
+          end_stock: Number(arrivingRecord.qty),
+          critical: false,
+        }]);
       }
 
       // Mark on_the_way as arrived

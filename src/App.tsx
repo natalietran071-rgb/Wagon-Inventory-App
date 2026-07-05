@@ -12,6 +12,7 @@ import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import MasterERP from './components/MasterERP';
 import Shipment from './components/Shipment';
+import OnTheWay from './components/OnTheWay';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, loading, error } = useAuth();
@@ -68,6 +69,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       case '/inbound': return 'Nhập Kho';
       case '/outbound': return 'Xuất Kho';
       case '/audit': return 'Kiểm Kê';
+      case '/on-the-way': return 'On The Way';
       case '/shipment': return 'Giao Hàng';
       case '/users': return 'Người dùng';
       case '/master-erp': return 'Master ERP';
@@ -124,6 +126,7 @@ function App() {
                     <Route path="/inventory" element={<Inventory />} />
                     <Route path="/inbound" element={<Inbound />} />
                     <Route path="/outbound" element={<Outbound />} />
+                    <Route path="/on-the-way" element={<OnTheWay />} />
                     <Route path="/audit" element={<Audit />} />
                     <Route path="/shipment" element={<Shipment />} />
                     <Route path="/users" element={<UserManagement />} />

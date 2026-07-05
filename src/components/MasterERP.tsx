@@ -101,7 +101,7 @@ const MasterERP = () => {
         .select('*', { count: 'exact' })
         .order('erp', { ascending: true })
         .range(pg * PAGE_SIZE, (pg + 1) * PAGE_SIZE - 1);
-      if (search.trim()) q = q.or(`erp.ilike.%${search}%,name.ilike.%${search}%,name_zh.ilike.%${search}%,spec.ilike.%${search}%`);
+      if (search.trim()) { const s = search.trim().replace(/"/g, ''); q = q.or(`erp.ilike."%${s}%",name.ilike."%${s}%",name_zh.ilike."%${s}%",spec.ilike."%${s}%"`); }
       if (filter === 'no_name') q = q.is('name', null);
       if (filter === 'no_spec') q = q.is('spec', null);
       const { data, error, count } = await q;
@@ -124,7 +124,7 @@ const MasterERP = () => {
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(pg * PAGE_SIZE, (pg + 1) * PAGE_SIZE - 1);
-      if (search.trim()) q = q.or(`erp.ilike.%${search}%,name.ilike.%${search}%`);
+      if (search.trim()) { const s = search.trim().replace(/"/g, ''); q = q.or(`erp.ilike."%${s}%",name.ilike."%${s}%",name_zh.ilike."%${s}%"`); }
       const { data, error, count } = await q;
       if (error) throw error;
       setPendingItems(data || []);
@@ -151,21 +151,31 @@ const MasterERP = () => {
     showToast('Đang xuất dữ liệu...');
     try {
       const XLSX = await import('xlsx');
-      const CHUNK = 3000;
-      let all: any[] = [];
+      const CHUNK = 1000;
+
+      // Fetch all master_erp (no filter, no search)
+      let allMaster: any[] = [];
       let from = 0;
       while (true) {
-        let q = supabase.from('master_erp').select('erp,name,name_zh,spec,unit,updated_at').order('erp', { ascending: true }).range(from, from + CHUNK - 1);
-        if (activeFilter === 'no_name') q = q.is('name', null);
-        else if (activeFilter === 'no_spec') q = q.is('spec', null);
-        if (searchQuery) q = q.or(`erp.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%,name_zh.ilike.%${searchQuery}%,spec.ilike.%${searchQuery}%`);
-        const { data } = await q;
+        const { data } = await supabase.from('master_erp').select('erp,name,name_zh,spec,unit,updated_at').order('erp', { ascending: true }).range(from, from + CHUNK - 1);
         if (!data || data.length === 0) break;
-        all = all.concat(data);
+        allMaster = allMaster.concat(data);
         if (data.length < CHUNK) break;
         from += CHUNK;
       }
-      const rows = all.map((r, i) => ({
+
+      // Fetch all master_erp_pending
+      let allPending: any[] = [];
+      from = 0;
+      while (true) {
+        const { data } = await supabase.from('master_erp_pending').select('erp,name,name_zh,spec,unit,reason,created_at').order('created_at', { ascending: false }).range(from, from + CHUNK - 1);
+        if (!data || data.length === 0) break;
+        allPending = allPending.concat(data);
+        if (data.length < CHUNK) break;
+        from += CHUNK;
+      }
+
+      const masterRows = allMaster.map((r, i) => ({
         'STT': i + 1,
         'Mã ERP': r.erp,
         'Tên Tiếng Việt': r.name || '',
@@ -174,11 +184,23 @@ const MasterERP = () => {
         'Đơn Vị': r.unit || '',
         'Cập Nhật': r.updated_at ? new Date(r.updated_at).toLocaleDateString('vi-VN') : '',
       }));
-      const ws = XLSX.utils.json_to_sheet(rows);
+
+      const pendingRows = allPending.map((r, i) => ({
+        'STT': i + 1,
+        'Mã ERP': r.erp,
+        'Tên Tiếng Việt': r.name || '',
+        'Tên Tiếng Trung': r.name_zh || '',
+        'Quy Cách': r.spec || '',
+        'Đơn Vị': r.unit || '',
+        'Lý Do': REASON_LABEL[r.reason] || r.reason || '',
+        'Ngày Tạo': r.created_at ? new Date(r.created_at).toLocaleDateString('vi-VN') : '',
+      }));
+
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Master ERP');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(masterRows), 'Master ERP');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pendingRows), 'Chờ xử lý');
       XLSX.writeFile(wb, `master_erp_${new Date().toISOString().split('T')[0]}.xlsx`);
-      showToast(`✅ Đã xuất ${rows.length.toLocaleString()} mã ERP`);
+      showToast(`✅ Đã xuất ${masterRows.length.toLocaleString()} mã ERP + ${pendingRows.length.toLocaleString()} chờ xử lý`);
     } catch (err: any) {
       showToast('Lỗi xuất Excel: ' + err.message, true);
     } finally {

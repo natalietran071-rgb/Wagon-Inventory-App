@@ -46,6 +46,8 @@ const Outbound = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [outboundRecords, setOutboundRecords] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  // Danh sách bộ phận đã đăng ký (lấy từ các tài khoản dept_user) — dùng cho dropdown chọn Mã BP
+  const [departments, setDepartments] = useState<{ dept_code: string; dept_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -229,17 +231,22 @@ const Outbound = () => {
     if (showEditHistory) {
       const fetchEditHistory = async () => {
         try {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          
-          const { data, error } = await supabase
-            .from('edit_history_outbound')
-            .select('*')
-            .gte('edited_at', thirtyDaysAgo.toISOString())
-            .order('edited_at', { ascending: false });
-            
-          if (error) throw error;
-          if (data) setEditHistory(data);
+          let all: any[] = [];
+          let from = 0;
+          const PAGE = 1000;
+          while (true) {
+            const { data, error } = await supabase
+              .from('edit_history_outbound')
+              .select('*')
+              .order('edited_at', { ascending: false })
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            all = all.concat(data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+          }
+          setEditHistory(all);
         } catch (err: any) {
           console.error('Error fetching edit history:', err);
           showToast('Lỗi khi tải lịch sử: ' + err.message, true);
@@ -298,9 +305,26 @@ const Outbound = () => {
           return allInv;
         };
 
-        const [inv, outbound] = await Promise.all([fetchInventory(), fetchOutboundRecords(), fetchDbOutboundTotal()]);
+        const fetchDepartments = async (): Promise<{ dept_code: string; dept_name: string }[]> => {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('dept_code, dept_name')
+            .eq('role', 'dept_user')
+            .not('dept_code', 'is', null);
+          if (error) { console.error('Departments fetch error:', error); return []; }
+          // Khử trùng lặp theo dept_code
+          const map = new Map<string, { dept_code: string; dept_name: string }>();
+          (data || []).forEach((d: any) => {
+            const code = (d.dept_code || '').trim();
+            if (code && !map.has(code)) map.set(code, { dept_code: code, dept_name: (d.dept_name || '').trim() });
+          });
+          return Array.from(map.values()).sort((a, b) => a.dept_code.localeCompare(b.dept_code));
+        };
+
+        const [inv, outbound, , depts] = await Promise.all([fetchInventory(), fetchOutboundRecords(), fetchDbOutboundTotal(), fetchDepartments()]);
         setInventoryItems(inv);
         setOutboundRecords(outbound);
+        setDepartments(depts);
       } catch (err) {
         console.error('Error fetching data:', err);
       } finally {
@@ -391,6 +415,15 @@ const Outbound = () => {
   const handleRowChange = (index: number, field: string, value: string) => {
     const newRows = [...outboundRows];
     newRows[index][field as keyof ReturnType<typeof createEmptyOutboundRow>] = value;
+    setOutboundRows(newRows);
+  };
+
+  // Đổi Mã BP trong form tạo: nếu mã trùng bộ phận đã đăng ký thì tự điền Tên BP tương ứng
+  const handleRowDeptCodeChange = (index: number, value: string) => {
+    const match = departments.find(d => d.dept_code === value.trim());
+    const newRows = [...outboundRows];
+    newRows[index].deptCode = value;
+    if (match) newRows[index].deptName = match.dept_name;
     setOutboundRows(newRows);
   };
 
@@ -949,23 +982,33 @@ const Outbound = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      const { data: dataToExport, error } = await supabase.rpc('export_outbound', {
-        p_search: searchQuery || '',
-        p_status: filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
-        p_from_date: filterDateFrom || null,
-        p_to_date: filterDateTo || null,
-        p_date_type: filterDateType,
-      });
+      // Phân trang để lấy HẾT dòng — PostgREST giới hạn mỗi response RPC tối đa 1000 dòng
+      const PAGE = 1000;
+      let dataToExport: any[] = [];
+      let pg = 0;
+      while (true) {
+        const { data, error } = await (supabase.rpc('export_outbound', {
+          p_search: searchQuery || '',
+          p_status: filterStatus.toLowerCase() === 'all' ? 'all' : filterStatus,
+          p_from_date: filterDateFrom || null,
+          p_to_date: filterDateTo || null,
+          p_date_type: filterDateType,
+        }) as any).range(pg * PAGE, (pg + 1) * PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        dataToExport = dataToExport.concat(data);
+        if (data.length < PAGE) break;
+        pg++;
+      }
 
-      if (error) throw error;
-      if (!dataToExport || (dataToExport as any[]).length === 0) {
+      if (dataToExport.length === 0) {
         showToast('Không có dữ liệu để xuất.', true);
         return;
       }
 
       const filteredExport = filterNoBpm
-        ? (dataToExport || []).filter((item: any) => !item.bpm_number || item.bpm_number === 'No BPM')
-        : (dataToExport || []);
+        ? dataToExport.filter((item: any) => !item.bpm_number || item.bpm_number === 'No BPM')
+        : dataToExport;
 
       const exportData = filteredExport.map(item => {
         const inv = inventoryMap.get(item.erp_code);
@@ -1259,6 +1302,13 @@ const Outbound = () => {
               </div>
             </div>
 
+            {/* Danh sách bộ phận đã đăng ký — dùng chung cho ô Mã BP (form tạo + popup sửa) */}
+            <datalist id="dept-options">
+              {departments.map(d => (
+                <option key={d.dept_code} value={d.dept_code}>{d.dept_name}</option>
+              ))}
+            </datalist>
+
             <div className="space-y-4 relative z-10 w-full">
               <div className="overflow-x-auto border border-outline-variant/20 rounded-xl max-h-[500px] overflow-y-auto no-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[700px]">
@@ -1317,11 +1367,12 @@ const Outbound = () => {
                           <td className="p-0 border-r border-outline-variant/5">
                             <input
                               type="text"
+                              list="dept-options"
                               value={row.deptCode || ''}
-                              onChange={(e) => handleRowChange(idx, 'deptCode', e.target.value)}
+                              onChange={(e) => handleRowDeptCodeChange(idx, e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'deptCode')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Mã BP"
+                              placeholder="Chọn mã BP"
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1894,9 +1945,14 @@ const Outbound = () => {
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                     type="text"
-                    placeholder="Mã bộ phận"
+                    list="dept-options"
+                    placeholder="Chọn mã bộ phận"
                     value={editingRecord.dept_code || ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, dept_code: e.target.value })}
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      const match = departments.find(d => d.dept_code === code.trim());
+                      setEditingRecord({ ...editingRecord, dept_code: code, ...(match ? { dept_name: match.dept_name } : {}) });
+                    }}
                   />
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
@@ -2046,11 +2102,47 @@ const Outbound = () => {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-on-surface-variant italic">Không có dữ liệu sửa đổi trong 30 ngày qua.</td>
+                      <td colSpan={6} className="py-12 text-center text-on-surface-variant italic">Không có dữ liệu chỉnh sửa.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="px-6 py-4 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
+              <span>Tổng cộng {editHistory.length} lần điều chỉnh</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    import('xlsx').then(XLSX => {
+                      const rows = editHistory.map(item => ({
+                        'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
+                        'Mã phiếu xuất': item.outbound_id || '',
+                        'Mã ERP': item.erp_code || '',
+                        'Đối tác': item.partner || '',
+                        'SL Cũ': item.old_qty ?? '',
+                        'Biến động': Number(item.new_qty) - Number(item.old_qty || 0),
+                        'SL Mới': item.new_qty ?? '',
+                        'Lý do': item.reason || '',
+                        'Người thực hiện': item.edited_by || '',
+                      }));
+                      const ws = XLSX.utils.json_to_sheet(rows);
+                      const wb = XLSX.utils.book_new();
+                      XLSX.utils.book_append_sheet(wb, ws, 'Lich Su Xuat');
+                      XLSX.writeFile(wb, `Lich_Su_Chinh_Sua_Xuat_Kho_${new Date().toISOString().split('T')[0]}.xlsx`);
+                    });
+                  }}
+                  className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow hover:bg-emerald-700 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">download</span>
+                  Xuất Excel
+                </button>
+                <button
+                  onClick={() => setShowEditHistory(false)}
+                  className="px-6 py-2.5 bg-primary text-on-primary rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                >
+                  Đóng cửa sổ
+                </button>
+              </div>
             </div>
           </div>
         </div>

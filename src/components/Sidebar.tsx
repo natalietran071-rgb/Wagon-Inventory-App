@@ -26,6 +26,7 @@ const Sidebar = ({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }
   const navItems = [
     { name: t('inventory'), icon: 'inventory_2', path: '/inventory' },
     { name: t('inbound'), icon: 'input', path: '/inbound' },
+    { name: 'On The Way', icon: 'local_shipping', path: '/on-the-way', roles: ['admin', 'editor'] },
     { name: t('outbound'), icon: 'output', path: '/outbound', badge: !isDeptUser && (shipmentCounts.pending + shipmentCounts.rejected) > 0 ? shipmentCounts.pending + shipmentCounts.rejected : 0, badgeColor: 'bg-amber-500' },
     { name: t('audit'), icon: 'fact_check', path: '/audit' },
     {
@@ -47,10 +48,16 @@ const Sidebar = ({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }
   return (
     <aside className={`fixed left-0 top-0 h-screen w-64 z-50 bg-surface-container-low flex flex-col py-8 border-r border-outline-variant/20 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
       <div className="px-8 mb-8 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center text-on-primary shadow-xl shadow-primary/30 border border-white/20">
+        <div className="flex items-center gap-3">
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-on-primary shadow-xl border border-white/20 ${import.meta.env.VITE_APP_ENV === 'preview' ? 'bg-amber-500 shadow-amber-500/30' : 'bg-primary shadow-primary/30'}`}>
             <span className="material-symbols-outlined text-2xl">factory</span>
           </div>
+          {import.meta.env.VITE_APP_ENV === 'preview' && (
+            <div>
+              <div className="text-[10px] font-black text-amber-600 uppercase tracking-widest leading-none">Preview</div>
+              <div className="text-[9px] text-on-surface-variant opacity-60 leading-none mt-0.5">Staging DB</div>
+            </div>
+          )}
         </div>
         <button className="lg:hidden p-2 text-on-surface-variant" onClick={onClose}>
           <span className="material-symbols-outlined">close</span>

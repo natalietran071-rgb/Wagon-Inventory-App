@@ -84,7 +84,7 @@ const Audit = () => {
       const { data, error } = await supabase
         .from('inventory')
         .select('*')
-        .or(`erp.ilike.%${query}%,name.ilike.%${query}%,pos.ilike.%${query}%`)
+        .or(`erp.ilike."%${query.replace(/"/g, '')}%",name.ilike."%${query.replace(/"/g, '')}%",pos.ilike."%${query.replace(/"/g, '')}%"`)
         .limit(100);
       
       if (data) {
@@ -296,12 +296,20 @@ const Audit = () => {
     if (!sid) return;
 
     try {
-      const { data, error } = await supabase.rpc('get_audited_items', {
-        p_session_id: sid,
-        p_status: 'Draft'
-      });
-      if (error) throw error;
-      if (data) setAuditItems(data);
+      // Phân trang — PostgREST cắt mỗi response RPC ở 1000 dòng
+      const P = 1000; let all: any[] = []; let pg = 0;
+      while (true) {
+        const { data, error } = await (supabase.rpc('get_audited_items', {
+          p_session_id: sid,
+          p_status: 'Draft'
+        }) as any).range(pg * P, (pg + 1) * P - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < P) break;
+        pg++;
+      }
+      setAuditItems(all);
     } catch (err) {
       console.error("Error fetching draft records:", err);
     }
@@ -312,12 +320,20 @@ const Audit = () => {
     if (!sid) return;
 
     try {
-      const { data, error } = await supabase.rpc('get_audited_items', {
-        p_session_id: sid,
-        p_status: 'Pending'
-      });
-      if (error) throw error;
-      if (data) setPendingRecords(data);
+      // Phân trang — PostgREST cắt mỗi response RPC ở 1000 dòng
+      const P = 1000; let all: any[] = []; let pg = 0;
+      while (true) {
+        const { data, error } = await (supabase.rpc('get_audited_items', {
+          p_session_id: sid,
+          p_status: 'Pending'
+        }) as any).range(pg * P, (pg + 1) * P - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < P) break;
+        pg++;
+      }
+      setPendingRecords(all);
     } catch (err) {
       console.error("Error fetching pending records:", err);
     }
@@ -325,24 +341,32 @@ const Audit = () => {
 
   const fetchApprovedHistory = async () => {
     try {
-      let query = supabase
-        .from('audit_records')
-        .select('*')
-        .eq('status', 'Approved')
-        .order('approved_at', { ascending: false });
+      // Phân trang để lấy HẾT dòng — PostgREST cắt mỗi response ở 1000 dòng
+      const P = 1000; let all: any[] = []; let pg = 0;
+      while (true) {
+        let query = supabase
+          .from('audit_records')
+          .select('*')
+          .eq('status', 'Approved')
+          .order('approved_at', { ascending: false });
 
-      // Filter theo ngày nếu có
-      if (fromDate) query = query.gte('approved_at', fromDate + 'T00:00:00');
-      if (toDate) query = query.lte('approved_at', toDate + 'T23:59:59');
+        // Filter theo ngày nếu có
+        if (fromDate) query = query.gte('approved_at', fromDate + 'T00:00:00');
+        if (toDate) query = query.lte('approved_at', toDate + 'T23:59:59');
 
-      // Filter theo ERP nếu có
-      if (searchErp) query = query.ilike('erp_code', '%' + searchErp + '%');
+        // Filter theo ERP nếu có
+        if (searchErp) query = query.ilike('erp_code', '%' + searchErp + '%');
 
-      const { data, error } = await query;
-      if (error) throw error;
-      
+        const { data, error } = await query.range(pg * P, (pg + 1) * P - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < P) break;
+        pg++;
+      }
+
       // Map joined name to item_name if needed
-      const formatted = (data || []).map((item: any) => ({
+      const formatted = all.map((item: any) => ({
         ...item,
         name: item.item_name || 'N/A'
       }));

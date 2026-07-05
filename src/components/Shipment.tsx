@@ -506,7 +506,7 @@ const Shipment: React.FC = () => {
     try {
       const { data, error } = await supabase.rpc('get_shipments', {
         p_dept_code: deptCode,
-        p_status: null,
+        p_status: 'all',
         p_from_date: filterFrom || null,
         p_to_date: filterTo || null,
       });
@@ -610,21 +610,18 @@ const Shipment: React.FC = () => {
       let hasMore = true;
 
       while (hasMore) {
-        const { data, error } = await supabase.rpc('get_shipments', {
+        // PostgREST giới hạn mỗi response RPC tối đa 1000 dòng → phải phân trang bằng range
+        const { data, error } = await (supabase.rpc('get_shipments', {
           p_dept_code: deptCode,
-          p_status: null,
+          p_status: 'all',
           p_from_date: filterFrom || null,
           p_to_date: filterTo || null,
-        });
-        // Note: get_shipments RPC — paginate via range if needed
+        }) as any).range(page * PAGE, (page + 1) * PAGE - 1);
         if (error) throw error;
         const rows = (data as Shipment[]) ?? [];
-        allData = rows; // RPC returns all; use range only if table-based
-        hasMore = false; // RPC handles all rows in one call
+        allData = allData.concat(rows);
+        hasMore = rows.length === PAGE;
         page++;
-        // If we wanted table-based pagination: break when rows.length < PAGE
-        void page;
-        void PAGE;
       }
 
       if (allData.length === 0) {

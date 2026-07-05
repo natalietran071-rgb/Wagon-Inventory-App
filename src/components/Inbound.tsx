@@ -35,6 +35,7 @@ const Inbound = () => {
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const syncingRef = useRef(false);
 
   useEffect(() => {
@@ -55,11 +56,16 @@ const Inbound = () => {
   // Form state
   const createEmptyRow = () => ({
     orderId: '',
+    poNumber: '',
     erpCode: '',
+    qcCheckNo: '',
     qty: '',
     unit: 'Kiện (Pallet)',
+    deptCode: '',
+    deptName: '',
     location: '',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    remark: '',
   });
 
   const [inboundRows, setInboundRows] = useState(Array.from({ length: 5 }, createEmptyRow));
@@ -158,7 +164,7 @@ const Inbound = () => {
       e.preventDefault();
       
       const newRows = [...inboundRows];
-      const fields = ['orderId', 'erpCode', 'ignored_name', 'ignored_spec', 'qty', 'unit', 'location', 'date'];
+      const fields = ['orderId', 'poNumber', 'erpCode', 'ignored_name', 'ignored_spec', 'qcCheckNo', 'qty', 'unit', 'deptCode', 'deptName', 'location', 'date', 'remark'];
       const fieldIdx = fields.indexOf(startField);
       
       let currentRowIdx = startIdx;
@@ -316,17 +322,22 @@ const Inbound = () => {
     if (showEditHistory) {
       const fetchEditHistory = async () => {
         try {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          
-          const { data, error } = await supabase
-            .from('edit_history_inbound')
-            .select('*')
-            .gte('edited_at', thirtyDaysAgo.toISOString())
-            .order('edited_at', { ascending: false });
-            
-          if (error) throw error;
-          if (data) setEditHistory(data);
+          let all: any[] = [];
+          let from = 0;
+          const PAGE = 1000;
+          while (true) {
+            const { data, error } = await supabase
+              .from('edit_history_inbound')
+              .select('*')
+              .order('edited_at', { ascending: false })
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            all = all.concat(data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+          }
+          setEditHistory(all);
         } catch (err: any) {
           console.error('Error fetching edit history:', err);
         }
@@ -371,10 +382,15 @@ const Inbound = () => {
     try {
       const recordsToInsert = validRows.map(row => ({
         order_id: row.orderId,
+        po_number: row.poNumber || null,
         erp_code: row.erpCode,
+        qc_check_no: row.qcCheckNo || null,
         qty: Math.round(parseFloat(row.qty)) || 0,
         unit: row.unit,
+        dept_code: row.deptCode || null,
+        dept_name: row.deptName || null,
         location: row.location,
+        remark: row.remark || null,
         status: 'Stocked',
         date: row.date || new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString()
@@ -401,7 +417,9 @@ const Inbound = () => {
         await supabase.from('movements').insert(chunk);
       }
 
-      // 2. Update inventory table — group qty by ERP, update in_qty + end_stock
+      // 2. Tồn kho cho ERP ĐÃ tồn tại được trigger trg_update_inventory_inbound tự cộng
+      //    ngay khi insert inbound_records ở trên. Ở đây CHỈ tạo dòng tồn kho mới cho
+      //    những ERP chưa có trong inventory (trigger không tự tạo dòng mới).
       const erpList = Array.from(new Set(validRows.map(r => r.erpCode)));
       
       // Fetch in chunks to avoid .in() limit
@@ -419,20 +437,14 @@ const Inbound = () => {
          qtyByErp[row.erpCode] = (qtyByErp[row.erpCode] || 0) + (Math.round(parseFloat(row.qty)) || 0);
       }
 
-      const invUpdates = [];
+      const invInserts = [];
       for (const erp of Object.keys(qtyByErp)) {
+         // ERP đã có trong inventory: trigger đã cộng tồn → KHÔNG cộng lại ở JS (tránh cộng đôi)
+         if (existingMap.has(erp)) continue;
          const qty = qtyByErp[erp];
-         const existingItem = existingMap.get(erp);
          const rowEx = validRows.find(r => r.erpCode === erp);
-         
-         if (existingItem) {
-           invUpdates.push({
-             ...existingItem,
-             in_qty: (existingItem.in_qty || 0) + qty,
-             end_stock: (existingItem.end_stock || 0) + qty
-           });
-         } else if (rowEx) {
-            invUpdates.push({
+         if (rowEx) {
+            invInserts.push({
              erp: erp,
              name: '',
              unit: rowEx.unit,
@@ -446,9 +458,9 @@ const Inbound = () => {
          }
       }
 
-      if (invUpdates.length > 0) {
-        for (let i = 0; i < invUpdates.length; i += chunkSize) {
-          const chunk = invUpdates.slice(i, i + chunkSize);
+      if (invInserts.length > 0) {
+        for (let i = 0; i < invInserts.length; i += chunkSize) {
+          const chunk = invInserts.slice(i, i + chunkSize);
           await supabase.from('inventory').upsert(chunk, { onConflict: 'erp' });
         }
       }
@@ -595,19 +607,23 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       };
       await supabase.from('movements').insert([movementToInsert]);
 
-      const { data: existingData } = await supabase.from('inventory').select('*').eq('erp', singleRow.erpCode).single();
-      
-      const invUpdate = {
-        erp: singleRow.erpCode,
-        in_qty: (existingData?.in_qty || 0) + (Math.round(parseFloat(singleRow.qty)) || 0),
-        end_stock: (existingData?.end_stock || 0) + (Math.round(parseFloat(singleRow.qty)) || 0),
-        pos: singleRow.location || existingData?.pos || '',
-        name: existingData?.name || '',
-        unit: singleRow.unit || existingData?.unit || '',
-        updated_at: new Date().toISOString()
-      };
-      
-      await supabase.from('inventory').upsert([invUpdate], { onConflict: 'erp' });
+      // Tồn kho cho ERP đã tồn tại được trigger trg_update_inventory_inbound tự cộng khi
+      // insert inbound_records ở trên. Chỉ tạo dòng tồn kho mới nếu ERP chưa có trong inventory.
+      const { data: existingData } = await supabase.from('inventory').select('erp').eq('erp', singleRow.erpCode).single();
+      if (!existingData) {
+        const qty = Math.round(parseFloat(singleRow.qty)) || 0;
+        await supabase.from('inventory').insert([{
+          erp: singleRow.erpCode,
+          name: '',
+          unit: singleRow.unit || '',
+          pos: singleRow.location || '',
+          start_stock: 0,
+          in_qty: qty,
+          out_qty: 0,
+          end_stock: qty,
+          critical: false
+        }]);
+      }
 
       setSingleRow(createEmptyRow());
       alert('Nhập kho thành công!');
@@ -717,8 +733,13 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
           nameMatch;
       });
     }
+    result = [...result].sort((a, b) => {
+      const da = (a.date || '') + (a.created_at || '');
+      const db = (b.date || '') + (b.created_at || '');
+      return sortOrder === 'desc' ? db.localeCompare(da) : da.localeCompare(db);
+    });
     return result;
-  }, [inboundRecords, fromDate, toDate, searchQuery, inventoryMap]);
+  }, [inboundRecords, fromDate, toDate, searchQuery, inventoryMap, sortOrder]);
 
   const exportToExcel = async () => {
     setLoading(true);
@@ -726,15 +747,25 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      const { data: dataToExport, error } = await (supabase.rpc('export_inbound', {
-        p_search: searchQuery || '',
-        p_from_date: fromDate || null,
-        p_to_date: toDate || null
-      }) as any).setHeader('Prefer', 'return=representation');
+      // Phân trang để lấy HẾT dòng — PostgREST giới hạn mỗi response RPC tối đa 1000 dòng
+      const PAGE = 1000;
+      let dataToExport: any[] = [];
+      let pg = 0;
+      while (true) {
+        const { data, error } = await (supabase.rpc('export_inbound', {
+          p_search: searchQuery || '',
+          p_from_date: fromDate || null,
+          p_to_date: toDate || null
+        }) as any).range(pg * PAGE, (pg + 1) * PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        dataToExport = dataToExport.concat(data);
+        if (data.length < PAGE) break;
+        pg++;
+      }
+      if (dataToExport.length === 0) throw new Error('No data found');
 
-      if (error || !dataToExport) throw error || new Error('No data found');
-
-      const exportData = (dataToExport || []).map(item => {
+      const exportData = dataToExport.map(item => {
         const inv = inventoryMap.get(item.erp_code);
         return {
           'Thời gian': `${item.date} ${item.time || ''}`,
@@ -766,14 +797,19 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
   const exportTemplate = () => {
     import('xlsx').then(XLSX => {
       const templateData = [{
-        'Order ID': '',
+        'BPM Number': '',
+        'PO Number': '',
         'Mã ERP': '',
         'Tên SP (Hiển thị tự động, không nhập)': '',
         'Quy cách (Hiển thị tự động, không nhập)': '',
+        'QC Check No': '',
         'Số lượng': '',
         'Đơn vị': '',
+        'Mã BP': '',
+        'Tên BP': '',
         'Vị trí': '',
-        'Ngày nhập (YYYY-MM-DD)': ''
+        'Ngày nhập (YYYY-MM-DD)': '',
+        'Remark': ''
       }];
 
       const ws = XLSX.utils.json_to_sheet(templateData);
@@ -1013,14 +1049,19 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   <thead className="sticky top-0 bg-surface-container-highest z-20 shadow-sm border-b border-outline-variant/20">
                     <tr>
                       <th className="px-2 py-3 text-xs font-bold text-on-surface-variant uppercase text-center w-10">#</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Order ID</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">BPM Number</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">PO Number</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[200px]">{t('erpCode')}</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên SP</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Quy cách</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">QC Check No</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Số lượng</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">{t('unit')}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">Mã BP</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên BP</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{t('location')}</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Ngày nhập</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Remark</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/10 text-sm bg-surface-container-lowest">
@@ -1030,13 +1071,23 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                         <tr key={idx} className="hover:bg-surface-container-low focus-within:bg-secondary-container/20 transition-colors group">
                           <td className="px-2 py-2 text-center text-on-surface-variant/50 text-[10px] font-bold select-none">{idx + 1}</td>
                           <td className="p-0 border-r border-outline-variant/5">
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               value={row.orderId}
                               onChange={(e) => handleRowChange(idx, 'orderId', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'orderId')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Mã Order"
+                              placeholder="BPM Number"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.poNumber}
+                              onChange={(e) => handleRowChange(idx, 'poNumber', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'poNumber')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="PO Number"
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5 relative">
@@ -1070,8 +1121,18 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                             </div>
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
-                            <input 
-                              type="number" 
+                            <input
+                              type="text"
+                              value={row.qcCheckNo}
+                              onChange={(e) => handleRowChange(idx, 'qcCheckNo', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'qcCheckNo')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="QC Check No"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="number"
                               value={row.qty}
                               onChange={(e) => handleRowChange(idx, 'qty', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'qty')}
@@ -1080,9 +1141,9 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5 relative">
-                            <input 
+                            <input
                               list="inbound-unit-options"
-                              type="text" 
+                              type="text"
                               value={row.unit}
                               onChange={(e) => handleRowChange(idx, 'unit', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'unit')}
@@ -1091,8 +1152,28 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
+                              value={row.deptCode}
+                              onChange={(e) => handleRowChange(idx, 'deptCode', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'deptCode')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Mã BP"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
+                              value={row.deptName}
+                              onChange={(e) => handleRowChange(idx, 'deptName', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'deptName')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Tên bộ phận"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="text"
                               value={row.location}
                               onChange={(e) => handleRowChange(idx, 'location', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'location')}
@@ -1100,13 +1181,23 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                               placeholder="Vị trí"
                             />
                           </td>
-                          <td className="p-0">
-                            <input 
-                              type="date" 
+                          <td className="p-0 border-r border-outline-variant/5">
+                            <input
+                              type="date"
                               value={row.date}
                               onChange={(e) => handleRowChange(idx, 'date', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'date')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-xs font-medium cursor-pointer"
+                            />
+                          </td>
+                          <td className="p-0">
+                            <input
+                              type="text"
+                              value={row.remark}
+                              onChange={(e) => handleRowChange(idx, 'remark', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'remark')}
+                              className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
+                              placeholder="Ghi chú"
                             />
                           </td>
                         </tr>
@@ -1299,6 +1390,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 <button onClick={() => { setFromDate(''); setToDate(''); }} className="material-symbols-outlined text-[14px] hover:text-error transition-colors ml-1 shrink-0">close</button>
               )}
             </div>
+            <button
+              onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
+              className="flex items-center gap-1.5 bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10 text-[10px] md:text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors whitespace-nowrap"
+              title={sortOrder === 'desc' ? 'Đang xem: Mới nhất trước' : 'Đang xem: Cũ nhất trước'}
+            >
+              <span className="material-symbols-outlined text-sm">{sortOrder === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span>
+              {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
+            </button>
             <div className="flex gap-2 flex-wrap w-full sm:w-auto">
               {selectedRows.length > 0 && canEdit && (
                 <button 
@@ -1679,7 +1778,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 </div>
                 <div>
                   <h3 className="text-xl font-bold font-manrope text-on-surface">Lịch sử sửa phiếu nhập</h3>
-                  <p className="text-on-surface-variant text-xs font-medium">Theo dõi các thay đổi trong 30 ngày qua.</p>
+                  <p className="text-on-surface-variant text-xs font-medium">Toàn bộ lịch sử chỉnh sửa phiếu nhập.</p>
                 </div>
               </div>
               <button 
@@ -1741,7 +1840,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                       <td colSpan={6} className="py-24 text-center">
                         <div className="flex flex-col items-center gap-4 opacity-40">
                           <span className="material-symbols-outlined text-6xl">history_toggle_off</span>
-                          <p className="text-sm font-bold italic tracking-wide">Không có dữ liệu chỉnh sửa trong 30 ngày qua.</p>
+                          <p className="text-sm font-bold italic tracking-wide">Không có dữ liệu chỉnh sửa.</p>
                         </div>
                       </td>
                     </tr>
@@ -1751,12 +1850,38 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
             </div>
             <div className="px-8 py-6 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
                <span>Tổng cộng {editHistory.length} lần điều chỉnh</span>
-               <button 
-                onClick={() => setShowEditHistory(false)}
-                className="px-8 py-3 bg-primary text-on-primary rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
-               >
-                 Đóng cửa sổ
-               </button>
+               <div className="flex items-center gap-3">
+                 <button
+                   onClick={() => {
+                     import('xlsx').then(XLSX => {
+                       const rows = editHistory.map(item => ({
+                         'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
+                         'Mã phiếu': item.order_id || '',
+                         'Mã ERP': item.erp_code || '',
+                         'SL Cũ': item.old_qty ?? '',
+                         'Biến động': Number(item.new_qty) - Number(item.old_qty || 0),
+                         'SL Mới': item.new_qty ?? '',
+                         'Lý do': item.reason || '',
+                         'Người thực hiện': item.edited_by || '',
+                       }));
+                       const ws = XLSX.utils.json_to_sheet(rows);
+                       const wb = XLSX.utils.book_new();
+                       XLSX.utils.book_append_sheet(wb, ws, 'Lich Su Nhap');
+                       XLSX.writeFile(wb, `Lich_Su_Chinh_Sua_Nhap_Kho_${new Date().toISOString().split('T')[0]}.xlsx`);
+                     });
+                   }}
+                   className="flex items-center gap-1.5 px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow hover:bg-emerald-700 transition-colors"
+                 >
+                   <span className="material-symbols-outlined text-sm">download</span>
+                   Xuất Excel
+                 </button>
+                 <button
+                  onClick={() => setShowEditHistory(false)}
+                  className="px-8 py-3 bg-primary text-on-primary rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                 >
+                   Đóng cửa sổ
+                 </button>
+               </div>
             </div>
           </motion.div>
         </div>

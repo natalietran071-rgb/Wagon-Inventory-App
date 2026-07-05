@@ -165,7 +165,7 @@ const Inventory = () => {
           .select('*', { count: 'exact' });
         
         if (searchName) {
-          query = query.or(`erp.ilike.%${searchName}%,name.ilike.%${searchName}%,name_zh.ilike.%${searchName}%`);
+          { const s = searchName.replace(/"/g, ''); query = query.or(`erp.ilike."%${s}%",name.ilike."%${s}%",name_zh.ilike."%${s}%"`); }
         }
         
         if (selectedCategory !== 'All') {
@@ -279,6 +279,25 @@ const Inventory = () => {
   const [itemEditHistory, setItemEditHistory] = useState<any[]>([]);
 
   const canAdmin = profile?.role === 'admin' || profile?.role === 'editor' || user?.email === 'natalietran071@gmail.com' || !profile;
+
+  const [otwErpSet, setOtwErpSet] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const fetchOtwPending = async () => {
+      let all: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data } = await supabase.from('on_the_way').select('erp_code').eq('status', 'pending').range(from, from + PAGE - 1);
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      setOtwErpSet(new Set(all.map((r: any) => r.erp_code)));
+    };
+    fetchOtwPending();
+  }, []);
 
   const handleSaveEditDetail = async () => {
     if (!editDetailData) return;
@@ -480,13 +499,21 @@ const Inventory = () => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const { data } = await supabase
-      .from('deleted_items')
-      .select('*')
-      .gte('deleted_at', thirtyDaysAgo.toISOString())
-      .order('deleted_at', { ascending: false });
-      
-    if (data) setDeletedItems(data);
+    // Phân trang để lấy HẾT dòng — PostgREST cắt mỗi response ở 1000 dòng
+    const P = 1000; let all: any[] = []; let p = 0;
+    while (true) {
+      const { data } = await supabase
+        .from('deleted_items')
+        .select('*')
+        .gte('deleted_at', thirtyDaysAgo.toISOString())
+        .order('deleted_at', { ascending: false })
+        .range(p * P, (p + 1) * P - 1);
+      if (!data || data.length === 0) break;
+      all = all.concat(data);
+      if (data.length < P) break;
+      p++;
+    }
+    setDeletedItems(all);
   };
 
   const exportDeletedItemsToExcel = () => {
@@ -525,16 +552,24 @@ const Inventory = () => {
 
       if (reportFromDate && reportToDate) {
         // Use RPC for date-range view (same as fetchInventory)
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_inventory_by_date', {
-          p_from_date: reportFromDate,
-          p_to_date: reportToDate,
-          p_search: searchName,
-          p_location: tableLocation === 'All' ? '' : tableLocation,
-          p_limit: 100000,
-          p_offset: 0
-        });
-        if (rpcError) throw rpcError;
-        allData = rpcData || [];
+        // Phân trang qua p_offset — PostgREST cắt mỗi response RPC ở 1000 dòng
+        const P = 1000;
+        let pgDate = 0;
+        while (true) {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('get_inventory_by_date', {
+            p_from_date: reportFromDate,
+            p_to_date: reportToDate,
+            p_search: searchName,
+            p_location: tableLocation === 'All' ? '' : tableLocation,
+            p_limit: P,
+            p_offset: pgDate * P
+          });
+          if (rpcError) throw rpcError;
+          const rows = rpcData || [];
+          allData = allData.concat(rows);
+          if (rows.length < P) break;
+          pgDate++;
+        }
       } else {
         // Regular pagination with ALL active filters
         const PAGE = 1000;
@@ -547,7 +582,7 @@ const Inventory = () => {
             .range(page * PAGE, (page + 1) * PAGE - 1);
 
           if (searchName) {
-            query = query.or(`erp.ilike.%${searchName}%,name.ilike.%${searchName}%,name_zh.ilike.%${searchName}%`);
+            { const s = searchName.replace(/"/g, ''); query = query.or(`erp.ilike."%${s}%",name.ilike."%${s}%",name_zh.ilike."%${s}%"`); }
           }
           if (selectedCategory !== 'All') {
             query = query.eq('category', selectedCategory);
@@ -588,14 +623,28 @@ const Inventory = () => {
         }
 
         // Aggregate in/out from records tables (same source as dashboard)
-        const [inboundAgg, outboundAgg] = await Promise.all([
-          supabase.from('inbound_records').select('erp_code, qty'),
-          supabase.from('outbound_records').select('erp_code, qty').eq('status', 'Đã Xuất')
+        // Phải lấy HẾT dòng — PostgREST cắt mỗi response ở 1000 dòng → cộng dồn bị thiếu
+        const fetchAllQty = async (table: string, status?: string) => {
+          const P = 1000; let all: any[] = []; let p = 0;
+          while (true) {
+            let q = supabase.from(table).select('erp_code, qty').order('id', { ascending: true });
+            if (status) q = q.eq('status', status);
+            const { data } = await q.range(p * P, (p + 1) * P - 1);
+            if (!data || data.length === 0) break;
+            all = all.concat(data);
+            if (data.length < P) break;
+            p++;
+          }
+          return all;
+        };
+        const [inboundRows, outboundRows] = await Promise.all([
+          fetchAllQty('inbound_records'),
+          fetchAllQty('outbound_records', 'Đã Xuất')
         ]);
         const inMap = new Map<string, number>();
-        (inboundAgg.data || []).forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
+        inboundRows.forEach((r: any) => inMap.set(r.erp_code, (inMap.get(r.erp_code) || 0) + Number(r.qty)));
         const outMap = new Map<string, number>();
-        (outboundAgg.data || []).forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
+        outboundRows.forEach((r: any) => outMap.set(r.erp_code, (outMap.get(r.erp_code) || 0) + Number(r.qty)));
         allData = allData.map(item => ({ ...item, _in_agg: inMap.get(item.erp) || 0, _out_agg: outMap.get(item.erp) || 0 }));
       }
 
@@ -1191,8 +1240,13 @@ const Inventory = () => {
                       </button>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="font-bold text-[13px] leading-tight">
+                      <div className="font-bold text-[13px] leading-tight flex items-center gap-1.5 flex-wrap">
                         {item.name ? item.name : <span className="text-amber-500 italic flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span> Thiếu thông tin</span>}
+                        {otwErpSet.has(item.erp) && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 group-hover:bg-amber-200/60 rounded-full text-[9px] font-black whitespace-nowrap" title="Có hàng đang On The Way">
+                            <span className="material-symbols-outlined text-[10px]">local_shipping</span>OTW
+                          </span>
+                        )}
                       </div>
                       <div className={`text-[9px] font-medium mt-0.5 truncate max-w-[120px] md:max-w-none ${isCritical || itemData.end < 0 ? 'text-error group-hover:text-error-container flex items-center gap-1' : 'text-on-surface-variant group-hover:text-surface/60'}`}>
                         {(isCritical || itemData.end < 0) && <span className="material-symbols-outlined text-[10px]">error</span>}
@@ -1588,13 +1642,22 @@ const Inventory = () => {
                   <div className="pt-4 border-t border-outline-variant/10 flex justify-center">
                     <button 
                       onClick={async () => {
-                        const { data } = await supabase
-                          .from('edit_history_inventory')
-                          .select('*')
-                          .eq('erp_code', selectedItemDetail.erp)
-                          .order('edited_at', { ascending: false });
-                        
-                        if (data) setItemEditHistory(data);
+                        let all: any[] = [];
+                        let from = 0;
+                        const PAGE = 1000;
+                        while (true) {
+                          const { data } = await supabase
+                            .from('edit_history_inventory')
+                            .select('*')
+                            .eq('erp_code', selectedItemDetail.erp)
+                            .order('edited_at', { ascending: false })
+                            .range(from, from + PAGE - 1);
+                          if (!data || data.length === 0) break;
+                          all = all.concat(data);
+                          if (data.length < PAGE) break;
+                          from += PAGE;
+                        }
+                        setItemEditHistory(all);
                         setShowItemEditHistory(true);
                       }}
                       className="text-primary text-xs font-bold hover:underline flex items-center gap-1"
@@ -1750,6 +1813,37 @@ const Inventory = () => {
                     )}
                   </tbody>
                 </table>
+              </div>
+              <div className="px-4 py-3 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
+                <span>Tổng cộng {itemEditHistory.length} lần điều chỉnh</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      import('xlsx').then(XLSX => {
+                        const rows = itemEditHistory.map(item => ({
+                          'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
+                          'Mã ERP': item.erp_code || '',
+                          'Trường': item.field_name || '',
+                          'Giá trị cũ': item.old_value || '',
+                          'Giá trị mới': item.new_value || '',
+                          'Ghi chú': item.reason || '',
+                          'Người sửa': item.edited_by || '',
+                        }));
+                        const ws = XLSX.utils.json_to_sheet(rows);
+                        const wb = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(wb, ws, 'Lich Su');
+                        XLSX.writeFile(wb, `Lich_Su_Chinh_Sua_${selectedItemDetail?.erp || 'Item'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+                      });
+                    }}
+                    className="flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-[10px] shadow hover:bg-emerald-700 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">download</span>
+                    Xuất Excel
+                  </button>
+                  <button onClick={() => setShowItemEditHistory(false)} className="px-4 py-2 bg-primary text-on-primary rounded-xl font-bold text-[10px] shadow hover:opacity-90 transition-all">
+                    Đóng
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

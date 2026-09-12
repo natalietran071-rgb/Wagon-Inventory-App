@@ -96,6 +96,7 @@ export const zh: Record<string, string> = {
   "⚠️ {0} dòng trùng hoàn toàn → tab Chờ xử lý": "⚠️ {0} 筆完全重複 → 「待處理」頁籤",
   "⚠ CẢNH BÁO NGUY HIỂM": "⚠ 危險警告",
   "⚠️ Hành động này không thể hoàn tác.": "⚠️ 此操作無法復原。",
+  "⚠️ Đã lưu thông tin vật tư nhưng KHÔNG ghi được lịch sử chỉnh sửa:\n{0}": "⚠️ 物料資料已儲存，但修改紀錄寫入失敗：\n{0}",
   "⚠️ Vật tư quan trọng (Critical)": "⚠️ 重要物料（Critical）",
   "✅ Dọn dẹp thành công!\n- Lịch sử chỉnh sửa: {0}\n- Danh mục đã xóa: {1}": "✅ 清理完成！\n- 修改紀錄：{0}\n- 已刪除項目：{1}",
   "✅ Đã cập nhật đơn hàng": "✅ 已更新訂單",

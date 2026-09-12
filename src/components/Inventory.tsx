@@ -339,7 +339,7 @@ const Inventory = () => {
         if (Boolean(original.critical) !== Boolean(editDetailData.critical)) changes.push({ field: 'Critical Item', old: original.critical ? 'Có' : 'Không', new: editDetailData.critical ? 'Có' : 'Không' });
         
         if (changes.length > 0) {
-           await supabase.from('edit_history_inventory').insert(changes.map(c => ({
+           const { error: historyError } = await supabase.from('edit_history_inventory').insert(changes.map(c => ({
              erp_code: editDetailData.erp,
              field_name: c.field,
              old_value: String(c.old === null || c.old === undefined ? '' : c.old),
@@ -347,6 +347,11 @@ const Inventory = () => {
              reason: editDetailData.editReason || tr("Cập nhật thông tin vật tư"),
              edited_by: profile?.full_name || profile?.email || user?.email || 'Unknown'
            })));
+           if (historyError) {
+             // Thông tin vật tư đã lưu xong; chỉ phần lịch sử chỉnh sửa thất bại. Báo rõ thay vì im lặng.
+             console.error('edit_history_inventory insert failed:', historyError);
+             alert(tr("⚠️ Đã lưu thông tin vật tư nhưng KHÔNG ghi được lịch sử chỉnh sửa:\n{0}", [historyError.message]));
+           }
         }
       }
 

@@ -13,6 +13,7 @@ import UserManagement from './components/UserManagement';
 import MasterERP from './components/MasterERP';
 import Shipment from './components/Shipment';
 import OnTheWay from './components/OnTheWay';
+import { tr, useLanguage } from './contexts/LanguageContext';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, loading, error } = useAuth();
@@ -31,13 +32,13 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
         <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
           <span className="material-symbols-outlined text-3xl">error</span>
         </div>
-        <h2 className="text-xl font-black text-on-surface mb-2">Lỗi kết nối hệ thống</h2>
+        <h2 className="text-xl font-black text-on-surface mb-2">{tr("Lỗi kết nối hệ thống")}</h2>
         <p className="text-on-surface-variant text-sm mb-8 max-w-md leading-relaxed">{error}</p>
         <button
           onClick={() => window.location.reload()}
           className="bg-primary text-on-primary px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
         >
-          Thử lại
+          {tr("Thử lại")}
         </button>
       </div>
     );
@@ -65,13 +66,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const getTitle = (path: string) => {
     switch (path) {
-      case '/inventory': return 'Tồn Kho';
-      case '/inbound': return 'Nhập Kho';
-      case '/outbound': return 'Xuất Kho';
-      case '/audit': return 'Kiểm Kê';
+      case '/inventory': return tr("Tồn Kho");
+      case '/inbound': return tr("Nhập Kho");
+      case '/outbound': return tr("Xuất Kho");
+      case '/audit': return tr("Kiểm Kê");
       case '/on-the-way': return 'On The Way';
-      case '/shipment': return 'Giao Hàng';
-      case '/users': return 'Người dùng';
+      case '/shipment': return tr("Giao Hàng");
+      case '/users': return tr("Người dùng");
       case '/master-erp': return 'Master ERP';
       default: return 'Wagon Inventory Hub';
     }
@@ -96,6 +97,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  const { language } = useLanguage();
   const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 
   if (!supabaseConfigured) {
@@ -104,9 +106,9 @@ function App() {
         <div className="w-16 h-16 bg-warning/10 rounded-2xl flex items-center justify-center text-warning mb-6">
           <span className="material-symbols-outlined text-3xl">settings_suggest</span>
         </div>
-        <h2 className="text-xl font-black text-on-surface mb-2">Chưa cấu hình Supabase</h2>
+        <h2 className="text-xl font-black text-on-surface mb-2">{tr("Chưa cấu hình Supabase")}</h2>
         <p className="text-on-surface-variant text-sm mb-8 max-w-md leading-relaxed">
-          Vui lòng thiết lập <strong>VITE_SUPABASE_URL</strong> và <strong>VITE_SUPABASE_ANON_KEY</strong> trong bảng Secrets (Settings) để bắt đầu sử dụng ứng dụng.
+          {tr("Vui lòng thiết lập")} <strong>VITE_SUPABASE_URL</strong> {tr("và")} <strong>VITE_SUPABASE_ANON_KEY</strong> {tr("trong bảng Secrets (Settings) để bắt đầu sử dụng ứng dụng.")}
         </p>
       </div>
     );
@@ -116,6 +118,8 @@ function App() {
     <AuthProvider>
       <DataProvider>
         <Router>
+          {/* key={language}: đổi ngôn ngữ thì render lại toàn bộ giao diện */}
+          <React.Fragment key={language}>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/*" element={
@@ -136,6 +140,7 @@ function App() {
               </PrivateRoute>
             } />
           </Routes>
+          </React.Fragment>
         </Router>
       </DataProvider>
     </AuthProvider>

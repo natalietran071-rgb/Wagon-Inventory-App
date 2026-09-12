@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
+import { tr } from '../contexts/LanguageContext';
 
 type Role = 'admin' | 'editor' | 'viewer' | 'dept_user';
 
@@ -61,7 +62,7 @@ const UserManagement: React.FC = () => {
       setUsers(data || []);
     } catch (err: any) {
       console.error('Error fetching users:', err);
-      alert('Không tải được danh sách người dùng: ' + (err.message || ''));
+      alert(tr("Không tải được danh sách người dùng:") + (err.message || ''));
     } finally {
       setLoading(false);
     }
@@ -69,7 +70,7 @@ const UserManagement: React.FC = () => {
 
   const validateDept = () => {
     if (formData.role === 'dept_user' && !formData.dept_code.trim()) {
-      alert('Vui lòng nhập Mã bộ phận cho tài khoản Dept User.');
+      alert(tr("Vui lòng nhập Mã bộ phận cho tài khoản Dept User."));
       return false;
     }
     return true;
@@ -92,11 +93,11 @@ const UserManagement: React.FC = () => {
         p_dept_name: formData.role === 'dept_user' ? formData.dept_name.trim() || null : null,
       });
       if (error) throw error;
-      if (!data || data.status !== 'success') throw new Error(data?.error || 'Không thể tạo người dùng');
+      if (!data || data.status !== 'success') throw new Error(data?.error || tr("Không thể tạo người dùng"));
 
       setIsAddModalOpen(false);
       setCredentials({
-        title: 'Tài khoản đã được tạo',
+        title: tr("Tài khoản đã được tạo"),
         full_name: formData.full_name.trim(),
         login_code: data.login_code,
         password: data.password,
@@ -104,7 +105,7 @@ const UserManagement: React.FC = () => {
       await fetchUsers();
     } catch (err: any) {
       console.error('Error creating user:', err);
-      alert('Lỗi: ' + (err.message || 'Không thể tạo người dùng'));
+      alert(tr("Lỗi:") + (err.message || tr("Không thể tạo người dùng")));
     } finally {
       setLoading(false);
     }
@@ -137,66 +138,66 @@ const UserManagement: React.FC = () => {
         p_dept_name: formData.role === 'dept_user' ? formData.dept_name.trim() || null : null,
       });
       if (error) throw error;
-      if (!data || data.status !== 'success') throw new Error(data?.error || 'Không thể cập nhật');
+      if (!data || data.status !== 'success') throw new Error(data?.error || tr("Không thể cập nhật"));
 
       setIsEditModalOpen(false);
       await fetchUsers();
     } catch (err: any) {
       console.error('Error updating user:', err);
-      alert('Lỗi: ' + (err.message || 'Không thể cập nhật'));
+      alert(tr("Lỗi:") + (err.message || tr("Không thể cập nhật")));
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetPassword = async (user: UserProfile) => {
-    if (!confirm(`Cấp mật khẩu mới cho ${user.full_name || user.login_code}?\nMật khẩu cũ sẽ không dùng được nữa.`)) return;
+    if (!confirm(tr("Cấp mật khẩu mới cho {0}?\nMật khẩu cũ sẽ không dùng được nữa.", [user.full_name || user.login_code]))) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('admin_reset_password', { p_user_id: user.id });
       if (error) throw error;
-      if (!data || data.status !== 'success') throw new Error(data?.error || 'Không thể cấp lại mật khẩu');
+      if (!data || data.status !== 'success') throw new Error(data?.error || tr("Không thể cấp lại mật khẩu"));
 
       setCredentials({
-        title: 'Mật khẩu mới đã được cấp',
+        title: tr("Mật khẩu mới đã được cấp"),
         full_name: user.full_name,
         login_code: user.login_code,
         password: data.password,
       });
     } catch (err: any) {
       console.error('Error resetting password:', err);
-      alert('Lỗi: ' + (err.message || 'Không thể cấp lại mật khẩu'));
+      alert(tr("Lỗi:") + (err.message || tr("Không thể cấp lại mật khẩu")));
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteUser = async (user: UserProfile) => {
-    if (!confirm(`Xóa người dùng ${user.full_name || user.login_code}? Không thể hoàn tác.`)) return;
+    if (!confirm(tr("Xóa người dùng {0}? Không thể hoàn tác.", [user.full_name || user.login_code]))) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('admin_delete_user', { p_user_id: user.id });
       if (error) throw error;
-      if (!data || data.status !== 'success') throw new Error(data?.error || 'Không thể xóa');
+      if (!data || data.status !== 'success') throw new Error(data?.error || tr("Không thể xóa"));
       setUsers(prev => prev.filter(u => u.id !== user.id));
     } catch (err: any) {
-      alert('Lỗi: ' + (err.message || 'Không thể xóa'));
+      alert(tr("Lỗi:") + (err.message || tr("Không thể xóa")));
     } finally {
       setLoading(false);
     }
   };
 
   const handleManualCleanup = async () => {
-    if (!confirm('Bạn có muốn dọn dẹp các lịch sử cũ hơn 30 ngày ngay bây giờ?')) return;
+    if (!confirm(tr("Bạn có muốn dọn dẹp các lịch sử cũ hơn 30 ngày ngay bây giờ?"))) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('cleanup_old_history');
       if (error) throw error;
       const { deleted_history, deleted_items } = data;
-      alert(`✅ Dọn dẹp thành công!\n- Lịch sử chỉnh sửa: ${deleted_history}\n- Danh mục đã xóa: ${deleted_items}`);
+      alert(tr("✅ Dọn dẹp thành công!\n- Lịch sử chỉnh sửa: {0}\n- Danh mục đã xóa: {1}", [deleted_history, deleted_items]));
     } catch (err: any) {
       console.error('Cleanup error:', err);
-      alert('Lỗi: ' + (err.message || 'Không thể dọn dẹp'));
+      alert(tr("Lỗi:") + (err.message || tr("Không thể dọn dẹp")));
     } finally {
       setLoading(false);
     }
@@ -204,12 +205,12 @@ const UserManagement: React.FC = () => {
 
   const copyCredentials = async () => {
     if (!credentials) return;
-    const text = `Tài khoản Wagon Inventory\nHọ tên: ${credentials.full_name}\nMã đăng nhập: ${credentials.login_code}\nMật khẩu: ${credentials.password}`;
+    const text = tr("Tài khoản Wagon Inventory\nHọ tên: {0}\nMã đăng nhập: {1}\nMật khẩu: {2}", [credentials.full_name, credentials.login_code, credentials.password]);
     try {
       await navigator.clipboard.writeText(text);
-      alert('Đã copy mã đăng nhập và mật khẩu.');
+      alert(tr("Đã copy mã đăng nhập và mật khẩu."));
     } catch {
-      alert('Không copy được, vui lòng ghi lại thủ công.');
+      alert(tr("Không copy được, vui lòng ghi lại thủ công."));
     }
   };
 
@@ -228,18 +229,18 @@ const UserManagement: React.FC = () => {
   const renderFormFields = (idPrefix: string, showActive: boolean) => (
     <>
       <div>
-        <label className={labelClass}>Họ và tên</label>
+        <label className={labelClass}>{tr("Họ và tên")}</label>
         <input
           type="text" required autoFocus
           className={inputClass}
-          placeholder="Nhập họ và tên..."
+          placeholder={tr("Nhập họ và tên...")}
           value={formData.full_name}
           onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
         />
       </div>
 
       <div>
-        <label className={labelClass}>Vai trò</label>
+        <label className={labelClass}>{tr("Vai trò")}</label>
         <div className="relative">
           <select
             className={`${inputClass} appearance-none cursor-pointer`}
@@ -247,7 +248,7 @@ const UserManagement: React.FC = () => {
             onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as Role }))}
           >
             {(Object.keys(ROLE_LABELS) as Role[]).map(r => (
-              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              <option key={r} value={r}>{tr(ROLE_LABELS[r])}</option>
             ))}
           </select>
           <span className="absolute right-6 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none text-on-surface-variant">expand_more</span>
@@ -257,7 +258,7 @@ const UserManagement: React.FC = () => {
       {formData.role === 'dept_user' && (
         <div className="grid grid-cols-2 gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200">
           <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">Mã bộ phận *</label>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">{tr("Mã bộ phận *")}</label>
             <input
               type="text" required
               className="w-full bg-white border border-amber-200 rounded-xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-300 outline-none uppercase"
@@ -267,11 +268,11 @@ const UserManagement: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">Tên bộ phận</label>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">{tr("Tên bộ phận")}</label>
             <input
               type="text"
               className="w-full bg-white border border-amber-200 rounded-xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-300 outline-none"
-              placeholder="VD: Kế toán"
+              placeholder={tr("VD: Kế toán")}
               value={formData.dept_name}
               onChange={(e) => setFormData(prev => ({ ...prev, dept_name: e.target.value }))}
             />
@@ -288,7 +289,7 @@ const UserManagement: React.FC = () => {
             checked={formData.is_active}
             onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
           />
-          <label htmlFor={`${idPrefix}_is_active`} className="text-sm font-bold text-on-surface cursor-pointer select-none">Kích hoạt tài khoản</label>
+          <label htmlFor={`${idPrefix}_is_active`} className="text-sm font-bold text-on-surface cursor-pointer select-none">{tr("Kích hoạt tài khoản")}</label>
         </div>
       )}
     </>
@@ -318,8 +319,8 @@ const UserManagement: React.FC = () => {
     <div className="p-4 md:p-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
         <div>
-          <h2 className="text-3xl font-black text-on-surface font-manrope tracking-tight mb-2">Quản lý người dùng</h2>
-          <p className="text-on-surface-variant font-medium">Tạo tài khoản bằng họ tên, hệ thống tự cấp mã đăng nhập và mật khẩu.</p>
+          <h2 className="text-3xl font-black text-on-surface font-manrope tracking-tight mb-2">{tr("Quản lý người dùng")}</h2>
+          <p className="text-on-surface-variant font-medium">{tr("Tạo tài khoản bằng họ tên, hệ thống tự cấp mã đăng nhập và mật khẩu.")}</p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
           <button
@@ -330,18 +331,18 @@ const UserManagement: React.FC = () => {
           </button>
           <button
             onClick={handleManualCleanup}
-            title="Dọn dẹp lịch sử (>30 ngày)"
+            title={tr("Dọn dẹp lịch sử (>30 ngày)")}
             className="flex items-center gap-2 px-4 py-3 bg-surface-container rounded-2xl text-on-surface-variant hover:bg-warning/10 hover:text-warning transition-all border border-outline-variant/10 shadow-sm"
           >
             <span className="material-symbols-outlined text-xl">cleaning_services</span>
-            <span className="uppercase tracking-widest text-[9px] font-black hidden md:inline">Dọn dẹp</span>
+            <span className="uppercase tracking-widest text-[9px] font-black hidden md:inline">{tr("Dọn dẹp")}</span>
           </button>
           <button
             onClick={handleOpenAdd}
             className="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-2xl font-black text-sm hover:shadow-lg hover:shadow-primary/20 transition-all"
           >
             <span className="material-symbols-outlined">person_add</span>
-            <span className="uppercase tracking-widest text-[11px]">Thêm người dùng</span>
+            <span className="uppercase tracking-widest text-[11px]">{tr("Thêm người dùng")}</span>
           </button>
         </div>
       </div>
@@ -352,7 +353,7 @@ const UserManagement: React.FC = () => {
             <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant">search</span>
             <input
               type="text"
-              placeholder="Tìm theo tên, mã đăng nhập, bộ phận..."
+              placeholder={tr("Tìm theo tên, mã đăng nhập, bộ phận...")}
               className="w-full bg-surface-container-lowest border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold shadow-inner focus:ring-2 focus:ring-primary/20"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -364,12 +365,12 @@ const UserManagement: React.FC = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-surface-container-low text-on-surface-variant uppercase text-[10px] font-black tracking-widest border-b border-outline-variant/10">
-                <th className="px-8 py-5">Họ và tên</th>
-                <th className="px-8 py-5">Mã đăng nhập</th>
-                <th className="px-8 py-5">Vai trò</th>
-                <th className="px-8 py-5">Đăng nhập cuối</th>
-                <th className="px-8 py-5">Trạng thái</th>
-                <th className="px-8 py-5 text-right">Thao tác</th>
+                <th className="px-8 py-5">{tr("Họ và tên")}</th>
+                <th className="px-8 py-5">{tr("Mã đăng nhập")}</th>
+                <th className="px-8 py-5">{tr("Vai trò")}</th>
+                <th className="px-8 py-5">{tr("Đăng nhập cuối")}</th>
+                <th className="px-8 py-5">{tr("Trạng thái")}</th>
+                <th className="px-8 py-5 text-right">{tr("Thao tác")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/5">
@@ -388,7 +389,7 @@ const UserManagement: React.FC = () => {
                           {user.full_name?.charAt(0) || user.login_code?.charAt(0) || 'U'}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-on-surface">{user.full_name || 'Chưa cập nhật'}</p>
+                          <p className="text-sm font-bold text-on-surface">{user.full_name || tr("Chưa cập nhật")}</p>
                           {user.role === 'dept_user' && user.dept_name && (
                             <p className="text-[10px] text-on-surface-variant/70 font-medium">{user.dept_name}</p>
                           )}
@@ -409,13 +410,13 @@ const UserManagement: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-8 py-6 text-sm font-medium text-on-surface-variant">
-                      {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'Chưa từng'}
+                      {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : tr("Chưa từng")}
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${user.is_active ? 'bg-success' : 'bg-outline-variant'}`}></span>
                         <span className={`text-[11px] font-bold ${user.is_active ? 'text-success' : 'text-on-surface-variant'}`}>
-                          {user.is_active ? 'Active' : 'Bị khóa'}
+                          {user.is_active ? 'Active' : tr("Bị khóa")}
                         </span>
                       </div>
                     </td>
@@ -423,21 +424,21 @@ const UserManagement: React.FC = () => {
                       <div className="flex justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => handleResetPassword(user)}
-                          title="Cấp mật khẩu mới"
+                          title={tr("Cấp mật khẩu mới")}
                           className="p-2 rounded-xl hover:bg-warning/10 text-on-surface-variant hover:text-warning transition-all"
                         >
                           <span className="material-symbols-outlined text-xl">lock_reset</span>
                         </button>
                         <button
                           onClick={() => handleEdit(user)}
-                          title="Chỉnh sửa"
+                          title={tr("Chỉnh sửa")}
                           className="p-2 rounded-xl hover:bg-primary/10 text-on-surface-variant hover:text-primary transition-all"
                         >
                           <span className="material-symbols-outlined text-xl">edit</span>
                         </button>
                         <button
                           onClick={() => handleDeleteUser(user)}
-                          title="Xóa người dùng"
+                          title={tr("Xóa người dùng")}
                           className="p-2 rounded-xl hover:bg-error/10 text-on-surface-variant hover:text-error transition-all"
                         >
                           <span className="material-symbols-outlined text-xl">delete</span>
@@ -449,7 +450,7 @@ const UserManagement: React.FC = () => {
               ) : (
                 <tr key="empty-users">
                   <td colSpan={6} className="px-8 py-20 text-center text-on-surface-variant font-bold italic">
-                    Không tìm thấy người dùng nào.
+                    {tr("Không tìm thấy người dùng nào.")}
                   </td>
                 </tr>
               )}
@@ -462,8 +463,8 @@ const UserManagement: React.FC = () => {
       <AnimatePresence>
         {isAddModalOpen && modalShell(() => setIsAddModalOpen(false), (
           <>
-            <h3 className="text-3xl font-black text-on-surface mb-2">Thêm người dùng</h3>
-            <p className="text-xs text-on-surface-variant font-medium mb-8">Mã đăng nhập và mật khẩu sẽ được tạo tự động sau khi lưu.</p>
+            <h3 className="text-3xl font-black text-on-surface mb-2">{tr("Thêm người dùng")}</h3>
+            <p className="text-xs text-on-surface-variant font-medium mb-8">{tr("Mã đăng nhập và mật khẩu sẽ được tạo tự động sau khi lưu.")}</p>
             <form onSubmit={handleAddUser} className="space-y-6">
               {renderFormFields('add', false)}
               <div className="flex gap-4 pt-4">
@@ -472,14 +473,14 @@ const UserManagement: React.FC = () => {
                   onClick={() => setIsAddModalOpen(false)}
                   className="flex-1 py-5 bg-surface-container text-on-surface-variant rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-surface-container-high transition-colors"
                 >
-                  HỦY
+                  {tr("HỦY")}
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="flex-1 py-5 bg-primary text-on-primary rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-lg hover:shadow-primary/30 transition-all disabled:opacity-50"
                 >
-                  {loading ? 'ĐANG TẠO...' : 'TẠO TÀI KHOẢN'}
+                  {loading ? tr("ĐANG TẠO...") : tr("TẠO TÀI KHOẢN")}
                 </button>
               </div>
             </form>
@@ -491,9 +492,9 @@ const UserManagement: React.FC = () => {
       <AnimatePresence>
         {isEditModalOpen && selectedUser && modalShell(() => setIsEditModalOpen(false), (
           <>
-            <h3 className="text-3xl font-black text-on-surface mb-2">Chỉnh sửa thông tin</h3>
+            <h3 className="text-3xl font-black text-on-surface mb-2">{tr("Chỉnh sửa thông tin")}</h3>
             <p className="text-xs text-on-surface-variant font-medium mb-8">
-              Mã đăng nhập: <span className="font-mono font-black text-primary">{selectedUser.login_code}</span> (không đổi được)
+              {tr("Mã đăng nhập:")} <span className="font-mono font-black text-primary">{selectedUser.login_code}</span> {tr("(không đổi được)")}
             </p>
             <form onSubmit={handleUpdate} className="space-y-6">
               {renderFormFields('edit', true)}
@@ -503,14 +504,14 @@ const UserManagement: React.FC = () => {
                   onClick={() => setIsEditModalOpen(false)}
                   className="flex-1 py-5 bg-surface-container text-on-surface-variant rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-surface-container-high transition-colors"
                 >
-                  HỦY
+                  {tr("HỦY")}
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="flex-1 py-5 bg-primary text-on-primary rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-lg hover:shadow-primary/30 transition-all disabled:opacity-50"
                 >
-                  {loading ? 'ĐANG LƯU...' : 'LƯU THAY ĐỔI'}
+                  {loading ? tr("ĐANG LƯU...") : tr("LƯU THAY ĐỔI")}
                 </button>
               </div>
             </form>
@@ -527,16 +528,16 @@ const UserManagement: React.FC = () => {
             </div>
             <h3 className="text-2xl font-black text-on-surface mb-1">{credentials.title}</h3>
             <p className="text-xs text-on-surface-variant font-medium mb-8">
-              Gửi thông tin dưới đây cho <span className="font-bold text-on-surface">{credentials.full_name}</span>. Mật khẩu chỉ hiển thị một lần, hãy lưu lại ngay.
+              {tr("Gửi thông tin dưới đây cho")} <span className="font-bold text-on-surface">{credentials.full_name}</span>. Mật khẩu chỉ hiển thị một lần, hãy lưu lại ngay.
             </p>
 
             <div className="space-y-4">
               <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant/10">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-1">Mã đăng nhập</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-1">{tr("Mã đăng nhập")}</p>
                 <p className="text-2xl font-black font-mono text-primary tracking-widest select-all">{credentials.login_code}</p>
               </div>
               <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant/10">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-1">Mật khẩu</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-1">{tr("Mật khẩu")}</p>
                 <p className="text-2xl font-black font-mono text-on-surface tracking-widest select-all break-all">{credentials.password}</p>
               </div>
             </div>
@@ -555,7 +556,7 @@ const UserManagement: React.FC = () => {
                 onClick={() => setCredentials(null)}
                 className="flex-1 py-4 bg-primary text-on-primary rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-lg hover:shadow-primary/30 transition-all"
               >
-                ĐÃ LƯU, ĐÓNG
+                {tr("ĐÃ LƯU, ĐÓNG")}
               </button>
             </div>
           </>

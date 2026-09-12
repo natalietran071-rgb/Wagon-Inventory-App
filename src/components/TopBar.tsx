@@ -5,6 +5,7 @@ import { useLanguage, Language } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Html5Qrcode } from 'html5-qrcode';
+import { tr } from '../contexts/LanguageContext';
 
 const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: () => void }) => {
   const location = useLocation();
@@ -71,9 +72,9 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
         } catch (err: any) {
           console.error("QR Code Scanner error:", err);
           if (err?.toString()?.includes('NotAllowedError') || err?.toString()?.includes('Permission denied')) {
-            setScanError("Quyền truy cập Camera bị từ chối. Vui lòng kiểm tra cài đặt trình duyệt và cấp quyền camera cho trang web.");
+            setScanError(tr("Quyền truy cập Camera bị từ chối. Vui lòng kiểm tra cài đặt trình duyệt và cấp quyền camera cho trang web."));
           } else {
-            setScanError("Không thể khởi động camera. Lỗi: " + (err?.message || err?.toString()));
+            setScanError(tr("Không thể khởi động camera. Lỗi:") + (err?.message || err?.toString()));
           }
         }
       };
@@ -90,7 +91,7 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
   }, [isScanning]);
 
   const languages: { code: Language; label: string; flag: string }[] = [
-    { code: 'vi', label: 'Tiếng Việt', flag: '🇻🇳' },
+    { code: 'vi', label: tr("Tiếng Việt"), flag: '🇻🇳' },
     { code: 'en', label: 'English', flag: '🇺🇸' },
     { code: 'zh', label: '繁體中文', flag: '🇹🇼' },
   ];
@@ -140,10 +141,10 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                 <span className="material-symbols-outlined text-4xl animate-pulse">qr_code_scanner</span>
               </div>
               <h3 className="text-2xl font-black text-on-surface mb-2">
-                {scanError ? "Lỗi Camera" : isQuerying ? "Đang truy vấn vật tư..." : "Đang khởi động Camera..."}
+                {scanError ? tr("Lỗi Camera") : isQuerying ? tr("Đang truy vấn vật tư...") : tr("Đang khởi động Camera...")}
               </h3>
               <p className={`text-sm mb-8 ${scanError ? "text-error font-bold" : "text-on-surface-variant font-medium"}`}>
-                {scanError || (isQuerying ? "Vui lòng đợi trong giây lát." : "Vui lòng đưa mã QR vào khung hình để hệ thống tự động nhận diện vật tư.")}
+                {scanError || (isQuerying ? tr("Vui lòng đợi trong giây lát.") : tr("Vui lòng đưa mã QR vào khung hình để hệ thống tự động nhận diện vật tư."))}
               </p>
               <div className={`aspect-video bg-black rounded-2xl mb-8 relative overflow-hidden flex items-center justify-center border-4 shadow-inner transition-colors ${scanError ? "border-error/20" : "border-primary/20"}`}>
                 <div id="reader" className="w-full h-full"></div>
@@ -151,7 +152,7 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20">
                     <div className="flex flex-col items-center gap-4">
                       <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-                      {isQuerying && <p className="text-white text-xs font-bold uppercase tracking-widest">Đang tìm kiếm...</p>}
+                      {isQuerying && <p className="text-white text-xs font-bold uppercase tracking-widest">{tr("Đang tìm kiếm...")}</p>}
                     </div>
                   </div>
                 )}
@@ -162,7 +163,7 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                       onClick={() => setIsScanning(false)}
                       className="text-xs text-error font-bold underline px-4 py-2 hover:bg-error/10 rounded-lg transition-colors"
                     >
-                      Đóng và thử lại sau
+                      {tr("Đóng và thử lại sau")}
                     </button>
                   </div>
                 )}
@@ -201,8 +202,8 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                     <span className="material-symbols-outlined">{scannedItem ? 'inventory_2' : 'warning'}</span>
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-on-surface">{scannedItem ? 'Thông Tin Vật Tư' : 'Không Tìm Thấy'}</h3>
-                    <p className="text-sm text-on-surface-variant font-medium">Kết quả quét mã QR</p>
+                    <h3 className="text-xl font-bold text-on-surface">{scannedItem ? tr("Thông Tin Vật Tư") : tr("Không Tìm Thấy")}</h3>
+                    <p className="text-sm text-on-surface-variant font-medium">{tr("Kết quả quét mã QR")}</p>
                   </div>
                 </div>
                 <button onClick={() => setShowResultModal(false)} className="w-10 h-10 rounded-full hover:bg-surface-container transition-colors flex items-center justify-center">
@@ -215,37 +216,37 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                   <div className="bg-surface-container-low p-6 rounded-3xl border border-outline-variant/10">
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Mã ERP</p>
+                        <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">{tr("Mã ERP")}</p>
                         <h4 className="text-lg font-black text-on-surface">{scannedItem.erp}</h4>
                       </div>
                       {scannedItem.critical && (
-                        <span className="px-3 py-1 bg-error/10 text-error rounded-full text-[10px] font-bold uppercase tracking-wider">Tồn Kho Thấp!</span>
+                        <span className="px-3 py-1 bg-error/10 text-error rounded-full text-[10px] font-bold uppercase tracking-wider">{tr("Tồn Kho Thấp!")}</span>
                       )}
                     </div>
                     
                     <div className="space-y-4">
                       <div>
-                         <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Tên Vật Tư</p>
+                         <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">{tr("Tên Vật Tư")}</p>
                          <p className="text-sm font-bold text-on-surface line-clamp-2">{scannedItem.name}</p>
                          {scannedItem.name_zh && <p className="text-sm text-on-surface-variant/70 italic mt-0.5">{scannedItem.name_zh}</p>}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/5">
-                          <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Số Lượng Tồn</p>
+                          <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">{tr("Số Lượng Tồn")}</p>
                           <p className={`text-xl font-black ${scannedItem.end_stock <= (scannedItem.min_stock || 0) ? 'text-error' : 'text-primary'}`}>
                             {scannedItem.end_stock}
                           </p>
                         </div>
                         <div className="bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/5">
-                          <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Vị Trí</p>
+                          <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">{tr("Vị Trí")}</p>
                           <p className="text-xl font-black text-on-surface">{scannedItem.pos || '---'}</p>
                         </div>
                       </div>
 
                       <div>
-                         <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Quy Cách</p>
-                         <p className="text-sm font-medium text-on-surface bg-surface-container-highest/20 px-3 py-2 rounded-lg">{scannedItem.spec || 'Không có quy cách'}</p>
+                         <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">{tr("Quy Cách")}</p>
+                         <p className="text-sm font-medium text-on-surface bg-surface-container-highest/20 px-3 py-2 rounded-lg">{scannedItem.spec || tr("Không có quy cách")}</p>
                       </div>
                     </div>
                   </div>
@@ -259,7 +260,7 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                       className="flex flex-col items-center gap-2 p-4 bg-primary text-on-primary rounded-3xl hover:shadow-lg hover:shadow-primary/30 transition-all font-bold"
                     >
                       <span className="material-symbols-outlined">add_box</span>
-                      <span className="text-xs uppercase tracking-widest">Nhập Kho</span>
+                      <span className="text-xs uppercase tracking-widest">{tr("Nhập Kho")}</span>
                     </button>
                     <button 
                       onClick={() => {
@@ -269,7 +270,7 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                       className="flex flex-col items-center gap-2 p-4 bg-secondary text-on-secondary rounded-3xl hover:shadow-lg hover:shadow-secondary/30 transition-all font-bold"
                     >
                       <span className="material-symbols-outlined">output</span>
-                      <span className="text-xs uppercase tracking-widest">Xuất Kho</span>
+                      <span className="text-xs uppercase tracking-widest">{tr("Xuất Kho")}</span>
                     </button>
                     <button 
                       onClick={() => {
@@ -279,7 +280,7 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                       className="flex flex-col items-center gap-2 p-4 bg-surface-container-highest text-on-surface rounded-3xl hover:bg-surface-container-high transition-all font-bold"
                     >
                       <span className="material-symbols-outlined">fact_check</span>
-                      <span className="text-xs uppercase tracking-widest">Kiểm Kê</span>
+                      <span className="text-xs uppercase tracking-widest">{tr("Kiểm Kê")}</span>
                     </button>
                     <button 
                       onClick={() => {
@@ -289,7 +290,7 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                       className="flex flex-col items-center gap-2 p-4 bg-surface-container-highest text-on-surface rounded-3xl hover:bg-surface-container-high transition-all font-bold"
                     >
                       <span className="material-symbols-outlined">search</span>
-                      <span className="text-xs uppercase tracking-widest">Chi Tiết</span>
+                      <span className="text-xs uppercase tracking-widest">{tr("Chi Tiết")}</span>
                     </button>
                   </div>
                 </div>
@@ -298,8 +299,8 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                   <div className="w-16 h-16 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
                     <span className="material-symbols-outlined text-4xl">search_off</span>
                   </div>
-                  <p className="text-lg font-bold text-on-surface mb-2">Mã {notFoundCode} không tồn tại</p>
-                  <p className="text-sm text-on-surface-variant font-medium mb-8">Hệ thống không tìm thấy vật tư nào tương ứng với mã ERP này trong cơ sở dữ liệu.</p>
+                  <p className="text-lg font-bold text-on-surface mb-2">{tr("Mã")} {notFoundCode} {tr("không tồn tại")}</p>
+                  <p className="text-sm text-on-surface-variant font-medium mb-8">{tr("Hệ thống không tìm thấy vật tư nào tương ứng với mã ERP này trong cơ sở dữ liệu.")}</p>
                   <button 
                     onClick={() => {
                       setIsScanning(true);
@@ -307,7 +308,7 @@ const TopBar = ({ title, onToggleSidebar }: { title: string, onToggleSidebar?: (
                     }}
                     className="bg-primary text-on-primary px-8 py-3 rounded-2xl font-bold hover:shadow-lg hover:shadow-primary/30 transition-all"
                   >
-                    Quét Lại
+                    {tr("Quét Lại")}
                   </button>
                 </div>
               )}

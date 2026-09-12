@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { displayLoginCode } from '../lib/loginCode';
 
 const showToast = (msg: string, isError = false) => {
   try {
@@ -951,7 +952,7 @@ const Audit = () => {
               <div className="bg-white/10 p-5 rounded-2xl border border-white/5 backdrop-blur-sm">
                  <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-1">Tài khoản</p>
                  <p className="text-lg font-bold">{profile?.full_name || 'Hệ Thống'}</p>
-                 <p className="text-xs font-medium text-white/70 italic mt-0.5">{user?.email}</p>
+                 <p className="text-xs font-medium text-white/70 italic mt-0.5">{profile?.login_code || displayLoginCode(user?.email)}</p>
               </div>
               <div className="bg-white/10 p-5 rounded-2xl border border-white/5 backdrop-blur-sm relative z-20">
                  <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-2">Phiên Kiểm Kê</p>

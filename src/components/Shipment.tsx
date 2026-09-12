@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { exportToExcelMultiSheet } from '../lib/excelUtils';
+import { tr } from '../contexts/LanguageContext';
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
 const showToast = (msg: string, isError = false) => {
@@ -92,10 +93,10 @@ const fmtDateTime = (iso: string | null | undefined): string => {
 // ─── Status badge ─────────────────────────────────────────────────────────────
 const StatusBadge: React.FC<{ status: ShipmentStatus }> = ({ status }) => {
   const map: Record<ShipmentStatus, { label: string; cls: string }> = {
-    Pending:   { label: 'Chờ xác nhận', cls: 'bg-amber-100 text-amber-700 border border-amber-200' },
-    Confirmed: { label: 'Đã xác nhận',  cls: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
-    Rejected:  { label: 'Bị từ chối',   cls: 'bg-red-100 text-red-700 border border-red-200' },
-    Returned:  { label: 'Đã nhận lại',  cls: 'bg-blue-100 text-blue-600 border border-blue-200' },
+    Pending:   { label: tr("Chờ xác nhận"), cls: 'bg-amber-100 text-amber-700 border border-amber-200' },
+    Confirmed: { label: tr("Đã xác nhận"),  cls: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
+    Rejected:  { label: tr("Bị từ chối"),   cls: 'bg-red-100 text-red-700 border border-red-200' },
+    Returned:  { label: tr("Đã nhận lại"),  cls: 'bg-blue-100 text-blue-600 border border-blue-200' },
   };
   const { label, cls } = map[status] ?? { label: status, cls: 'bg-surface-container text-on-surface-variant border border-outline-variant/20' };
   return (
@@ -123,7 +124,7 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
 
   const handleSubmit = async () => {
     if (isReject && !note.trim()) {
-      showToast('Vui lòng nhập lý do từ chối.', true);
+      showToast(tr("Vui lòng nhập lý do từ chối."), true);
       return;
     }
     setLoading(true);
@@ -137,14 +138,14 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
       });
       if (error) throw error;
       if (data?.success === false) {
-        showToast(data.error ?? 'Có lỗi xảy ra.', true);
+        showToast(data.error ?? tr("Có lỗi xảy ra."), true);
         return;
       }
-      showToast(isReject ? 'Đã từ chối phiếu giao hàng.' : 'Đã xác nhận nhận hàng!');
+      showToast(isReject ? tr("Đã từ chối phiếu giao hàng.") : tr("Đã xác nhận nhận hàng!"));
       onSuccess();
       onClose();
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -173,7 +174,7 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
               {isReject ? 'cancel' : 'check_circle'}
             </span>
             <h3 className="font-black text-on-surface text-base">
-              {isReject ? 'Từ chối phiếu giao hàng' : 'Xác nhận đã nhận hàng'}
+              {isReject ? tr("Từ chối phiếu giao hàng") : tr("Xác nhận đã nhận hàng")}
             </h3>
           </div>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-black/10 transition-colors">
@@ -189,7 +190,7 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
               {shipment.bpm_number ? (
                 <span className="font-mono font-black text-primary text-sm">BPM: {shipment.bpm_number}</span>
               ) : (
-                <span className="font-mono font-black text-on-surface-variant text-sm">Phiếu #{shipment.outbound_id}</span>
+                <span className="font-mono font-black text-on-surface-variant text-sm">{tr("Phiếu #")}{shipment.outbound_id}</span>
               )}
               {shipment.bpm_number && <span className="text-[10px] text-on-surface-variant/60">#{shipment.outbound_id}</span>}
               <StatusBadge status={shipment.status} />
@@ -199,22 +200,22 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
               {shipment.dept_name && <span> · {shipment.dept_name}</span>}
             </div>
             <div className="text-xs text-on-surface-variant">
-              Ngày xuất: {fmtDate(shipment.shipped_at)} · {shipment.item_count} mặt hàng · Tổng: <span className="font-black text-on-surface">{Number(shipment.total_qty).toLocaleString()}</span>
+              {tr("Ngày xuất:")} {fmtDate(shipment.shipped_at)} · {shipment.item_count} {tr("mặt hàng · Tổng:")} <span className="font-black text-on-surface">{Number(shipment.total_qty).toLocaleString()}</span>
             </div>
           </div>
 
           {/* Items */}
           {items.length > 0 && (
             <div>
-              <p className="text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Chi tiết hàng hóa</p>
+              <p className="text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">{tr("Chi tiết hàng hóa")}</p>
               <div className="rounded-2xl overflow-hidden border border-outline-variant/10">
                 <table className="w-full text-xs">
                   <thead className="bg-surface-container">
                     <tr>
                       <th className="text-left px-3 py-2 font-black text-on-surface-variant">ERP</th>
                       <th className="text-right px-3 py-2 font-black text-on-surface-variant">SL</th>
-                      <th className="text-left px-3 py-2 font-black text-on-surface-variant">Vị trí</th>
-                      <th className="text-left px-3 py-2 font-black text-on-surface-variant">Ngày YC</th>
+                      <th className="text-left px-3 py-2 font-black text-on-surface-variant">{tr("Vị trí")}</th>
+                      <th className="text-left px-3 py-2 font-black text-on-surface-variant">{tr("Ngày YC")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -235,18 +236,18 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
           {/* Note textarea */}
           <div>
             <label className="text-xs font-black text-on-surface-variant uppercase tracking-wider block mb-1.5">
-              {isReject ? 'Lý do từ chối *' : 'Ghi chú (tuỳ chọn)'}
+              {isReject ? tr("Lý do từ chối *") : tr("Ghi chú (tuỳ chọn)")}
             </label>
             <textarea
               className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2.5 text-sm font-medium text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
               rows={3}
-              placeholder={isReject ? 'Lý do từ chối...' : 'Ghi chú thêm (nếu có)...'}
+              placeholder={isReject ? tr("Lý do từ chối...") : tr("Ghi chú thêm (nếu có)...")}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               autoFocus={isReject}
             />
             {isReject && !note.trim() && (
-              <p className="text-xs text-error mt-1 font-medium">Bắt buộc nhập lý do từ chối.</p>
+              <p className="text-xs text-error mt-1 font-medium">{tr("Bắt buộc nhập lý do từ chối.")}</p>
             )}
           </div>
         </div>
@@ -258,7 +259,7 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
             disabled={loading}
             className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant transition-all border border-outline-variant/10 disabled:opacity-50"
           >
-            Huỷ
+            {tr("Huỷ")}
           </button>
           <button
             onClick={handleSubmit}
@@ -270,7 +271,7 @@ const ActionModal: React.FC<ModalProps> = ({ shipment, action, onClose, onSucces
             }`}
           >
             {loading && <span className="material-symbols-outlined text-base animate-spin">sync</span>}
-            {isReject ? 'Xác nhận từ chối' : 'Xác nhận nhận hàng'}
+            {isReject ? tr("Xác nhận từ chối") : tr("Xác nhận nhận hàng")}
           </button>
         </div>
       </motion.div>
@@ -314,7 +315,7 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
               </span>
             ) : (
               <span className="font-mono font-black text-on-surface-variant text-sm tracking-tight bg-surface-container px-2.5 py-0.5 rounded-lg border border-outline-variant/10">
-                Phiếu #{shipment.outbound_id}
+                {tr("Phiếu #")}{shipment.outbound_id}
               </span>
             )}
             {shipment.bpm_number && (
@@ -338,11 +339,11 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
           <div className="flex flex-wrap items-center gap-3 text-xs text-on-surface-variant font-medium">
             <span className="flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">inventory_2</span>
-              {Number(shipment.item_count)} mặt hàng
+              {Number(shipment.item_count)} {tr("mặt hàng")}
             </span>
             <span className="flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">pin</span>
-              Tổng: <span className="font-black text-on-surface ml-0.5">{Number(shipment.total_qty).toLocaleString()}</span>
+              {tr("Tổng:")} <span className="font-black text-on-surface ml-0.5">{Number(shipment.total_qty).toLocaleString()}</span>
             </span>
             <span className="flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">local_shipping</span>
@@ -359,7 +360,7 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
             aria-label="Toggle items"
           >
             <span className="material-symbols-outlined text-sm">{expanded ? 'expand_less' : 'expand_more'}</span>
-            {expanded ? 'Thu gọn' : 'Chi tiết'}
+            {expanded ? tr("Thu gọn") : tr("Chi tiết")}
           </button>
         </div>
       </div>
@@ -369,7 +370,7 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
         <div className="mx-5 mb-3 px-4 py-2 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700 font-medium flex flex-wrap gap-x-3 gap-y-1">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">check_circle</span>
-            Xác nhận bởi: <span className="font-black ml-0.5">{shipment.confirmed_by_name || shipment.confirmed_by_email || '—'}</span>
+            {tr("Xác nhận bởi:")} <span className="font-black ml-0.5">{shipment.confirmed_by_name || shipment.confirmed_by_email || '—'}</span>
           </span>
           <span>{fmtDateTime(shipment.confirmed_at)}</span>
         </div>
@@ -379,11 +380,11 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
         <div className="mx-5 mb-3 px-4 py-2 bg-red-50 rounded-xl border border-red-100 text-xs text-red-700 font-medium">
           <span className="flex items-center gap-1 mb-0.5">
             <span className="material-symbols-outlined text-sm">cancel</span>
-            <span className="font-black">Bị từ chối bởi: {shipment.confirmed_by_name || shipment.confirmed_by_email || '—'}</span>
+            <span className="font-black">{tr("Bị từ chối bởi:")} {shipment.confirmed_by_name || shipment.confirmed_by_email || '—'}</span>
             <span className="ml-auto text-red-500">{fmtDateTime(shipment.confirmed_at)}</span>
           </span>
           {shipment.rejection_note && (
-            <p className="text-red-600 mt-1 font-medium">Lý do: {shipment.rejection_note}</p>
+            <p className="text-red-600 mt-1 font-medium">{tr("Lý do:")} {shipment.rejection_note}</p>
           )}
         </div>
       )}
@@ -392,7 +393,7 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
         <div className="mx-5 mb-3 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700 font-medium flex flex-wrap gap-x-3 gap-y-1">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">undo</span>
-            Nhận lại bởi kho: <span className="font-black ml-0.5">{shipment.return_confirmed_by || '—'}</span>
+            {tr("Nhận lại bởi kho:")} <span className="font-black ml-0.5">{shipment.return_confirmed_by || '—'}</span>
           </span>
           <span>{fmtDateTime(shipment.return_confirmed_at)}</span>
         </div>
@@ -414,15 +415,15 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
                 <thead className="bg-surface-container">
                   <tr>
                     <th className="text-left px-3 py-2 font-black text-on-surface-variant uppercase tracking-wider">ERP Code</th>
-                    <th className="text-right px-3 py-2 font-black text-on-surface-variant uppercase tracking-wider">Số lượng</th>
-                    <th className="text-left px-3 py-2 font-black text-on-surface-variant uppercase tracking-wider">Vị trí</th>
-                    <th className="text-left px-3 py-2 font-black text-on-surface-variant uppercase tracking-wider">Ngày yêu cầu</th>
+                    <th className="text-right px-3 py-2 font-black text-on-surface-variant uppercase tracking-wider">{tr("Số lượng")}</th>
+                    <th className="text-left px-3 py-2 font-black text-on-surface-variant uppercase tracking-wider">{tr("Vị trí")}</th>
+                    <th className="text-left px-3 py-2 font-black text-on-surface-variant uppercase tracking-wider">{tr("Ngày yêu cầu")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-4 text-center text-on-surface-variant italic">Không có dữ liệu</td>
+                      <td colSpan={4} className="px-3 py-4 text-center text-on-surface-variant italic">{tr("Không có dữ liệu")}</td>
                     </tr>
                   ) : (
                     items.map((item, i) => (
@@ -451,14 +452,14 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs transition-all shadow-sm"
               >
                 <span className="material-symbols-outlined text-sm">check_circle</span>
-                Xác nhận đã nhận
+                {tr("Xác nhận đã nhận")}
               </button>
               <button
                 onClick={() => onAction(shipment, 'reject')}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl border-2 border-error text-error hover:bg-error/5 font-black text-xs transition-all"
               >
                 <span className="material-symbols-outlined text-sm">cancel</span>
-                Từ chối
+                {tr("Từ chối")}
               </button>
             </>
           )}
@@ -468,7 +469,7 @@ const ShipmentCard: React.FC<CardProps> = ({ shipment, isWarehouse, userDeptCode
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs transition-all shadow-sm"
             >
               <span className="material-symbols-outlined text-sm">undo</span>
-              Xác nhận nhận lại kho
+              {tr("Xác nhận nhận lại kho")}
             </button>
           )}
         </div>
@@ -513,7 +514,7 @@ const Shipment: React.FC = () => {
       if (error) throw error;
       setShipments((data as Shipment[]) ?? []);
     } catch (err: any) {
-      showToast('Lỗi tải dữ liệu: ' + err.message, true);
+      showToast(tr("Lỗi tải dữ liệu:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -580,7 +581,7 @@ const Shipment: React.FC = () => {
 
   const handleReturnConfirm = async (shipment: Shipment) => {
     if (!isWarehouse) return;
-    const ok = window.confirm(`Xác nhận kho đã nhận lại hàng từ phiếu ${shipment.outbound_id}?`);
+    const ok = window.confirm(tr("Xác nhận kho đã nhận lại hàng từ phiếu {0}?", [shipment.outbound_id]));
     if (!ok) return;
     try {
       const { data, error } = await supabase.rpc('confirm_shipment_return', {
@@ -589,20 +590,20 @@ const Shipment: React.FC = () => {
       });
       if (error) throw error;
       if (data?.success === false) {
-        showToast(data.error ?? 'Có lỗi xảy ra.', true);
+        showToast(data.error ?? tr("Có lỗi xảy ra."), true);
         return;
       }
-      showToast('Đã xác nhận kho nhận lại hàng!');
+      showToast(tr("Đã xác nhận kho nhận lại hàng!"));
       fetchShipments();
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     }
   };
 
   // ── Export ──
   const handleExport = async () => {
     setExporting(true);
-    showToast('Đang chuẩn bị xuất dữ liệu...');
+    showToast(tr("Đang chuẩn bị xuất dữ liệu..."));
     try {
       const PAGE = 1000;
       let allData: Shipment[] = [];
@@ -625,29 +626,29 @@ const Shipment: React.FC = () => {
       }
 
       if (allData.length === 0) {
-        showToast('Không có dữ liệu để xuất.', true);
+        showToast(tr("Không có dữ liệu để xuất."), true);
         return;
       }
 
       const rows = allData.map(s => ({
-        'Phiếu xuất': s.outbound_id,
+        [tr("Phiếu xuất")]: s.outbound_id,
         'BPM': s.bpm_number || '',
-        'Bộ phận': s.dept_name || '',
-        'Người nhận': s.recipient_name || '',
-        'Tổng SL': Number(s.total_qty),
-        'Trạng thái': s.status,
-        'Ngày xuất': fmtDate(s.shipped_at),
-        'Ngày xác nhận': fmtDate(s.confirmed_at),
-        'Người xác nhận': s.confirmed_by_name || s.confirmed_by_email || '',
-        'Ghi chú': s.rejection_note || '',
+        [tr("Bộ phận")]: s.dept_name || '',
+        [tr("Người nhận")]: s.recipient_name || '',
+        [tr("Tổng SL")]: Number(s.total_qty),
+        [tr("Trạng thái")]: s.status,
+        [tr("Ngày xuất")]: fmtDate(s.shipped_at),
+        [tr("Ngày xác nhận")]: fmtDate(s.confirmed_at),
+        [tr("Người xác nhận")]: s.confirmed_by_name || s.confirmed_by_email || '',
+        [tr("Ghi chú")]: s.rejection_note || '',
       }));
 
       const today = new Date().toISOString().split('T')[0];
       const fileName = `giao-hang_${today}.xlsx`;
-      exportToExcelMultiSheet(rows, fileName, 'Giao Hàng');
-      showToast(`Đã xuất ${rows.length.toLocaleString()} phiếu!`);
+      exportToExcelMultiSheet(rows, fileName, tr("Giao Hàng"));
+      showToast(tr("Đã xuất {0} phiếu!", [rows.length.toLocaleString()]));
     } catch (err: any) {
-      showToast('Lỗi xuất Excel: ' + err.message, true);
+      showToast(tr("Lỗi xuất Excel:") + err.message, true);
     } finally {
       setExporting(false);
     }
@@ -681,9 +682,9 @@ const Shipment: React.FC = () => {
 
   // ── Tab config ──
   const tabs: { key: ActiveTab; label: string }[] = [
-    { key: 'pending', label: 'Chờ xác nhận' },
-    { key: 'processed', label: 'Đã xử lý' },
-    { key: 'all', label: 'Tất cả' },
+    { key: 'pending', label: tr("Chờ xác nhận") },
+    { key: 'processed', label: tr("Đã xử lý") },
+    { key: 'all', label: tr("Tất cả") },
   ];
 
   return (
@@ -691,11 +692,11 @@ const Shipment: React.FC = () => {
       {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between items-start gap-4">
         <div>
-          <h2 className="text-3xl md:text-4xl font-black text-on-surface tracking-tight mb-1">Giao Hàng</h2>
+          <h2 className="text-3xl md:text-4xl font-black text-on-surface tracking-tight mb-1">{tr("Giao Hàng")}</h2>
           <p className="text-xs md:text-sm text-on-surface-variant font-medium opacity-70">
             {isWarehouse
-              ? 'Theo dõi và xác nhận phiếu giao hàng đến các bộ phận.'
-              : `Phiếu giao hàng của bộ phận ${profile?.dept_name ?? '—'}.`}
+              ? tr("Theo dõi và xác nhận phiếu giao hàng đến các bộ phận.")
+              : tr("Phiếu giao hàng của bộ phận {0}.", [profile?.dept_name ?? '—'])}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
@@ -705,7 +706,7 @@ const Shipment: React.FC = () => {
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-sm disabled:opacity-50"
           >
             <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
-            <span>Đồng bộ</span>
+            <span>{tr("Đồng bộ")}</span>
           </button>
           <button
             onClick={handleExport}
@@ -713,7 +714,7 @@ const Shipment: React.FC = () => {
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-primary/20 text-xs md:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined text-lg">{exporting ? 'sync' : 'file_download'}</span>
-            <span>{exporting ? 'Đang xuất...' : 'Xuất Excel'}</span>
+            <span>{exporting ? tr("Đang xuất...") : tr("Xuất Excel")}</span>
           </button>
         </div>
       </div>
@@ -721,7 +722,7 @@ const Shipment: React.FC = () => {
       {/* ── Summary cards ── */}
       <div className="flex gap-2 md:gap-4">
         <SummaryCard
-          label="Chờ xác nhận"
+          label={tr("Chờ xác nhận")}
           count={counts.pending}
           icon="pending"
           color="text-amber-600"
@@ -730,7 +731,7 @@ const Shipment: React.FC = () => {
           active={activeTab === 'pending'}
         />
         <SummaryCard
-          label="Đã xác nhận"
+          label={tr("Đã xác nhận")}
           count={counts.confirmed}
           icon="check_circle"
           color="text-emerald-600"
@@ -739,7 +740,7 @@ const Shipment: React.FC = () => {
           active={activeTab === 'processed'}
         />
         <SummaryCard
-          label="Bị từ chối"
+          label={tr("Bị từ chối")}
           count={counts.rejected}
           icon="cancel"
           color="text-red-600"
@@ -756,7 +757,7 @@ const Shipment: React.FC = () => {
           <span className="material-symbols-outlined text-sm text-on-surface-variant mr-2">search</span>
           <input
             type="text"
-            placeholder="Tìm phiếu xuất, BPM, người nhận..."
+            placeholder={tr("Tìm phiếu xuất, BPM, người nhận...")}
             className="flex-1 bg-transparent border-none outline-none text-sm font-medium text-on-surface placeholder:text-on-surface-variant/40"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -778,11 +779,11 @@ const Shipment: React.FC = () => {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as ShipmentStatus | 'all')}
           >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="Pending">Chờ xác nhận</option>
-            <option value="Confirmed">Đã xác nhận</option>
-            <option value="Rejected">Bị từ chối</option>
-            <option value="Returned">Đã nhận lại</option>
+            <option value="all">{tr("Tất cả trạng thái")}</option>
+            <option value="Pending">{tr("Chờ xác nhận")}</option>
+            <option value="Confirmed">{tr("Đã xác nhận")}</option>
+            <option value="Rejected">{tr("Bị từ chối")}</option>
+            <option value="Returned">{tr("Đã nhận lại")}</option>
           </select>
         </div>
 
@@ -808,7 +809,7 @@ const Shipment: React.FC = () => {
             <button
               onClick={() => { setFilterFrom(''); setFilterTo(''); }}
               className="text-on-surface-variant/50 hover:text-error transition-colors"
-              title="Xoá bộ lọc ngày"
+              title={tr("Xoá bộ lọc ngày")}
             >
               <span className="material-symbols-outlined text-sm">close</span>
             </button>
@@ -842,7 +843,7 @@ const Shipment: React.FC = () => {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <span className="material-symbols-outlined text-4xl text-primary animate-spin">sync</span>
-          <p className="text-on-surface-variant font-bold text-sm">Đang tải dữ liệu...</p>
+          <p className="text-on-surface-variant font-bold text-sm">{tr("Đang tải dữ liệu...")}</p>
         </div>
       ) : filtered.length === 0 ? (
         <motion.div
@@ -852,21 +853,21 @@ const Shipment: React.FC = () => {
         >
           <span className="material-symbols-outlined text-5xl text-on-surface-variant/30">local_shipping</span>
           <p className="text-on-surface-variant font-bold text-sm">
-            {activeTab === 'pending' ? 'Không có phiếu nào chờ xác nhận.' : 'Không tìm thấy phiếu nào.'}
+            {activeTab === 'pending' ? tr("Không có phiếu nào chờ xác nhận.") : tr("Không tìm thấy phiếu nào.")}
           </p>
           {(searchQuery || statusFilter !== 'all' || filterFrom || filterTo) && (
             <button
               onClick={() => { setSearchQuery(''); setStatusFilter('all'); setFilterFrom(''); setFilterTo(''); }}
               className="text-xs text-primary font-bold hover:underline"
             >
-              Xoá bộ lọc
+              {tr("Xoá bộ lọc")}
             </button>
           )}
         </motion.div>
       ) : (
         <div className="space-y-3">
           <p className="text-xs text-on-surface-variant font-bold px-1">
-            Hiển thị {filtered.length.toLocaleString()} phiếu
+            {tr("Hiển thị")} {filtered.length.toLocaleString()} {tr("phiếu")}
           </p>
           <AnimatePresence mode="popLayout">
             {filtered.map(shipment => (

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { tr } from '../contexts/LanguageContext';
 
 const showToast = (msg: string, isError = false) => {
   try {
@@ -74,7 +75,7 @@ const OnTheWay = () => {
       }
       setRecords(all);
     } catch (err: any) {
-      showToast('Lỗi tải dữ liệu: ' + err.message, true);
+      showToast(tr("Lỗi tải dữ liệu:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -168,7 +169,7 @@ const OnTheWay = () => {
   // ── submit batch ───────────────────────────────────────────
   const handleBatchSubmit = async () => {
     const validRows = rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0);
-    if (validRows.length === 0) { showToast('Nhập ít nhất 1 dòng hợp lệ (ERP + số lượng)', true); return; }
+    if (validRows.length === 0) { showToast(tr("Nhập ít nhất 1 dòng hợp lệ (ERP + số lượng)"), true); return; }
     try {
       const records = validRows.map(r => ({
         bpm_number: r.bpmNumber.trim() || null,
@@ -176,7 +177,7 @@ const OnTheWay = () => {
         erp_code: r.erpCode.trim().toUpperCase(),
         qc_check_no: r.qcCheckNo.trim() || null,
         qty: Number(r.qty),
-        unit: r.unit || 'Cái',
+        unit: r.unit || tr("Cái"),
         dept_code: r.deptCode.trim() || null,
         dept_name: r.deptName.trim() || null,
         location: r.location.trim() || null,
@@ -187,11 +188,11 @@ const OnTheWay = () => {
       }));
       const { error } = await supabase.from('on_the_way').insert(records);
       if (error) throw error;
-      showToast(`✅ Đã thêm ${records.length} đơn hàng On the Way`);
+      showToast(tr("✅ Đã thêm {0} đơn hàng On the Way", [records.length]));
       setRows(Array.from({ length: 5 }, createEmptyRow));
       await loadRecords();
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     }
   };
 
@@ -207,7 +208,7 @@ const OnTheWay = () => {
         order_id: arrivingRecord.bpm_number || arrivingRecord.po_number || `OTW-${arrivingRecord.id}`,
         erp_code: arrivingRecord.erp_code,
         qty: arrivingRecord.qty,
-        unit: arrivingRecord.unit || 'Cái',
+        unit: arrivingRecord.unit || tr("Cái"),
         location: arrivingLocation || arrivingRecord.location || null,
         date: arrivingDate,
         dept_code: arrivingRecord.dept_code || null,
@@ -239,7 +240,7 @@ const OnTheWay = () => {
         await supabase.from('inventory').insert([{
           erp: arrivingRecord.erp_code,
           name: '',
-          unit: arrivingRecord.unit || 'Cái',
+          unit: arrivingRecord.unit || tr("Cái"),
           pos: arrivingLocation || arrivingRecord.location || '',
           start_stock: 0,
           in_qty: Number(arrivingRecord.qty),
@@ -256,11 +257,11 @@ const OnTheWay = () => {
         updated_at: new Date().toISOString(),
       }).eq('id', arrivingRecord.id);
 
-      showToast('✅ Đã nhập kho thành công! Tồn kho đã được cập nhật.');
+      showToast(tr("✅ Đã nhập kho thành công! Tồn kho đã được cập nhật."));
       setArrivingRecord(null);
       await loadRecords();
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setIsArriving(false);
     }
@@ -269,8 +270,8 @@ const OnTheWay = () => {
   // ── cancel OTW ─────────────────────────────────────────────
   const handleCancelRecord = async (id: string) => {
     const { error } = await supabase.from('on_the_way').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', id);
-    if (error) { showToast('Lỗi: ' + error.message, true); return; }
-    showToast('Đã huỷ đơn hàng');
+    if (error) { showToast(tr("Lỗi:") + error.message, true); return; }
+    showToast(tr("Đã huỷ đơn hàng"));
     await loadRecords();
   };
 
@@ -283,7 +284,7 @@ const OnTheWay = () => {
       erp_code: r.erp_code || '',
       qc_check_no: r.qc_check_no || '',
       qty: r.qty ?? '',
-      unit: r.unit || 'Cái',
+      unit: r.unit || tr("Cái"),
       dept_code: r.dept_code || '',
       dept_name: r.dept_name || '',
       location: r.location || '',
@@ -294,15 +295,15 @@ const OnTheWay = () => {
 
   const handleEditSave = async () => {
     if (!editingRecord) return;
-    if (!editForm.erp_code?.trim()) { showToast('Mã ERP không được để trống', true); return; }
-    if (!Number(editForm.qty) || Number(editForm.qty) <= 0) { showToast('Số lượng phải > 0', true); return; }
+    if (!editForm.erp_code?.trim()) { showToast(tr("Mã ERP không được để trống"), true); return; }
+    if (!Number(editForm.qty) || Number(editForm.qty) <= 0) { showToast(tr("Số lượng phải > 0"), true); return; }
     const { error } = await supabase.from('on_the_way').update({
       bpm_number: editForm.bpm_number.trim() || null,
       po_number: editForm.po_number.trim() || null,
       erp_code: editForm.erp_code.trim().toUpperCase(),
       qc_check_no: editForm.qc_check_no.trim() || null,
       qty: Number(editForm.qty),
-      unit: editForm.unit || 'Cái',
+      unit: editForm.unit || tr("Cái"),
       dept_code: editForm.dept_code.trim() || null,
       dept_name: editForm.dept_name.trim() || null,
       location: editForm.location.trim() || null,
@@ -310,8 +311,8 @@ const OnTheWay = () => {
       remark: editForm.remark.trim() || null,
       updated_at: new Date().toISOString(),
     }).eq('id', editingRecord.id);
-    if (error) { showToast('Lỗi: ' + error.message, true); return; }
-    showToast('✅ Đã cập nhật đơn hàng');
+    if (error) { showToast(tr("Lỗi:") + error.message, true); return; }
+    showToast(tr("✅ Đã cập nhật đơn hàng"));
     setEditingRecord(null);
     await loadRecords();
   };
@@ -322,19 +323,19 @@ const OnTheWay = () => {
       const rows = filtered.map(r => ({
         'BPM Number': r.bpm_number || '',
         'PO Number': r.po_number || '',
-        'Mã ERP': r.erp_code || '',
-        'Tên vật tư': inventoryMap.get(r.erp_code)?.name || '',
+        [tr("Mã ERP")]: r.erp_code || '',
+        [tr("Tên vật tư")]: inventoryMap.get(r.erp_code)?.name || '',
         'QC Check No': r.qc_check_no || '',
-        'Số lượng': r.qty,
-        'Đơn vị': r.unit || '',
-        'Mã bộ phận': r.dept_code || '',
-        'Tên bộ phận': r.dept_name || '',
-        'Vị trí': r.location || '',
-        'Ngày dự kiến': r.expected_date || '',
-        'Ghi chú': r.remark || '',
-        'Trạng thái': r.status,
-        'Ngày tạo': new Date(r.created_at).toLocaleString('vi-VN'),
-        'Người tạo': r.created_by || '',
+        [tr("Số lượng")]: r.qty,
+        [tr("Đơn vị")]: r.unit || '',
+        [tr("Mã bộ phận")]: r.dept_code || '',
+        [tr("Tên bộ phận")]: r.dept_name || '',
+        [tr("Vị trí")]: r.location || '',
+        [tr("Ngày dự kiến")]: r.expected_date || '',
+        [tr("Ghi chú")]: r.remark || '',
+        [tr("Trạng thái")]: r.status,
+        [tr("Ngày tạo")]: new Date(r.created_at).toLocaleString('vi-VN'),
+        [tr("Người tạo")]: r.created_by || '',
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
@@ -349,9 +350,9 @@ const OnTheWay = () => {
     cancelled: 'bg-rose-100 text-rose-600',
   };
   const statusLabel: Record<string, string> = {
-    pending: 'Đang về',
-    arrived: 'Đã về',
-    cancelled: 'Đã huỷ',
+    pending: tr("Đang về"),
+    arrived: tr("Đã về"),
+    cancelled: tr("Đã huỷ"),
   };
 
   return (
@@ -359,9 +360,9 @@ const OnTheWay = () => {
       {/* ── Stats ── */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'SKU đang về', value: stats.pendingSKU.toLocaleString('en-US'), icon: 'inventory_2', color: 'text-primary' },
-          { label: 'Tổng đơn đang về', value: stats.pendingCount.toLocaleString('en-US'), icon: 'local_shipping', color: 'text-amber-600' },
-          { label: 'Tổng SL đang về', value: stats.pendingQty.toLocaleString('en-US'), icon: 'stack', color: 'text-secondary' },
+          { label: tr("SKU đang về"), value: stats.pendingSKU.toLocaleString('en-US'), icon: 'inventory_2', color: 'text-primary' },
+          { label: tr("Tổng đơn đang về"), value: stats.pendingCount.toLocaleString('en-US'), icon: 'local_shipping', color: 'text-amber-600' },
+          { label: tr("Tổng SL đang về"), value: stats.pendingQty.toLocaleString('en-US'), icon: 'stack', color: 'text-secondary' },
         ].map(s => (
           <div key={s.label} className="bg-surface-container-lowest rounded-2xl p-5 border border-outline-variant/10 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
@@ -381,9 +382,9 @@ const OnTheWay = () => {
               <div>
                 <h3 className="text-xl font-bold flex items-center gap-2">
                   <span className="material-symbols-outlined text-amber-600">add_circle</span>
-                  Thêm hàng đang trên đường về
+                  {tr("Thêm hàng đang trên đường về")}
                 </h3>
-                <p className="text-xs text-on-surface-variant mt-1">Hỗ trợ dán (Ctrl+V) trực tiếp từ Excel.</p>
+                <p className="text-xs text-on-surface-variant mt-1">{tr("Hỗ trợ dán (Ctrl+V) trực tiếp từ Excel.")}</p>
               </div>
             </div>
 
@@ -394,15 +395,15 @@ const OnTheWay = () => {
                     <th className="px-2 py-3 text-xs font-bold text-on-surface-variant uppercase text-center w-8">#</th>
                     <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">BPM Number</th>
                     <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">PO Number</th>
-                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Mã ERP (*)</th>
-                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên SP</th>
+                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{tr("Mã ERP (*)")}</th>
+                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">{tr("Tên SP")}</th>
                     <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">QC Check No</th>
                     <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[90px]">SL (*)</th>
-                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[80px]">ĐV</th>
-                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã BP</th>
-                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Tên bộ phận</th>
-                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Vị trí</th>
-                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Ngày dự kiến</th>
+                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[80px]">{tr("ĐV")}</th>
+                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">{tr("Mã BP")}</th>
+                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">{tr("Tên bộ phận")}</th>
+                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">{tr("Vị trí")}</th>
+                    <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">{tr("Ngày dự kiến")}</th>
                     <th className="px-3 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[160px]">Remark</th>
                   </tr>
                 </thead>
@@ -424,7 +425,7 @@ const OnTheWay = () => {
                             onChange={e => handleRowChange(idx, 'erpCode', e.target.value.toUpperCase())}
                             onPaste={e => handlePaste(e, idx, 'erpCode')}
                             className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-bold text-primary"
-                            placeholder="Nhập/Chọn ERP" />
+                            placeholder={tr("Nhập/Chọn ERP")} />
                         </td>
                         <td className="p-0 border-r border-outline-variant/5 bg-on-surface/5">
                           <div className="px-3 py-2 text-[10px] font-medium text-on-surface-variant min-h-[52px]">
@@ -439,11 +440,11 @@ const OnTheWay = () => {
                         <td className={`p-0 border-r border-outline-variant/5 ${row.erpCode.trim() && !Number(row.qty) ? 'bg-amber-50' : ''}`}>
                           <input type="number" value={row.qty} onChange={e => handleRowChange(idx, 'qty', e.target.value)}
                             onPaste={e => handlePaste(e, idx, 'qty')}
-                            className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-bold" placeholder="Nhập SL" min="1" />
+                            className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-bold" placeholder={tr("Nhập SL")} min="1" />
                         </td>
                         <td className="p-0 border-r border-outline-variant/5">
                           <input type="text" value={row.unit} onChange={e => handleRowChange(idx, 'unit', e.target.value)}
-                            className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-medium" placeholder="Cái" />
+                            className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-medium" placeholder={tr("Cái")} />
                         </td>
                         {(['deptCode', 'deptName', 'location'] as const).map(f => (
                           <td key={f} className="p-0 border-r border-outline-variant/5">
@@ -459,7 +460,7 @@ const OnTheWay = () => {
                         <td className="p-0">
                           <input type="text" value={row.remark} onChange={e => handleRowChange(idx, 'remark', e.target.value)}
                             onPaste={e => handlePaste(e, idx, 'remark')}
-                            className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-medium" placeholder="Ghi chú..." />
+                            className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-3 py-3 text-sm font-medium" placeholder={tr("Ghi chú...")} />
                         </td>
                       </tr>
                     );
@@ -468,7 +469,7 @@ const OnTheWay = () => {
               </table>
               <datalist id="otw-erp-options">
                 {inventoryItems.map((item, i) => (
-                  <option key={item.erp || i} value={item.erp}>{item.name} - Tồn: {item.end_stock?.toLocaleString('en-US')}</option>
+                  <option key={item.erp || i} value={item.erp}>{item.name} {tr("- Tồn:")} {item.end_stock?.toLocaleString('en-US')}</option>
                 ))}
               </datalist>
             </div>
@@ -479,17 +480,17 @@ const OnTheWay = () => {
                 {(() => {
                   const valid = rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0).length;
                   const hasErpNoQty = rows.filter(r => r.erpCode.trim() && !Number(r.qty)).length;
-                  if (valid > 0) return <span>Sẽ lưu <strong className="text-amber-600">{valid}</strong> đơn hợp lệ.</span>;
-                  if (hasErpNoQty > 0) return <span className="text-amber-700">Đã có Mã ERP — vui lòng nhập <strong>Số lượng &gt; 0</strong> để kích hoạt nút.</span>;
-                  return <span>Nhập <strong>Mã ERP</strong> + <strong>Số lượng &gt; 0</strong> để kích hoạt nút.</span>;
+                  if (valid > 0) return <span>{tr("Sẽ lưu")} <strong className="text-amber-600">{valid}</strong> {tr("đơn hợp lệ.")}</span>;
+                  if (hasErpNoQty > 0) return <span className="text-amber-700">{tr("Đã có Mã ERP — vui lòng nhập")} <strong>{tr("Số lượng > 0")}</strong> {tr("để kích hoạt nút.")}</span>;
+                  return <span>{tr("Nhập")} <strong>{tr("Mã ERP")}</strong> + <strong>{tr("Số lượng > 0")}</strong> {tr("để kích hoạt nút.")}</span>;
                 })()}
               </div>
               <div className="flex gap-2">
-                <button onClick={handleCancel} className="bg-surface-container-highest text-on-surface px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors">Huỷ</button>
+                <button onClick={handleCancel} className="bg-surface-container-highest text-on-surface px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors">{tr("Huỷ")}</button>
                 <button onClick={handleBatchSubmit} disabled={!canEdit || rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0).length === 0}
                   className="bg-amber-600 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0).length === 0 ? 'Cần nhập Mã ERP + Số lượng > 0' : ''}>
-                  Thêm vào On the Way
+                  title={rows.filter(r => r.erpCode.trim() && Number(r.qty) > 0).length === 0 ? tr("Cần nhập Mã ERP + Số lượng > 0") : ''}>
+                  {tr("Thêm vào On the Way")}
                 </button>
               </div>
             </div>
@@ -502,12 +503,12 @@ const OnTheWay = () => {
         {/* Header controls */}
         <div className="px-6 py-4 border-b border-outline-variant/10 flex flex-col md:flex-row gap-3 justify-between items-start md:items-center">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold">Danh sách hàng On the Way</h3>
+            <h3 className="text-base font-bold">{tr("Danh sách hàng On the Way")}</h3>
             <div className="flex gap-1 bg-surface-container rounded-xl p-1 ml-2">
               {(['pending', 'arrived', 'cancelled', 'all'] as const).map(s => (
                 <button key={s} onClick={() => setFilterStatus(s)}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${filterStatus === s ? 'bg-amber-500 text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
-                  {s === 'all' ? 'Tất cả' : statusLabel[s]}
+                  {s === 'all' ? tr("Tất cả") : statusLabel[s]}
                   {s !== 'all' && <span className="ml-1 text-[10px]">({records.filter(r => r.status === s).length})</span>}
                 </button>
               ))}
@@ -515,7 +516,7 @@ const OnTheWay = () => {
           </div>
           <div className="flex gap-2 items-center flex-wrap">
             <div className="relative bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10">
-              <input type="text" placeholder="Tìm ERP, BPM, PO, bộ phận..." value={searchQuery}
+              <input type="text" placeholder={tr("Tìm ERP, BPM, PO, bộ phận...")} value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="bg-transparent border-none text-xs font-medium focus:ring-0 outline-none w-52" />
               <span className="material-symbols-outlined text-sm absolute right-3 top-1/2 -translate-y-1/2 text-outline-variant">search</span>
@@ -523,12 +524,12 @@ const OnTheWay = () => {
             <button onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
               className="flex items-center gap-1.5 bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors">
               <span className="material-symbols-outlined text-sm">{sortOrder === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span>
-              {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
+              {sortOrder === 'desc' ? tr("Mới nhất") : tr("Cũ nhất")}
             </button>
             <button onClick={handleExport}
               className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors">
               <span className="material-symbols-outlined text-sm">download</span>
-              Xuất Excel
+              {tr("Xuất Excel")}
             </button>
             <button onClick={handleSync} disabled={isSyncing}
               className={`p-2 hover:bg-surface-container-high rounded-full transition-colors text-on-surface-variant ${isSyncing ? 'animate-spin text-primary' : ''}`}>
@@ -541,28 +542,28 @@ const OnTheWay = () => {
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-20 text-on-surface-variant">
-              <span className="material-symbols-outlined animate-spin text-3xl mr-3">progress_activity</span> Đang tải...
+              <span className="material-symbols-outlined animate-spin text-3xl mr-3">progress_activity</span> {tr("Đang tải...")}
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 opacity-40">
               <span className="material-symbols-outlined text-6xl">local_shipping</span>
-              <p className="font-bold italic">Không có đơn hàng nào.</p>
+              <p className="font-bold italic">{tr("Không có đơn hàng nào.")}</p>
             </div>
           ) : (
             <table className="w-full text-left border-collapse text-sm" style={{ minWidth: 1100 }}>
               <thead className="bg-surface-container-low border-b border-outline-variant/20">
                 <tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
-                  <th className="py-4 px-4">Ngày tạo</th>
+                  <th className="py-4 px-4">{tr("Ngày tạo")}</th>
                   <th className="py-4 px-4">BPM / PO</th>
-                  <th className="py-4 px-4">Mã ERP</th>
-                  <th className="py-4 px-4">Tên vật tư</th>
+                  <th className="py-4 px-4">{tr("Mã ERP")}</th>
+                  <th className="py-4 px-4">{tr("Tên vật tư")}</th>
                   <th className="py-4 px-4">QC Check No</th>
                   <th className="py-4 px-4 text-center">SL</th>
-                  <th className="py-4 px-4">Bộ phận</th>
-                  <th className="py-4 px-4">Vị trí / Ngày dự kiến</th>
+                  <th className="py-4 px-4">{tr("Bộ phận")}</th>
+                  <th className="py-4 px-4">{tr("Vị trí / Ngày dự kiến")}</th>
                   <th className="py-4 px-4">Remark</th>
-                  <th className="py-4 px-4 text-center">Trạng thái</th>
-                  <th className="py-4 px-4 text-center">Thao tác</th>
+                  <th className="py-4 px-4 text-center">{tr("Trạng thái")}</th>
+                  <th className="py-4 px-4 text-center">{tr("Thao tác")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/10">
@@ -580,7 +581,7 @@ const OnTheWay = () => {
                         {!r.bpm_number && !r.po_number && <span className="opacity-30 italic text-xs">-</span>}
                       </td>
                       <td className="py-3 px-4">
-                        <button onClick={() => openEditModal(r)} className="font-bold text-primary text-xs hover:underline hover:opacity-80 transition-opacity cursor-pointer text-left" title="Bấm để sửa đơn hàng">{r.erp_code}</button>
+                        <button onClick={() => openEditModal(r)} className="font-bold text-primary text-xs hover:underline hover:opacity-80 transition-opacity cursor-pointer text-left" title={tr("Bấm để sửa đơn hàng")}>{r.erp_code}</button>
                       </td>
                       <td className="py-3 px-4 max-w-[180px]">
                         <div className="font-medium text-on-surface text-xs line-clamp-2">{item?.name || <span className="italic opacity-40">-</span>}</div>
@@ -612,15 +613,15 @@ const OnTheWay = () => {
                               <button
                                 onClick={() => { setArrivingRecord(r); setArrivingLocation(r.location || ''); setArrivingDate(new Date().toISOString().split('T')[0]); }}
                                 className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-colors shadow-sm"
-                                title="Hàng đã về, nhập kho"
+                                title={tr("Hàng đã về, nhập kho")}
                               >
                                 <span className="material-symbols-outlined text-sm">input</span>
-                                Nhập kho
+                                {tr("Nhập kho")}
                               </button>
                               <button
                                 onClick={() => handleCancelRecord(r.id)}
                                 className="p-1.5 rounded-lg text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors"
-                                title="Huỷ đơn"
+                                title={tr("Huỷ đơn")}
                               >
                                 <span className="material-symbols-outlined text-base">cancel</span>
                               </button>
@@ -628,11 +629,11 @@ const OnTheWay = () => {
                           )}
                           {r.status === 'arrived' && (
                             <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                              <span className="material-symbols-outlined text-sm">check_circle</span> Đã nhập kho
+                              <span className="material-symbols-outlined text-sm">check_circle</span> {tr("Đã nhập kho")}
                             </span>
                           )}
                           {r.status === 'cancelled' && (
-                            <span className="text-[10px] text-rose-500 italic">Đã huỷ</span>
+                            <span className="text-[10px] text-rose-500 italic">{tr("Đã huỷ")}</span>
                           )}
                         </div>
                       </td>
@@ -645,7 +646,7 @@ const OnTheWay = () => {
         </div>
 
         <div className="px-6 py-3 border-t border-outline-variant/10 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-          Hiển thị {filtered.length} / {records.length} đơn
+          {tr("Hiển thị")} {filtered.length} / {records.length} {tr("đơn")}
         </div>
       </section>
 
@@ -661,8 +662,8 @@ const OnTheWay = () => {
                   <span className="material-symbols-outlined text-xl">edit</span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold">Chỉnh sửa đơn hàng</h3>
-                  <p className="text-xs text-on-surface-variant">Cập nhật thông tin đơn On the Way</p>
+                  <h3 className="text-lg font-bold">{tr("Chỉnh sửa đơn hàng")}</h3>
+                  <p className="text-xs text-on-surface-variant">{tr("Cập nhật thông tin đơn On the Way")}</p>
                 </div>
                 <button onClick={() => setEditingRecord(null)} className="ml-auto p-2 rounded-full hover:bg-surface-container-high transition-colors">
                   <span className="material-symbols-outlined text-lg">close</span>
@@ -672,14 +673,14 @@ const OnTheWay = () => {
                 {[
                   { label: 'BPM Number', field: 'bpm_number', type: 'text' },
                   { label: 'PO Number', field: 'po_number', type: 'text' },
-                  { label: 'Mã ERP (*)', field: 'erp_code', type: 'text' },
+                  { label: tr("Mã ERP (*)"), field: 'erp_code', type: 'text' },
                   { label: 'QC Check No', field: 'qc_check_no', type: 'text' },
-                  { label: 'Số lượng (*)', field: 'qty', type: 'number' },
-                  { label: 'Đơn vị', field: 'unit', type: 'text' },
-                  { label: 'Mã BP', field: 'dept_code', type: 'text' },
-                  { label: 'Tên BP', field: 'dept_name', type: 'text' },
-                  { label: 'Vị trí', field: 'location', type: 'text' },
-                  { label: 'Ngày dự kiến', field: 'expected_date', type: 'date' },
+                  { label: tr("Số lượng (*)"), field: 'qty', type: 'number' },
+                  { label: tr("Đơn vị"), field: 'unit', type: 'text' },
+                  { label: tr("Mã BP"), field: 'dept_code', type: 'text' },
+                  { label: tr("Tên BP"), field: 'dept_name', type: 'text' },
+                  { label: tr("Vị trí"), field: 'location', type: 'text' },
+                  { label: tr("Ngày dự kiến"), field: 'expected_date', type: 'date' },
                 ].map(({ label, field, type }) => (
                   <div key={field} className="space-y-1">
                     <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">{label}</label>
@@ -698,18 +699,18 @@ const OnTheWay = () => {
                     value={editForm.remark}
                     onChange={e => setEditForm((f: any) => ({ ...f, remark: e.target.value }))}
                     className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none"
-                    placeholder="Ghi chú..."
+                    placeholder={tr("Ghi chú...")}
                   />
                 </div>
               </div>
               <div className="flex gap-3 px-8 py-5 border-t border-outline-variant/10">
                 <button onClick={() => setEditingRecord(null)}
                   className="flex-1 py-3 bg-surface-container-high text-on-surface rounded-xl font-bold text-sm hover:bg-surface-container-highest transition-colors">
-                  Huỷ
+                  {tr("Huỷ")}
                 </button>
                 <button onClick={handleEditSave}
                   className="flex-1 py-3 bg-amber-600 text-white rounded-xl font-bold text-sm shadow hover:bg-amber-700 transition-all">
-                  ✅ Lưu thay đổi
+                  {tr("✅ Lưu thay đổi")}
                 </button>
               </div>
             </motion.div>
@@ -728,18 +729,18 @@ const OnTheWay = () => {
                   <span className="material-symbols-outlined text-2xl">input</span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold">Xác nhận nhập kho</h3>
+                  <h3 className="text-lg font-bold">{tr("Xác nhận nhập kho")}</h3>
                   <p className="text-xs text-on-surface-variant">ERP: <strong className="text-primary">{arrivingRecord.erp_code}</strong> — SL: <strong>{Number(arrivingRecord.qty).toLocaleString('en-US')} {arrivingRecord.unit}</strong></p>
                 </div>
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1 block">Ngày nhập kho</label>
+                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1 block">{tr("Ngày nhập kho")}</label>
                   <input type="date" value={arrivingDate} onChange={e => setArrivingDate(e.target.value)}
                     className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1 block">Vị trí lưu kho</label>
+                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1 block">{tr("Vị trí lưu kho")}</label>
                   <input type="text" value={arrivingLocation} onChange={e => setArrivingLocation(e.target.value)}
                     placeholder={arrivingRecord.location || 'VD: A1-01'}
                     className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none" />
@@ -749,12 +750,12 @@ const OnTheWay = () => {
                 <button onClick={() => setArrivingRecord(null)}
                   disabled={isArriving}
                   className="flex-1 py-3 bg-surface-container-high text-on-surface rounded-xl font-bold text-sm hover:bg-surface-container-highest transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                  Huỷ
+                  {tr("Huỷ")}
                 </button>
                 <button onClick={handleArriveConfirm}
                   disabled={isArriving}
                   className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
-                  {isArriving ? 'Đang xử lý...' : '✅ Xác nhận nhập kho'}
+                  {isArriving ? tr("Đang xử lý...") : tr("✅ Xác nhận nhập kho")}
                 </button>
               </div>
             </motion.div>

@@ -7,6 +7,7 @@ import { useData } from '../contexts/DataContext';
 import { supabase } from '../lib/supabase';
 import { exportToExcelMultiSheet } from '../lib/excelUtils';
 import ItemHistoryModal from './ItemHistoryModal';
+import { tr } from '../contexts/LanguageContext';
 
 const showToast = (msg: string, isError = false) => {
   try {
@@ -114,14 +115,14 @@ const Inventory = () => {
   useEffect(() => { if (inventoryMainTab === 'pending') fetchIncompleteItems(); }, [inventoryMainTab]);
 
   const saveIncomplete = async (item: any) => {
-    if (!item.name?.trim()) { showToast('Cần nhập Tên vật tư.', true); return; }
+    if (!item.name?.trim()) { showToast(tr("Cần nhập Tên vật tư."), true); return; }
     const { error } = await supabase.from('inventory').update({
       name: item.name, name_zh: item.name_zh, spec: item.spec,
       category: item.category, unit: item.unit, pos: item.pos,
       is_incomplete: false, updated_at: new Date().toISOString()
     }).eq('erp', item.erp);
-    if (error) { showToast('Lỗi: ' + error.message, true); return; }
-    showToast(`Đã cập nhật ${item.erp}`);
+    if (error) { showToast(tr("Lỗi:") + error.message, true); return; }
+    showToast(tr("Đã cập nhật {0}", [item.erp]));
     setEditingIncomplete(null);
     fetchIncompleteItems();
   };
@@ -231,7 +232,7 @@ const Inventory = () => {
       setTotalFilteredCount(count);
     } catch (err: any) {
       console.error('Error fetching inventory:', err);
-      // alert('Lỗi khi tải dữ liệu tồn kho: ' + err.message); // removed alert to avoid multiple alerts on load
+      // alert(tr("Lỗi khi tải dữ liệu tồn kho:") + err.message); // removed alert to avoid multiple alerts on load
     }
   };
 
@@ -338,30 +339,35 @@ const Inventory = () => {
         if (Boolean(original.critical) !== Boolean(editDetailData.critical)) changes.push({ field: 'Critical Item', old: original.critical ? 'Có' : 'Không', new: editDetailData.critical ? 'Có' : 'Không' });
         
         if (changes.length > 0) {
-           await supabase.from('edit_history_inventory').insert(changes.map(c => ({
+           const { error: historyError } = await supabase.from('edit_history_inventory').insert(changes.map(c => ({
              erp_code: editDetailData.erp,
              field_name: c.field,
              old_value: String(c.old === null || c.old === undefined ? '' : c.old),
              new_value: String(c.new === null || c.new === undefined ? '' : c.new),
-             reason: editDetailData.editReason || 'Cập nhật thông tin vật tư',
+             reason: editDetailData.editReason || tr("Cập nhật thông tin vật tư"),
              edited_by: profile?.full_name || profile?.email || user?.email || 'Unknown'
            })));
+           if (historyError) {
+             // Thông tin vật tư đã lưu xong; chỉ phần lịch sử chỉnh sửa thất bại. Báo rõ thay vì im lặng.
+             console.error('edit_history_inventory insert failed:', historyError);
+             alert(tr("⚠️ Đã lưu thông tin vật tư nhưng KHÔNG ghi được lịch sử chỉnh sửa:\n{0}", [historyError.message]));
+           }
         }
       }
 
       setSelectedItemDetail({ ...selectedItemDetail, ...editDetailData, price, min_stock });
       setIsEditingDetail(false);
-      alert('Cập nhật thành công!');
+      alert(tr("Cập nhật thành công!"));
       fetchInventory();
     } catch (err: any) {
-      alert('Lỗi cập nhật: ' + err.message);
+      alert(tr("Lỗi cập nhật:") + err.message);
     }
   };
 
   const handleDeleteItem = async () => {
     if (!deleteModal.item) return;
     if (!deleteModal.reason.trim()) {
-       alert('Vui lòng nhập lý do xóa!');
+       alert(tr("Vui lòng nhập lý do xóa!"));
        return;
     }
     
@@ -383,10 +389,10 @@ const Inventory = () => {
       if (deleteError) throw deleteError;
 
       setItems(items.filter(item => item.id !== deleteModal.item.id));
-      alert('Đã xóa thành công!');
+      alert(tr("Đã xóa thành công!"));
       fetchInventory();
     } catch (err: any) {
-      alert('Lỗi khi xóa vật tư: ' + err.message);
+      alert(tr("Lỗi khi xóa vật tư:") + err.message);
     } finally {
       setDeleteModal({ isOpen: false, item: null, reason: '' });
     }
@@ -441,13 +447,13 @@ const Inventory = () => {
         if (error) throw error;
         deletedCount += chunk.length;
       }
-      alert(`Đã xóa ${deletedCount} item khỏi tồn kho.`);
+      alert(tr("Đã xóa {0} item khỏi tồn kho.", [deletedCount]));
       setSelectedRows([]);
       fetchInventory();
       fetchStats();
     } catch (err: any) {
       console.error(err);
-      alert('Lỗi khi xóa: ' + err.message);
+      alert(tr("Lỗi khi xóa:") + err.message);
     } finally {
       setLoading(false);
     }
@@ -462,20 +468,20 @@ const Inventory = () => {
         erp: 'ALL',
         name: `Xóa toàn bộ ${totalFilteredCount} item tồn kho`,
         deleted_by: profile?.full_name || profile?.email || user?.email || 'Unknown',
-        reason: 'Admin xóa toàn bộ dữ liệu tồn kho'
+        reason: tr("Admin xóa toàn bộ dữ liệu tồn kho")
       }]);
 
       // Delete all inventory
       const { error } = await supabase.from('inventory').delete().neq('erp', '');
       if (error) throw error;
 
-      alert('Đã xóa toàn bộ dữ liệu tồn kho!');
+      alert(tr("Đã xóa toàn bộ dữ liệu tồn kho!"));
       setSelectedRows([]);
       fetchInventory();
       fetchStats();
     } catch (err: any) {
       console.error(err);
-      alert('Lỗi: ' + err.message);
+      alert(tr("Lỗi:") + err.message);
     } finally {
       setLoading(false);
     }
@@ -519,11 +525,11 @@ const Inventory = () => {
   const exportDeletedItemsToExcel = () => {
     import('xlsx').then(XLSX => {
       const exportData = deletedItems.map(item => ({
-        'Mã ERP': item.erp,
-        'Tên Vật Tư': item.name,
-        'Lý do xóa': item.reason,
-        'Xóa bởi': item.deleted_by,
-        'Thời gian xóa': new Date(item.deleted_at).toLocaleString()
+        [tr("Mã ERP")]: item.erp,
+        [tr("Tên Vật Tư")]: item.name,
+        [tr("Lý do xóa")]: item.reason,
+        [tr("Xóa bởi")]: item.deleted_by,
+        [tr("Thời gian xóa")]: new Date(item.deleted_at).toLocaleString()
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -545,7 +551,7 @@ const Inventory = () => {
 
   const exportInventoryToExcel = async () => {
     setLoading(true);
-    showToast('Đang xuất dữ liệu...');
+    showToast(tr("Đang xuất dữ liệu..."));
     try {
       const today = new Date().toISOString().split('T')[0];
       let allData: any[] = [];
@@ -649,30 +655,30 @@ const Inventory = () => {
       }
 
       const exportData = allData.map((item: any, idx: number) => ({
-        'Số TT': idx + 1,
-        'Mã ERP': item.erp,
-        'Tên Tiếng Việt': item.name,
-        'Tên Tiếng Trung': item.name_zh || '',
-        'Quy cách': item.spec || '',
-        'Vị trí': item.pos || '',
-        'ĐVT': item.unit || '',
-        'Tồn tối thiểu': item.min_stock !== null ? item.min_stock : '',
-        'Critical': item.critical ? 'Có' : 'Không',
-        'Tồn đầu kỳ': item.start_stock || 0,
-        'Nhập trong kỳ': item.in_period !== undefined ? (item.in_period || 0) : (item._in_agg ?? item.in_qty ?? 0),
-        'Xuất trong kỳ': item.out_period !== undefined ? (item.out_period || 0) : (item._out_agg ?? item.out_qty ?? 0),
-        'Tồn cuối kỳ': item.end_stock || 0
+        [tr("Số TT")]: idx + 1,
+        [tr("Mã ERP")]: item.erp,
+        [tr("Tên Tiếng Việt")]: item.name,
+        [tr("Tên Tiếng Trung")]: item.name_zh || '',
+        [tr("Quy cách")]: item.spec || '',
+        [tr("Vị trí")]: item.pos || '',
+        [tr("ĐVT")]: item.unit || '',
+        [tr("Tồn tối thiểu")]: item.min_stock !== null ? item.min_stock : '',
+        [tr("Critical")]: item.critical ? tr("Có") : tr("Không"),
+        [tr("Tồn đầu kỳ")]: item.start_stock || 0,
+        [tr("Nhập trong kỳ")]: item.in_period !== undefined ? (item.in_period || 0) : (item._in_agg ?? item.in_qty ?? 0),
+        [tr("Xuất trong kỳ")]: item.out_period !== undefined ? (item.out_period || 0) : (item._out_agg ?? item.out_qty ?? 0),
+        [tr("Tồn cuối kỳ")]: item.end_stock || 0
       }));
 
       const fileName = reportFromDate
         ? `ton-kho_${reportFromDate}_${reportToDate || today}.xlsx`
         : `ton-kho_${today}.xlsx`;
 
-      const sheets = exportToExcelMultiSheet(exportData, fileName, 'Tồn Kho');
-      showToast(`✅ Đã xuất ${exportData.length.toLocaleString()} dòng — ${sheets} sheet!`);
+      const sheets = exportToExcelMultiSheet(exportData, fileName, tr("Tồn Kho"));
+      showToast(tr("✅ Đã xuất {0} dòng — {1} sheet!", [exportData.length.toLocaleString(), sheets]));
     } catch (err: any) {
       console.error('Export error:', err);
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -683,16 +689,16 @@ const Inventory = () => {
   const exportLowStockToExcel = () => {
     import('xlsx').then(XLSX => {
       const exportData = lowStockItems.map((item, idx) => ({
-         'Số TT': idx + 1,
-         'Mã ERP': item.erp,
-         'Tên Cần Mua': item.name,
-         'Tên Tiếng Trung': item.name_zh || '',
-         'Quy cách': item.spec || '',
-         'Vị trí': item.pos || '',
-         'ĐVT': item.unit || '',
-         'Tồn tối thiểu': item.min_stock !== null ? item.min_stock : 'N/A',
-         'Tồn hiện tại': item.end_stock || 0,
-         'Cảnh báo': item.critical ? '⚠️ Vật tư quan trọng (Critical)' : 'Thấp hơn định mức tối thiểu'
+         [tr("Số TT")]: idx + 1,
+         [tr("Mã ERP")]: item.erp,
+         [tr("Tên Cần Mua")]: item.name,
+         [tr("Tên Tiếng Trung")]: item.name_zh || '',
+         [tr("Quy cách")]: item.spec || '',
+         [tr("Vị trí")]: item.pos || '',
+         [tr("ĐVT")]: item.unit || '',
+         [tr("Tồn tối thiểu")]: item.min_stock !== null ? item.min_stock : 'N/A',
+         [tr("Tồn hiện tại")]: item.end_stock || 0,
+         [tr("Cảnh báo")]: item.critical ? tr("⚠️ Vật tư quan trọng (Critical)") : tr("Thấp hơn định mức tối thiểu")
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -707,7 +713,7 @@ const Inventory = () => {
       <div className="flex flex-col xl:flex-row xl:items-end justify-between items-start gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold text-on-surface tracking-tight mb-2">{t('inventory')}</h1>
-          <p className="text-on-surface-variant font-medium">Theo dõi và quản lý vật tư trong thời gian thực.</p>
+          <p className="text-on-surface-variant font-medium">{tr("Theo dõi và quản lý vật tư trong thời gian thực.")}</p>
         </div>
         <div className="flex flex-wrap gap-2 md:gap-3 w-full xl:w-auto mt-2 md:mt-0">
           <button 
@@ -715,7 +721,7 @@ const Inventory = () => {
             className="flex-1 md:flex-none px-4 md:px-6 py-2 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 bg-error-container text-on-error-container hover:bg-error/20 transition-all font-mono text-xs md:text-sm"
           >
             <span className="material-symbols-outlined text-lg">delete_history</span>
-            Lịch sử Hủy
+            {tr("Lịch sử Hủy")}
           </button>
           <button
             onClick={handleSync}
@@ -723,21 +729,21 @@ const Inventory = () => {
             className="flex-1 md:flex-none px-4 md:px-6 py-2 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all disabled:opacity-50 text-xs md:text-sm"
           >
             <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
-            Đồng bộ
+            {tr("Đồng bộ")}
           </button>
           <button 
             onClick={() => setIsFilterOpen(!isFilterOpen)}
             className={`flex-1 md:flex-none px-4 md:px-6 py-2 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-xs md:text-sm ${isFilterOpen ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'}`}
           >
             <span className="material-symbols-outlined text-lg">{isFilterOpen ? 'filter_list_off' : 'filter_list'}</span>
-            Bộ lọc
+            {tr("Bộ lọc")}
           </button>
           <button 
             onClick={exportInventoryToExcel}
             disabled={loading}
             className="flex-1 md:flex-none bg-surface-container-high text-on-surface-variant px-4 md:px-6 py-2 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-all text-xs md:text-sm disabled:opacity-50">
             <span className="material-symbols-outlined text-lg">{loading ? 'sync' : 'download'}</span>
-            {loading ? 'Đang xuất...' : 'Xuất Excel'}
+            {loading ? tr("Đang xuất...") : tr("Xuất Excel")}
           </button>
           {canAdmin && selectedRows.length > 0 && (
             <button 
@@ -745,7 +751,7 @@ const Inventory = () => {
               className="flex-1 md:flex-none bg-error text-on-error px-4 md:px-6 py-2 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all text-xs md:text-sm shadow-lg shadow-error/20"
             >
               <span className="material-symbols-outlined text-lg">delete</span>
-              Xóa ({selectedRows.length})
+              {tr("Xóa (")}{selectedRows.length})
             </button>
           )}
           {canAdmin && (
@@ -754,7 +760,7 @@ const Inventory = () => {
               className="flex-1 md:flex-none bg-error-container text-on-error-container px-4 md:px-6 py-2 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-error/20 transition-all text-xs md:text-sm"
             >
               <span className="material-symbols-outlined text-lg">delete_sweep</span>
-              Xóa toàn bộ
+              {tr("Xóa toàn bộ")}
             </button>
           )}
         </div>
@@ -773,7 +779,7 @@ const Inventory = () => {
                 setCurrentPage(1);
              }
           }}
-          placeholder="Tìm kiếm..."
+          placeholder={tr("Tìm kiếm...")}
           className="w-full bg-transparent border-none text-base md:text-lg font-medium focus:ring-0 placeholder:text-on-surface-variant/40 p-0"
           autoFocus
         />
@@ -785,26 +791,26 @@ const Inventory = () => {
       </div>
       
       <div className="flex flex-wrap gap-2 items-center px-1 md:px-2">
-        <div className="text-[10px] md:text-sm font-bold text-on-surface-variant mr-1 md:mr-2">Cảnh báo:</div>
+        <div className="text-[10px] md:text-sm font-bold text-on-surface-variant mr-1 md:mr-2">{tr("Cảnh báo:")}</div>
         <button
           onClick={() => setFilterProblem('all')}
           className={`px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all ${filterProblem === 'all' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'}`}
         >
-          Tất cả
+          {tr("Tất cả")}
         </button>
         <button
           onClick={() => setFilterProblem('negative')}
           className={`px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all flex items-center gap-1 ${filterProblem === 'negative' ? 'bg-error text-on-error' : 'bg-error-container/30 text-error hover:bg-error-container'}`}
         >
           <span className="material-symbols-outlined text-[12px] md:text-[14px]">warning</span>
-          Tồn âm
+          {tr("Tồn âm")}
         </button>
         <button
           onClick={() => setFilterProblem('missing')}
           className={`px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all flex items-center gap-1 ${filterProblem === 'missing' ? 'bg-amber-500 text-white' : 'bg-amber-500/10 text-amber-700 hover:bg-amber-500/20'}`}
         >
           <span className="material-symbols-outlined text-[12px] md:text-[14px]">info</span>
-          Thiếu TT
+          {tr("Thiếu TT")}
         </button>
         <button
           onClick={() => setFilterProblem('critical')}
@@ -818,7 +824,7 @@ const Inventory = () => {
           className={`px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all flex items-center gap-1 ${filterProblem === 'duplicate' ? 'bg-violet-500 text-white' : 'bg-violet-500/10 text-violet-700 hover:bg-violet-500/20'}`}
         >
           <span className="material-symbols-outlined text-[12px] md:text-[14px]">content_copy</span>
-          Trùng ERP
+          {tr("Trùng ERP")}
         </button>
       </div>
 
@@ -833,14 +839,14 @@ const Inventory = () => {
           >
             <div className="bg-surface-container-low p-8 rounded-[2rem] border border-outline-variant/10 grid grid-cols-1 md:grid-cols-2 gap-6 relative" style={{ zIndex: 40 }}>
               <div className="space-y-2 relative">
-                <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-1">Phân loại (Category)</label>
+                <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-1">{tr("Phân loại (Category)")}</label>
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')}
                     className="w-full bg-surface-container-lowest border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 flex justify-between items-center text-on-surface"
                   >
-                    <span>{selectedCategory === 'All' ? 'Tất cả phân loại' : selectedCategory}</span>
+                    <span>{selectedCategory === 'All' ? tr("Tất cả phân loại") : selectedCategory}</span>
                     <span className={`material-symbols-outlined text-[20px] transition-transform ${openDropdown === 'category' ? 'rotate-180' : ''}`}>expand_more</span>
                   </button>
                   <AnimatePresence>
@@ -859,7 +865,7 @@ const Inventory = () => {
                             className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors hover:bg-surface-container-low ${selectedCategory === cat ? 'bg-primary-container/20 text-primary' : 'text-on-surface'}`}
                             onClick={() => { setSelectedCategory(cat); setOpenDropdown(null); }}
                           >
-                            {cat === 'All' ? 'Tất cả phân loại' : cat}
+                            {cat === 'All' ? tr("Tất cả phân loại") : cat}
                           </button>
                         ))}
                        </div>
@@ -869,14 +875,14 @@ const Inventory = () => {
                 </div>
               </div>
               <div className="space-y-2 relative">
-                <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-1">Khu vực (Zone)</label>
+                <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-1">{tr("Khu vực (Zone)")}</label>
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setOpenDropdown(openDropdown === 'location' ? null : 'location')}
                     className="w-full bg-surface-container-lowest border-none rounded-xl py-3 px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 flex justify-between items-center text-on-surface"
                   >
-                    <span>{selectedLocation === 'All' ? 'Tất cả khu vực' : `Khu vực ${selectedLocation}`}</span>
+                    <span>{selectedLocation === 'All' ? tr("Tất cả khu vực") : `Khu vực ${selectedLocation}`}</span>
                     <span className={`material-symbols-outlined text-[20px] transition-transform ${openDropdown === 'location' ? 'rotate-180' : ''}`}>expand_more</span>
                   </button>
                   <AnimatePresence>
@@ -895,7 +901,7 @@ const Inventory = () => {
                             className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors hover:bg-surface-container-low ${selectedLocation === loc ? 'bg-primary-container/20 text-primary' : 'text-on-surface'}`}
                             onClick={() => { setSelectedLocation(loc); setOpenDropdown(null); }}
                           >
-                            {loc === 'All' ? 'Tất cả khu vực' : `Khu vực ${loc}`}
+                            {loc === 'All' ? tr("Tất cả khu vực") : `Khu vực ${loc}`}
                           </button>
                         ))}
                        </div>
@@ -909,7 +915,7 @@ const Inventory = () => {
                   onClick={() => setShowClearConfirm(true)}
                   className="text-xs font-bold text-on-surface-variant hover:text-error transition-colors"
                 >
-                  Xóa tất cả bộ lọc
+                  {tr("Xóa tất cả bộ lọc")}
                 </button>
               </div>
             </div>
@@ -936,9 +942,9 @@ const Inventory = () => {
               <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
                 <span className="material-symbols-outlined text-3xl">filter_alt_off</span>
               </div>
-              <h3 className="text-xl font-black text-on-surface mb-2">Xác nhận xóa bộ lọc?</h3>
+              <h3 className="text-xl font-black text-on-surface mb-2">{tr("Xác nhận xóa bộ lọc?")}</h3>
               <p className="text-on-surface-variant text-sm mb-8 leading-relaxed">
-                Hành động này sẽ xóa toàn bộ các tiêu chí tìm kiếm và lọc hiện tại. Bạn có chắc chắn muốn tiếp tục?
+                {tr("Hành động này sẽ xóa toàn bộ các tiêu chí tìm kiếm và lọc hiện tại. Bạn có chắc chắn muốn tiếp tục?")}
               </p>
               <div className="flex gap-3">
                 <button 
@@ -967,7 +973,7 @@ const Inventory = () => {
             </div>
           </div>
           <div>
-            <p className="text-on-surface-variant text-[9px] md:text-[10px] font-bold uppercase tracking-widest mb-0.5 md:mb-1 opacity-60">Tổng Mã Hàng (SKU)</p>
+            <p className="text-on-surface-variant text-[9px] md:text-[10px] font-bold uppercase tracking-widest mb-0.5 md:mb-1 opacity-60">{tr("Tổng Mã Hàng (SKU)")}</p>
             <h3 className="text-2xl md:text-3xl font-extrabold text-on-surface data-value">{(stats.tong_sku || 0).toLocaleString()}</h3>
           </div>
           <div className="absolute -right-2 -bottom-2 md:-right-4 md:-bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -979,29 +985,29 @@ const Inventory = () => {
             <div className="px-4 md:px-6 py-2 md:py-4 border-b border-outline-variant/10 flex justify-between items-center bg-white/5 backdrop-blur-md z-10 w-full relative">
                 <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary text-lg md:text-xl">monitoring</span>
-                    <span className="text-[10px] md:text-xs font-bold text-on-surface uppercase tracking-widest opacity-80">Thông kê lưu lượng</span>
+                    <span className="text-[10px] md:text-xs font-bold text-on-surface uppercase tracking-widest opacity-80">{tr("Thông kê lưu lượng")}</span>
                 </div>
-                {(reportFromDate || reportToDate) && <span className="text-[9px] md:text-[10px] font-black tracking-widest text-primary px-2 py-0.5 bg-primary/10 rounded-full">Kỳ Báo Cáo</span>}
+                {(reportFromDate || reportToDate) && <span className="text-[9px] md:text-[10px] font-black tracking-widest text-primary px-2 py-0.5 bg-primary/10 rounded-full">{tr("Kỳ Báo Cáo")}</span>}
             </div>
             <div className="grid grid-cols-2 md:grid-cols-5 items-center px-4 md:px-6 py-4 md:py-6 gap-y-4 md:gap-y-0 h-full z-10 relative text-center md:text-left">
                 <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-4">
-                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">category</span> SKU CÓ NHẬP</p>
+                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">category</span> {tr("SKU CÓ NHẬP")}</p>
                    <h3 className="text-xl lg:text-2xl font-extrabold text-on-surface data-value">{(stats.sku_co_nhap || 0).toLocaleString()}</h3>
                 </div>
                 <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-4 border-l md:border-l-0">
-                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">warehouse</span> TỒN ĐẦU KỲ</p>
+                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">warehouse</span> {tr("TỒN ĐẦU KỲ")}</p>
                    <h3 className="text-xl lg:text-2xl font-extrabold text-on-surface data-value">{Number(stats.tong_ton_dau || 0).toLocaleString()}</h3>
                 </div>
                 <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-4 border-t md:border-t-0">
-                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">login</span> TỔNG NHẬP</p>
+                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">login</span> {tr("TỔNG NHẬP")}</p>
                    <h3 className="text-xl lg:text-2xl font-extrabold text-on-surface data-value">{(stats.tong_nhap || 0).toLocaleString()}</h3>
                 </div>
                 <div className="flex-1 md:border-r border-outline-variant/20 px-2 lg:px-4 border-t md:border-t-0 border-l md:border-l-0">
-                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">logout</span> TỔNG XUẤT</p>
+                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">logout</span> {tr("TỔNG XUẤT")}</p>
                    <h3 className="text-xl lg:text-2xl font-extrabold text-on-surface data-value">{(stats.tong_xuat || 0).toLocaleString()}</h3>
                 </div>
                 <div className="flex-1 px-2 lg:px-4 border-t md:border-t-0">
-                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">inventory</span> TỒN KHO</p>
+                   <p className="text-on-surface-variant text-[9px] lg:text-[11px] font-black uppercase tracking-widest mb-1 md:mb-2 opacity-80 flex items-center justify-center md:justify-start gap-1 leading-tight"><span className="material-symbols-outlined text-[14px] md:text-[16px]">inventory</span> {tr("TỒN KHO")}</p>
                    <h3 className="text-xl lg:text-2xl font-extrabold text-primary data-value">{Number(stats.tong_ton || 0).toLocaleString()}</h3>
                 </div>
             </div>
@@ -1018,8 +1024,8 @@ const Inventory = () => {
             <span className="material-symbols-outlined text-error opacity-50 group-hover:opacity-100 transition-opacity">open_in_new</span>
           </div>
           <div>
-            <p className="text-on-error-container text-[9px] md:text-[10px] font-bold uppercase tracking-widest mb-0.5 md:mb-1 opacity-60">Cần mua ngay</p>
-            <h3 className="text-2xl md:text-3xl font-extrabold text-on-error-container data-value">{lowStockItems.length} <span className="text-xs md:text-sm font-medium opacity-70">Mã</span></h3>
+            <p className="text-on-error-container text-[9px] md:text-[10px] font-bold uppercase tracking-widest mb-0.5 md:mb-1 opacity-60">{tr("Cần mua ngay")}</p>
+            <h3 className="text-2xl md:text-3xl font-extrabold text-on-error-container data-value">{lowStockItems.length} <span className="text-xs md:text-sm font-medium opacity-70">{tr("Mã")}</span></h3>
           </div>
           <div className="absolute -right-2 -bottom-2 md:-right-4 md:-bottom-4 opacity-10 group-hover:opacity-20 transition-opacity text-error">
             <span className="material-symbols-outlined text-[5rem] md:text-[8rem]">emergency_home</span>
@@ -1031,11 +1037,11 @@ const Inventory = () => {
       <div className="flex gap-1 bg-surface-container rounded-2xl p-1 w-fit">
         <button onClick={() => setInventoryMainTab('list')}
           className={`px-5 py-2 rounded-xl text-sm font-bold transition-colors ${inventoryMainTab === 'list' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
-          Danh sách tồn kho
+          {tr("Danh sách tồn kho")}
         </button>
         <button onClick={() => setInventoryMainTab('pending')}
           className={`px-5 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 ${inventoryMainTab === 'pending' ? 'bg-amber-500 text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
-          Chờ xử lý
+          {tr("Chờ xử lý")}
           {incompleteCount > 0 && <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${inventoryMainTab === 'pending' ? 'bg-white/20' : 'bg-amber-500 text-white'}`}>{incompleteCount}</span>}
         </button>
       </div>
@@ -1046,16 +1052,16 @@ const Inventory = () => {
           <div className="flex items-center gap-3 mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
             <span className="material-symbols-outlined text-amber-500 text-2xl">warning</span>
             <div>
-              <p className="text-sm font-bold text-on-surface">Vật tư thiếu thông tin trong kho</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">Bổ sung <strong className="text-amber-600">Tên vật tư</strong> và <strong className="text-amber-600">Quy cách</strong> rồi bấm <strong className="text-amber-600">Lưu</strong> để hoàn tất.</p>
+              <p className="text-sm font-bold text-on-surface">{tr("Vật tư thiếu thông tin trong kho")}</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">{tr("Bổ sung")} <strong className="text-amber-600">{tr("Tên vật tư")}</strong> {tr("và")} <strong className="text-amber-600">{tr("Quy cách")}</strong> {tr("rồi bấm")} <strong className="text-amber-600">{tr("Lưu")}</strong> {tr("để hoàn tất.")}</p>
             </div>
           </div>
           {incompleteLoading ? (
-            <p className="text-center py-12 text-on-surface-variant/40">Đang tải...</p>
+            <p className="text-center py-12 text-on-surface-variant/40">{tr("Đang tải...")}</p>
           ) : incompleteItems.length === 0 ? (
             <div className="text-center py-16 bg-surface-container-low rounded-2xl">
               <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-2">check_circle</span>
-              <p className="text-sm text-on-surface-variant/50">Không có vật tư nào cần bổ sung thông tin</p>
+              <p className="text-sm text-on-surface-variant/50">{tr("Không có vật tư nào cần bổ sung thông tin")}</p>
             </div>
           ) : (
             <div className="bg-surface-container-low rounded-2xl overflow-hidden">
@@ -1063,13 +1069,13 @@ const Inventory = () => {
                 <table className="w-full text-sm text-left">
                   <thead>
                     <tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/20">
-                      <th className="px-4 py-3">Mã ERP</th>
-                      <th className="px-4 py-3">Tên VN</th>
-                      <th className="px-4 py-3 hidden md:table-cell">Tên CN</th>
-                      <th className="px-4 py-3 hidden md:table-cell">Quy cách</th>
-                      <th className="px-4 py-3 hidden lg:table-cell">Đơn vị</th>
-                      <th className="px-4 py-3 hidden lg:table-cell">Vị trí</th>
-                      <th className="px-4 py-3 text-right">Thao tác</th>
+                      <th className="px-4 py-3">{tr("Mã ERP")}</th>
+                      <th className="px-4 py-3">{tr("Tên VN")}</th>
+                      <th className="px-4 py-3 hidden md:table-cell">{tr("Tên CN")}</th>
+                      <th className="px-4 py-3 hidden md:table-cell">{tr("Quy cách")}</th>
+                      <th className="px-4 py-3 hidden lg:table-cell">{tr("Đơn vị")}</th>
+                      <th className="px-4 py-3 hidden lg:table-cell">{tr("Vị trí")}</th>
+                      <th className="px-4 py-3 text-right">{tr("Thao tác")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1078,28 +1084,28 @@ const Inventory = () => {
                         {editingIncomplete?.erp === p.erp ? (
                           <>
                             <td className="px-3 py-2 font-mono font-bold text-amber-600 text-xs">{p.erp}</td>
-                            <td className="px-3 py-2"><input value={editingIncomplete.name || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, name: e.target.value}))} className="w-36 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder="Tên vật tư *" /></td>
-                            <td className="px-3 py-2 hidden md:table-cell"><input value={editingIncomplete.name_zh || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, name_zh: e.target.value}))} className="w-32 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder="Tên tiếng Trung" /></td>
-                            <td className="px-3 py-2 hidden md:table-cell"><input value={editingIncomplete.spec || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, spec: e.target.value}))} className="w-32 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder="Quy cách" /></td>
+                            <td className="px-3 py-2"><input value={editingIncomplete.name || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, name: e.target.value}))} className="w-36 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder={tr("Tên vật tư *")} /></td>
+                            <td className="px-3 py-2 hidden md:table-cell"><input value={editingIncomplete.name_zh || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, name_zh: e.target.value}))} className="w-32 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder={tr("Tên tiếng Trung")} /></td>
+                            <td className="px-3 py-2 hidden md:table-cell"><input value={editingIncomplete.spec || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, spec: e.target.value}))} className="w-32 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" placeholder={tr("Quy cách")} /></td>
                             <td className="px-3 py-2 hidden lg:table-cell"><input value={editingIncomplete.unit || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, unit: e.target.value}))} className="w-24 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
                             <td className="px-3 py-2 hidden lg:table-cell"><input value={editingIncomplete.pos || ''} onChange={e => setEditingIncomplete((x: any) => ({...x, pos: e.target.value}))} className="w-24 px-2 py-1 bg-surface-container rounded-lg text-xs border border-outline-variant/30 focus:outline-none focus:border-primary/50" /></td>
                             <td className="px-3 py-2 text-right">
                               <div className="flex gap-1 justify-end">
-                                <button onClick={() => saveIncomplete(editingIncomplete)} className="px-2 py-1 bg-primary text-on-primary rounded-lg text-xs font-bold">Lưu</button>
-                                <button onClick={() => setEditingIncomplete(null)} className="px-2 py-1 bg-surface-container rounded-lg text-xs">Hủy</button>
+                                <button onClick={() => saveIncomplete(editingIncomplete)} className="px-2 py-1 bg-primary text-on-primary rounded-lg text-xs font-bold">{tr("Lưu")}</button>
+                                <button onClick={() => setEditingIncomplete(null)} className="px-2 py-1 bg-surface-container rounded-lg text-xs">{tr("Hủy")}</button>
                               </div>
                             </td>
                           </>
                         ) : (
                           <>
                             <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp}</td>
-                            <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>
+                            <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">{tr("Chưa có tên")}</span>}</td>
                             <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.name_zh || '—'}</td>
                             <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>
                             <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.unit || '—'}</td>
                             <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.pos || '—'}</td>
                             <td className="px-4 py-3 text-right">
-                              <button onClick={() => setEditingIncomplete({...p})} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
+                              <button onClick={() => setEditingIncomplete({...p})} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title={tr("Sửa")}><span className="material-symbols-outlined text-base">edit</span></button>
                             </td>
                           </>
                         )}
@@ -1121,9 +1127,9 @@ const Inventory = () => {
               onChange={(e) => setTableLocation(e.target.value)}
               className="bg-surface-container-low border-none rounded-xl text-[10px] md:text-xs font-bold px-3 md:px-4 py-2 focus:ring-primary/20 cursor-pointer"
             >
-              <option value="All">Tất cả Vị Trí</option>
+              <option value="All">{tr("Tất cả Vị Trí")}</option>
               {locations.filter(l => l !== 'All').map(loc => (
-                <option key={loc} value={loc}>Khu vực {loc}</option>
+                <option key={loc} value={loc}>{tr("Khu vực")} {loc}</option>
               ))}
             </select>
             <select 
@@ -1131,10 +1137,10 @@ const Inventory = () => {
               onChange={(e) => setSortBy(e.target.value)}
               className="bg-surface-container-low border-none rounded-xl text-[10px] md:text-xs font-bold px-3 md:px-4 py-2 focus:ring-primary/20 cursor-pointer"
             >
-              <option value="newest">Sắp xếp: Mới nhất</option>
-              <option value="name_asc">Sắp xếp: Tên A-Z</option>
-              <option value="stock_desc">Sắp xếp: Tồn Cuối (Giảm)</option>
-              <option value="stock_asc">Sắp xếp: Tồn Cuối (Tăng)</option>
+              <option value="newest">{tr("Sắp xếp: Mới nhất")}</option>
+              <option value="name_asc">{tr("Sắp xếp: Tên A-Z")}</option>
+              <option value="stock_desc">{tr("Sắp xếp: Tồn Cuối (Giảm)")}</option>
+              <option value="stock_asc">{tr("Sắp xếp: Tồn Cuối (Tăng)")}</option>
             </select>
             
             <div className="flex items-center gap-1.5 md:gap-2 bg-surface-container-low rounded-xl px-2 border border-outline-variant/10 focus-within:border-primary/50 transition-colors">
@@ -1145,7 +1151,7 @@ const Inventory = () => {
                   onChange={e => setReportFromDate(e.target.value)}
                   className="bg-transparent border-none text-[10px] md:text-xs font-bold px-1 md:px-2 py-2 outline-none w-24 md:w-32"
                />
-               <span className="text-[10px] md:text-xs font-bold text-on-surface-variant">đến</span>
+               <span className="text-[10px] md:text-xs font-bold text-on-surface-variant">{tr("đến")}</span>
                <input 
                   type="date"
                   value={reportToDate}
@@ -1164,10 +1170,10 @@ const Inventory = () => {
                 onChange={(e: any) => setMovementType(e.target.value)}
                 className="bg-primary/5 text-primary border-none rounded-xl text-[10px] md:text-xs font-bold px-3 md:px-4 py-2 focus:ring-primary/20 cursor-pointer"
               >
-                <option value="all">Tất cả biến động</option>
-                <option value="inbound">Chỉ hàng nhập</option>
-                <option value="outbound">Chỉ hàng xuất</option>
-                <option value="movement">Mã có phát sinh</option>
+                <option value="all">{tr("Tất cả biến động")}</option>
+                <option value="inbound">{tr("Chỉ hàng nhập")}</option>
+                <option value="outbound">{tr("Chỉ hàng xuất")}</option>
+                <option value="movement">{tr("Mã có phát sinh")}</option>
               </select>
             )}
           </div>
@@ -1192,16 +1198,16 @@ const Inventory = () => {
                 )}
                 <th className="col-header py-4 px-4 hidden md:table-cell font-black text-[10px]">{t('erpCode')}</th>
                 <th className="col-header py-4 px-3 font-black text-[10px]">{t('itemName')}</th>
-                <th className="col-header py-4 px-3 hidden md:table-cell font-black text-[10px]">Tên Tiếng Trung</th>
+                <th className="col-header py-4 px-3 hidden md:table-cell font-black text-[10px]">{tr("Tên Tiếng Trung")}</th>
                 <th className="col-header py-4 px-3 hidden xl:table-cell font-black text-[10px]">{t('spec')}</th>
                 <th className="col-header py-4 px-3 text-center hidden md:table-cell font-black text-[10px]">{t('unit')}</th>
                 <th className="col-header py-4 px-3 font-black text-[10px] md:hidden lg:table-cell">{t('location')}</th>
-                <th className="col-header py-4 px-3 text-right hidden xl:table-cell font-black text-[10px]">Tồn tối thiểu</th>
+                <th className="col-header py-4 px-3 text-right hidden xl:table-cell font-black text-[10px]">{tr("Tồn tối thiểu")}</th>
                 <th className="col-header py-4 px-3 text-right hidden lg:table-cell font-black text-[10px]">{t('startStock')}</th>
                 <th className="col-header py-4 px-3 text-right hidden lg:table-cell font-black text-[10px]">{t('inQty')}</th>
                 <th className="col-header py-4 px-3 text-right hidden lg:table-cell font-black text-[10px]">{t('outQty')}</th>
                 <th className="col-header py-4 px-4 text-right font-black text-[10px]">{t('endStock')}</th>
-                {canAdmin && <th className="col-header py-4 px-3 text-right hidden lg:table-cell font-black text-[10px]">Thao tác</th>}
+                {canAdmin && <th className="col-header py-4 px-3 text-right hidden lg:table-cell font-black text-[10px]">{tr("Thao tác")}</th>}
               </tr>
             </thead>
             <tbody className="divide-y-0">
@@ -1234,16 +1240,16 @@ const Inventory = () => {
                           setHistoryModal({ isOpen: true, erp: item.erp, name: item.name });
                         }}
                         className="bg-surface-container-high group-hover:bg-white/10 px-2 py-1 rounded text-[9px] font-black data-value hover:text-primary transition-colors cursor-pointer"
-                        title="Xem lịch sử nhập xuất"
+                        title={tr("Xem lịch sử nhập xuất")}
                       >
                         {item.erp}
                       </button>
                     </td>
                     <td className="px-3 py-3">
                       <div className="font-bold text-[13px] leading-tight flex items-center gap-1.5 flex-wrap">
-                        {item.name ? item.name : <span className="text-amber-500 italic flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span> Thiếu thông tin</span>}
+                        {item.name ? item.name : <span className="text-amber-500 italic flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span> {tr("Thiếu thông tin")}</span>}
                         {otwErpSet.has(item.erp) && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 group-hover:bg-amber-200/60 rounded-full text-[9px] font-black whitespace-nowrap" title="Có hàng đang On The Way">
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 group-hover:bg-amber-200/60 rounded-full text-[9px] font-black whitespace-nowrap" title={tr("Có hàng đang On The Way")}>
                             <span className="material-symbols-outlined text-[10px]">local_shipping</span>OTW
                           </span>
                         )}
@@ -1272,7 +1278,7 @@ const Inventory = () => {
                     <td className="px-3 py-3 text-right font-bold text-[11px] data-value text-secondary group-hover:text-secondary-container hidden lg:table-cell">{(itemData.out || 0).toLocaleString('en-US')}</td>
                     <td className={`px-4 py-3 text-right font-black text-sm data-value ${(isCritical || itemData.end < 0) ? 'text-error group-hover:text-error-container' : 'text-primary group-hover:text-primary-container'}`}>
                       {itemData.end < 0 ? (
-                        <span className="flex items-center justify-end gap-1" title="Tồn kho bị âm"><span className="material-symbols-outlined text-[12px]">warning</span> {(itemData.end || 0).toLocaleString('en-US')}</span>
+                        <span className="flex items-center justify-end gap-1" title={tr("Tồn kho bị âm")}><span className="material-symbols-outlined text-[12px]">warning</span> {(itemData.end || 0).toLocaleString('en-US')}</span>
                       ) : (
                         (itemData.end || 0).toLocaleString('en-US')
                       )}
@@ -1286,7 +1292,7 @@ const Inventory = () => {
                               setHistoryModal({ isOpen: true, erp: item.erp, name: item.name });
                             }}
                             className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors"
-                            title="Lịch sử"
+                            title={tr("Lịch sử")}
                           >
                             <span className="material-symbols-outlined text-sm">history</span>
                           </button>
@@ -1296,7 +1302,7 @@ const Inventory = () => {
                               setDeleteModal({ isOpen: true, item, reason: '' });
                             }}
                             className="text-error hover:bg-error/10 p-1.5 rounded-lg transition-colors"
-                            title="Xóa"
+                            title={tr("Xóa")}
                           >
                             <span className="material-symbols-outlined text-sm">delete</span>
                           </button>
@@ -1309,7 +1315,7 @@ const Inventory = () => {
               {paginatedItems.length === 0 && (
                 <tr key="empty-inventory">
                   <td colSpan={canAdmin ? 13 : 11} className="px-8 py-12 text-center text-on-surface-variant font-medium">
-                    Không tìm thấy vật tư phù hợp với bộ lọc.
+                    {tr("Không tìm thấy vật tư phù hợp với bộ lọc.")}
                   </td>
                 </tr>
               )}
@@ -1318,7 +1324,7 @@ const Inventory = () => {
         </div>
         <div className="px-4 md:px-8 py-4 md:py-6 border-t border-surface-container flex flex-col sm:flex-row justify-between items-center bg-surface-container-low/30 gap-4">
           <p className="text-[10px] md:text-sm font-medium text-on-surface-variant text-center sm:text-left">
-            Hiển thị <span className="font-bold text-on-surface">{totalFilteredCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, totalFilteredCount)}</span> / {totalFilteredCount}
+            {tr("Hiển thị")} <span className="font-bold text-on-surface">{totalFilteredCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, totalFilteredCount)}</span> / {totalFilteredCount}
           </p>
           <div className="flex gap-1 md:gap-2">
             <button 
@@ -1359,18 +1365,18 @@ const Inventory = () => {
                     <span className="material-symbols-outlined text-2xl">warning</span>
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold font-manrope text-on-surface mb-2">Xóa vật tư</h3>
+                    <h3 className="text-xl font-bold font-manrope text-on-surface mb-2">{tr("Xóa vật tư")}</h3>
                     <p className="text-sm border border-outline-variant/20 rounded p-2 bg-surface-container-low font-mono font-bold text-primary inline-block mb-3">
                       {deleteModal.item?.erp}
                     </p>
                     <p className="text-sm font-medium text-on-surface-variant mb-6">
-                      Bạn có chắc chắn muốn xóa <span className="font-bold text-on-surface">{deleteModal.item?.name}</span> khỏi hệ thống không? Tác vụ này sẽ được ghi log lại.
+                      {tr("Bạn có chắc chắn muốn xóa")} <span className="font-bold text-on-surface">{deleteModal.item?.name}</span> {tr("khỏi hệ thống không? Tác vụ này sẽ được ghi log lại.")}
                     </p>
 
-                    <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2 block">Lý do xóa <span className="text-error">*</span></label>
+                    <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2 block">{tr("Lý do xóa")} <span className="text-error">*</span></label>
                     <textarea 
                       className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-error focus:border-error transition-all outline-none"
-                      placeholder="Nhập lý do xóa (Bắt buộc)... VD: Sai quy cách, Lỗi nhập liệu..."
+                      placeholder={tr("Nhập lý do xóa (Bắt buộc)... VD: Sai quy cách, Lỗi nhập liệu...")}
                       rows={3}
                       value={deleteModal.reason}
                       onChange={e => setDeleteModal(m => ({ ...m, reason: e.target.value }))}
@@ -1384,13 +1390,13 @@ const Inventory = () => {
                     onClick={() => setDeleteModal({ isOpen: false, item: null, reason: '' })}
                     className="px-6 py-2.5 font-bold text-on-surface-variant hover:bg-surface-container-low rounded-xl transition-colors text-sm"
                   >
-                    Hủy
+                    {tr("Hủy")}
                   </button>
                   <button 
                     onClick={handleDeleteItem}
                     className="px-6 py-2.5 bg-error text-on-error font-bold rounded-xl shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all text-sm flex items-center gap-2"
                   >
-                    Xóa vật tư
+                    {tr("Xóa vật tư")}
                   </button>
                 </div>
               </div>
@@ -1415,8 +1421,8 @@ const Inventory = () => {
                     <span className="material-symbols-outlined">delete_history</span>
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold font-manrope text-on-surface">Lịch sử Báo Hủy (30 ngày)</h3>
-                    <p className="text-sm font-medium text-on-surface-variant">Danh sách các vật tư đã bị xóa khỏi hệ thống.</p>
+                    <h3 className="text-2xl font-bold font-manrope text-on-surface">{tr("Lịch sử Báo Hủy (30 ngày)")}</h3>
+                    <p className="text-sm font-medium text-on-surface-variant">{tr("Danh sách các vật tư đã bị xóa khỏi hệ thống.")}</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -1440,11 +1446,11 @@ const Inventory = () => {
                 <table className="w-full text-left">
                   <thead className="bg-surface-container-low sticky top-0">
                     <tr className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">
-                      <th className="py-4 px-6 border-b border-outline-variant/20">Thời gian xóa</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20">Mã ERP</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20">Tên Vật Tư</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20">Lý do</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20">Người xóa</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Thời gian xóa")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Mã ERP")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Tên Vật Tư")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Lý do")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Người xóa")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/10 text-sm">
@@ -1458,7 +1464,7 @@ const Inventory = () => {
                       </tr>
                     )) : (
                       <tr key="empty-deleted">
-                        <td colSpan={5} className="py-12 text-center text-on-surface-variant italic">Không có dữ liệu xóa nào trong 30 ngày qua.</td>
+                        <td colSpan={5} className="py-12 text-center text-on-surface-variant italic">{tr("Không có dữ liệu xóa nào trong 30 ngày qua.")}</td>
                       </tr>
                     )}
                   </tbody>
@@ -1502,20 +1508,20 @@ const Inventory = () => {
                 <div className="flex gap-2">
                   {canAdmin && (
                      isEditingDetail ? (
-                        <button onClick={handleSaveEditDetail} className="px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-sm hover:shadow-md transition-all">Lưu</button>
+                        <button onClick={handleSaveEditDetail} className="px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-sm hover:shadow-md transition-all">{tr("Lưu")}</button>
                      ) : (
                         <>
                           <button onClick={() => {
                              setEditDetailData({ ...selectedItemDetail });
                              setIsEditingDetail(true);
                           }} className="px-3 md:px-4 py-2 bg-surface-container-highest text-on-surface rounded-lg font-bold text-sm hover:bg-outline-variant/20 transition-all flex items-center gap-1">
-                             <span className="material-symbols-outlined text-[16px]">edit</span> <span className="hidden md:inline">Sửa</span>
+                             <span className="material-symbols-outlined text-[16px]">edit</span> <span className="hidden md:inline">{tr("Sửa")}</span>
                           </button>
                           <button onClick={() => {
                              setSelectedItemDetail(null);
                              setDeleteModal({ isOpen: true, item: selectedItemDetail, reason: '' });
                           }} className="px-3 md:px-4 py-2 bg-error-container text-on-error-container rounded-lg font-bold text-sm hover:bg-error/20 transition-all flex items-center gap-1">
-                             <span className="material-symbols-outlined text-[16px]">delete</span> <span className="hidden md:inline">Xóa</span>
+                             <span className="material-symbols-outlined text-[16px]">delete</span> <span className="hidden md:inline">{tr("Xóa")}</span>
                           </button>
                         </>
                      )
@@ -1531,29 +1537,29 @@ const Inventory = () => {
               <div className="p-8 space-y-8">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                   <div className="bg-surface-container-low p-4 rounded-xl">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Tồn Cuối (End Stock)</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">{tr("Tồn Cuối (End Stock)")}</p>
                     <p className="text-2xl font-black text-primary data-value">{(selectedItemDetail.end_stock || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-surface-container-low p-4 rounded-xl">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Nhập Kho (In)</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">{tr("Nhập Kho (In)")}</p>
                     <p className="text-xl font-bold text-on-surface data-value">+{selectedItemDetail.in_qty || 0}</p>
                   </div>
                   <div className="bg-surface-container-low p-4 rounded-xl">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Xuất Kho (Out)</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">{tr("Xuất Kho (Out)")}</p>
                     <p className="text-xl font-bold text-on-surface data-value">-{selectedItemDetail.out_qty || 0}</p>
                   </div>
                   <div className="bg-surface-container-low p-4 rounded-xl">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Tồn Đầu (Start)</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">{tr("Tồn Đầu (Start)")}</p>
                     <p className="text-xl font-bold text-on-surface-variant data-value opacity-60">{selectedItemDetail.start_stock || 0}</p>
                   </div>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-x-12 gap-y-6">
                   <div>
-                     <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2 border-b border-outline-variant/10 pb-2">Thông tin cơ bản</p>
+                     <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2 border-b border-outline-variant/10 pb-2">{tr("Thông tin cơ bản")}</p>
                      <ul className="space-y-3 text-sm">
                        <li className="flex justify-between items-center">
-                          <span className="text-on-surface-variant">Phân loại:</span> 
+                          <span className="text-on-surface-variant">{tr("Phân loại:")}</span> 
                           {isEditingDetail ? (
                              <input type="text" value={editDetailData?.category || ''} onChange={e => setEditDetailData({...editDetailData, category: e.target.value})} className="bg-surface-container-high border-none rounded px-2 py-1 text-right w-32" />
                           ) : (
@@ -1561,7 +1567,7 @@ const Inventory = () => {
                           )}
                        </li>
                        <li className="flex justify-between items-center">
-                          <span className="text-on-surface-variant">Tên (CN):</span> 
+                          <span className="text-on-surface-variant">{tr("Tên (CN):")}</span> 
                           {isEditingDetail ? (
                              <input type="text" value={editDetailData?.name_zh || ''} onChange={e => setEditDetailData({...editDetailData, name_zh: e.target.value})} className="bg-surface-container-high border-none rounded px-2 py-1 text-right w-32" />
                           ) : (
@@ -1569,7 +1575,7 @@ const Inventory = () => {
                           )}
                        </li>
                        <li className="flex justify-between items-center">
-                          <span className="text-on-surface-variant">ĐVT:</span> 
+                          <span className="text-on-surface-variant">{tr("ĐVT:")}</span> 
                           {isEditingDetail ? (
                              <input type="text" value={editDetailData?.unit || ''} onChange={e => setEditDetailData({...editDetailData, unit: e.target.value})} className="bg-surface-container-high border-none rounded px-2 py-1 text-right w-24" />
                           ) : (
@@ -1577,7 +1583,7 @@ const Inventory = () => {
                           )}
                        </li>
                        <li className="flex justify-between items-center">
-                          <span className="text-on-surface-variant">Quy cách:</span> 
+                          <span className="text-on-surface-variant">{tr("Quy cách:")}</span> 
                           {isEditingDetail ? (
                              <input type="text" value={editDetailData?.spec || ''} onChange={e => setEditDetailData({...editDetailData, spec: e.target.value})} className="bg-surface-container-high border-none rounded px-2 py-1 text-right w-32" />
                           ) : (
@@ -1587,10 +1593,10 @@ const Inventory = () => {
                      </ul>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2 border-b border-outline-variant/10 pb-2">Lưu trữ & Giá trị</p>
+                    <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2 border-b border-outline-variant/10 pb-2">{tr("Lưu trữ & Giá trị")}</p>
                      <ul className="space-y-3 text-sm">
                        <li className="flex justify-between items-center">
-                          <span className="text-on-surface-variant">Vị trí:</span> 
+                          <span className="text-on-surface-variant">{tr("Vị trí:")}</span> 
                           {isEditingDetail ? (
                              <input type="text" value={editDetailData?.pos || ''} onChange={e => setEditDetailData({...editDetailData, pos: e.target.value})} className="bg-surface-container-high border-none rounded px-2 py-1 text-right w-24" />
                           ) : (
@@ -1598,7 +1604,7 @@ const Inventory = () => {
                           )}
                        </li>
                        <li className="flex justify-between items-center">
-                          <span className="text-on-surface-variant">Đơn giá:</span> 
+                          <span className="text-on-surface-variant">{tr("Đơn giá:")}</span> 
                           {isEditingDetail ? (
                              <input type="number" value={editDetailData?.price ?? ''} onChange={e => setEditDetailData({...editDetailData, price: e.target.value})} className="bg-surface-container-high border-none rounded px-2 py-1 text-right w-24" />
                           ) : (
@@ -1606,7 +1612,7 @@ const Inventory = () => {
                           )}
                        </li>
                        <li className="flex justify-between items-center">
-                          <span className="text-on-surface-variant">Tồn tối thiểu (Cảnh báo):</span> 
+                          <span className="text-on-surface-variant">{tr("Tồn tối thiểu (Cảnh báo):")}</span> 
                           {isEditingDetail ? (
                              <input type="number" value={editDetailData?.min_stock ?? ''} onChange={e => setEditDetailData({...editDetailData, min_stock: e.target.value})} className="bg-surface-container-high border-none rounded px-2 py-1 text-right w-24" />
                           ) : (
@@ -1615,7 +1621,7 @@ const Inventory = () => {
                        </li>
                        {isEditingDetail && (
                           <li className="flex justify-between items-center">
-                             <span className="text-on-surface-variant">Quản lý đặc biệt:</span> 
+                             <span className="text-on-surface-variant">{tr("Quản lý đặc biệt:")}</span> 
                              <label className="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" checked={editDetailData?.critical || false} onChange={e => setEditDetailData({...editDetailData, critical: e.target.checked})} className="rounded text-error focus:ring-error" />
                                 <span className="text-xs font-bold text-error">Critical Item</span>
@@ -1628,10 +1634,10 @@ const Inventory = () => {
 
                 {isEditingDetail && (
                   <div className="mt-2 p-4 bg-surface-container rounded-xl border border-outline-variant/10">
-                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Lý do thay đổi <span className="text-error">*</span></label>
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Lý do thay đổi")} <span className="text-error">*</span></label>
                     <textarea 
                       className="w-full bg-surface-container-lowest border-none rounded-lg p-2 text-sm focus:ring-1 focus:ring-primary h-20 outline-none"
-                      placeholder="Nhập lý do chỉnh sửa thông tin vật tư..."
+                      placeholder={tr("Nhập lý do chỉnh sửa thông tin vật tư...")}
                       value={editDetailData?.editReason || ''}
                       onChange={e => setEditDetailData({...editDetailData, editReason: e.target.value})}
                     />
@@ -1663,7 +1669,7 @@ const Inventory = () => {
                       className="text-primary text-xs font-bold hover:underline flex items-center gap-1"
                     >
                       <span className="material-symbols-outlined text-sm">history</span>
-                      Xem lịch sử chỉnh sửa thông tin
+                      {tr("Xem lịch sử chỉnh sửa thông tin")}
                     </button>
                   </div>
                 )}
@@ -1671,7 +1677,7 @@ const Inventory = () => {
                 {!isEditingDetail && selectedItemDetail.critical && (
                   <div className="bg-error-container/20 border border-error/20 p-4 rounded-xl flex items-center gap-3">
                      <span className="material-symbols-outlined text-error">warning</span>
-                     <p className="text-sm font-medium text-error">Vật tư này được đánh dấu là <span className="font-bold">vật tư quan trọng (Critical Item)</span>. Cần chú ý theo dõi mức tồn kho.</p>
+                     <p className="text-sm font-medium text-error">{tr("Vật tư này được đánh dấu là")} <span className="font-bold">{tr("vật tư quan trọng (Critical Item)")}</span>. Cần chú ý theo dõi mức tồn kho.</p>
                   </div>
                 )}
               </div>
@@ -1696,8 +1702,8 @@ const Inventory = () => {
                     <span className="material-symbols-outlined">emergency_home</span>
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold font-manrope text-on-surface">Vật tư quan trọng cần mua</h3>
-                    <p className="text-sm font-medium text-on-surface-variant">Danh sách các mã hàng được đánh dấu "Critical Item" có mức tồn kho dưới định mức tối thiểu.</p>
+                    <h3 className="text-2xl font-bold font-manrope text-on-surface">{tr("Vật tư quan trọng cần mua")}</h3>
+                    <p className="text-sm font-medium text-on-surface-variant">{tr("Danh sách các mã hàng được đánh dấu \"Critical Item\" có mức tồn kho dưới định mức tối thiểu.")}</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -1721,12 +1727,12 @@ const Inventory = () => {
                 <table className="w-full text-left">
                   <thead className="bg-surface-container-low sticky top-0 z-10 shadow-sm">
                     <tr className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">
-                      <th className="py-4 px-6 border-b border-outline-variant/20">Mã ERP</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20">Tên Vật Tư</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20">Vị trí</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20 text-right">Tồn tối thiểu</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20 text-right">Tồn hiện tại</th>
-                      <th className="py-4 px-6 border-b border-outline-variant/20 text-center">Phân loại</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Mã ERP")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Tên Vật Tư")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Vị trí")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20 text-right">{tr("Tồn tối thiểu")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20 text-right">{tr("Tồn hiện tại")}</th>
+                      <th className="py-4 px-6 border-b border-outline-variant/20 text-center">{tr("Phân loại")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/10 text-sm">
@@ -1736,10 +1742,10 @@ const Inventory = () => {
                            <span className="bg-surface-container-high px-2 py-1 rounded-lg text-xs font-black shadow-sm">{item.erp}</span>
                         </td>
                         <td className="py-4 px-6">
-                           <div className="font-bold text-surface">{item.name ? item.name : <span className="text-amber-500 italic flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">warning</span> Thiếu thông tin</span>}</div>
+                           <div className="font-bold text-surface">{item.name ? item.name : <span className="text-amber-500 italic flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">warning</span> {tr("Thiếu thông tin")}</span>}</div>
                            <div className="text-xs text-on-surface-variant flex gap-2">
-                             {item.spec && <span>Quy cách: {item.spec}</span>}
-                             <span>ĐVT: {item.unit}</span>
+                             {item.spec && <span>{tr("Quy cách:")} {item.spec}</span>}
+                             <span>{tr("ĐVT:")} {item.unit}</span>
                            </div>
                         </td>
                         <td className="py-4 px-6 font-medium text-surface-variant">{item.pos || '-'}</td>
@@ -1752,7 +1758,7 @@ const Inventory = () => {
                     )) : (
                       <tr key="empty-lowstock">
                         <td colSpan={6} className="py-12 text-center text-on-surface-variant italic">
-                           Thật tuyệt vời! Không có vật tư nào cảnh báo.
+                           {tr("Thật tuyệt vời! Không có vật tư nào cảnh báo.")}
                         </td>
                       </tr>
                     )}
@@ -1775,17 +1781,17 @@ const Inventory = () => {
               className="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[70vh] border border-outline-variant/10"
             >
               <div className="p-4 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low">
-                 <h3 className="font-bold font-manrope">Lịch sử thay đổi: {selectedItemDetail?.erp}</h3>
+                 <h3 className="font-bold font-manrope">{tr("Lịch sử thay đổi:")} {selectedItemDetail?.erp}</h3>
                  <button onClick={() => setShowItemEditHistory(false)} className="material-symbols-outlined text-on-surface-variant hover:text-error transition-colors">close</button>
               </div>
               <div className="flex-1 overflow-y-auto font-sans">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-surface-container-lowest sticky top-0 border-b border-outline-variant/10">
                     <tr>
-                      <th className="py-3 px-4 text-on-surface-variant uppercase font-black tracking-widest text-[9px]">Thời gian</th>
-                      <th className="py-3 px-4 text-on-surface-variant uppercase font-black tracking-widest text-[9px]">Trường</th>
-                      <th className="py-3 px-4 text-on-surface-variant uppercase font-black tracking-widest text-[9px]">Từ ➜ Sang</th>
-                      <th className="py-3 px-4 text-on-surface-variant uppercase font-black tracking-widest text-[9px]">Ghi chú/Người sửa</th>
+                      <th className="py-3 px-4 text-on-surface-variant uppercase font-black tracking-widest text-[9px]">{tr("Thời gian")}</th>
+                      <th className="py-3 px-4 text-on-surface-variant uppercase font-black tracking-widest text-[9px]">{tr("Trường")}</th>
+                      <th className="py-3 px-4 text-on-surface-variant uppercase font-black tracking-widest text-[9px]">{tr("Từ ➜ Sang")}</th>
+                      <th className="py-3 px-4 text-on-surface-variant uppercase font-black tracking-widest text-[9px]">{tr("Ghi chú/Người sửa")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1808,26 +1814,26 @@ const Inventory = () => {
                       </tr>
                     )) : (
                       <tr key="empty-history">
-                        <td colSpan={4} className="py-10 text-center text-on-surface-variant italic">Không có dữ liệu chỉnh sửa.</td>
+                        <td colSpan={4} className="py-10 text-center text-on-surface-variant italic">{tr("Không có dữ liệu chỉnh sửa.")}</td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
               <div className="px-4 py-3 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-                <span>Tổng cộng {itemEditHistory.length} lần điều chỉnh</span>
+                <span>{tr("Tổng cộng")} {itemEditHistory.length} {tr("lần điều chỉnh")}</span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
                       import('xlsx').then(XLSX => {
                         const rows = itemEditHistory.map(item => ({
-                          'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
-                          'Mã ERP': item.erp_code || '',
-                          'Trường': item.field_name || '',
-                          'Giá trị cũ': item.old_value || '',
-                          'Giá trị mới': item.new_value || '',
-                          'Ghi chú': item.reason || '',
-                          'Người sửa': item.edited_by || '',
+                          [tr("Thời gian")]: new Date(item.edited_at).toLocaleString('vi-VN'),
+                          [tr("Mã ERP")]: item.erp_code || '',
+                          [tr("Trường")]: item.field_name || '',
+                          [tr("Giá trị cũ")]: item.old_value || '',
+                          [tr("Giá trị mới")]: item.new_value || '',
+                          [tr("Ghi chú")]: item.reason || '',
+                          [tr("Người sửa")]: item.edited_by || '',
                         }));
                         const ws = XLSX.utils.json_to_sheet(rows);
                         const wb = XLSX.utils.book_new();
@@ -1838,10 +1844,10 @@ const Inventory = () => {
                     className="flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-[10px] shadow hover:bg-emerald-700 transition-colors"
                   >
                     <span className="material-symbols-outlined text-sm">download</span>
-                    Xuất Excel
+                    {tr("Xuất Excel")}
                   </button>
                   <button onClick={() => setShowItemEditHistory(false)} className="px-4 py-2 bg-primary text-on-primary rounded-xl font-bold text-[10px] shadow hover:opacity-90 transition-all">
-                    Đóng
+                    {tr("Đóng")}
                   </button>
                 </div>
               </div>
@@ -1857,9 +1863,9 @@ const Inventory = () => {
             <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
               <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
             </div>
-            <h3 className="text-xl font-black text-on-surface mb-2">Xác nhận xóa {selectedRows.length} item</h3>
+            <h3 className="text-xl font-black text-on-surface mb-2">{tr("Xác nhận xóa")} {selectedRows.length} item</h3>
             <p className="text-on-surface-variant text-sm mb-6 leading-relaxed">
-              Bạn có chắc chắn muốn XÓA <strong className="text-error">{selectedRows.length}</strong> item đã chọn khỏi tồn kho? Hành động này sẽ được ghi log lại.
+              {tr("Bạn có chắc chắn muốn XÓA")} <strong className="text-error">{selectedRows.length}</strong> {tr("item đã chọn khỏi tồn kho? Hành động này sẽ được ghi log lại.")}
             </p>
             <div className="flex gap-3">
               <button 
@@ -1867,14 +1873,14 @@ const Inventory = () => {
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
                 disabled={loading}
               >
-                Hủy
+                {tr("Hủy")}
               </button>
               <button 
                 onClick={executeDeleteSelected}
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-error text-on-error shadow-lg shadow-error/20 hover:opacity-90 transition-opacity"
                 disabled={loading}
               >
-                {loading ? 'Đang xóa...' : 'Xác nhận xóa'}
+                {loading ? tr("Đang xóa...") : tr("Xác nhận xóa")}
               </button>
             </div>
           </div>
@@ -1888,9 +1894,9 @@ const Inventory = () => {
             <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
               <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>delete_forever</span>
             </div>
-            <h3 className="text-xl font-black text-error mb-2">⚠ CẢNH BÁO NGUY HIỂM</h3>
+            <h3 className="text-xl font-black text-error mb-2">{tr("⚠ CẢNH BÁO NGUY HIỂM")}</h3>
             <p className="text-on-surface-variant text-sm mb-6 leading-relaxed">
-              Bạn sắp XÓA <strong className="text-error">TOÀN BỘ</strong> dữ liệu tồn kho. Hành động này <strong className="text-error">KHÔNG THỂ HOÀN TÁC</strong>. Chỉ thực hiện khi cần reset dữ liệu để nhập lại từ đầu.
+              {tr("Bạn sắp XÓA")} <strong className="text-error">{tr("TOÀN BỘ")}</strong> {tr("dữ liệu tồn kho. Hành động này")} <strong className="text-error">{tr("KHÔNG THỂ HOÀN TÁC")}</strong>. Chỉ thực hiện khi cần reset dữ liệu để nhập lại từ đầu.
             </p>
             <div className="flex gap-3">
               <button 
@@ -1898,14 +1904,14 @@ const Inventory = () => {
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
                 disabled={loading}
               >
-                Hủy
+                {tr("Hủy")}
               </button>
               <button 
                 onClick={executeDeleteAll}
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-error text-on-error shadow-lg shadow-error/20 hover:opacity-90 transition-opacity"
                 disabled={loading}
               >
-                {loading ? 'Đang xóa...' : 'XÓA TOÀN BỘ'}
+                {loading ? tr("Đang xóa...") : tr("XÓA TOÀN BỘ")}
               </button>
             </div>
           </div>

@@ -49,13 +49,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
           const isFirstAdmin = userData.user.email === 'natalietran071@gmail.com';
+          const loginCode = (userData.user.user_metadata?.login_code || userData.user.email?.split('@')[0] || '').toUpperCase();
           const { data: newProfile, error: upsertError } = await supabase
             .from('profiles')
             .upsert({
               id: userId,
-              email: userData.user.email,
-              full_name: userData.user.user_metadata?.full_name || userData.user.email,
-              role: isFirstAdmin ? 'admin' : 'view'
+              username: loginCode,
+              login_code: loginCode,
+              full_name: userData.user.user_metadata?.full_name || loginCode,
+              role: isFirstAdmin ? 'admin' : 'viewer',
+              is_active: true
             })
             .select()
             .single();

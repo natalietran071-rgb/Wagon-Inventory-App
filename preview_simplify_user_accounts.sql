@@ -1,5 +1,6 @@
 -- Tinh giản tài khoản người dùng: đăng nhập bằng MÃ + MẬT KHẨU, không dùng email.
--- Đã áp dụng lên project Supabase "Wagon Preview" (nfenstuyyzjommplhsbj).
+-- Đã áp dụng lên cả hai project Supabase: "Wagon Preview" (nfenstuyyzjommplhsbj)
+-- và Main (zginbmciyiqpvttntbeq). Chạy lại được nhiều lần (idempotent).
 --
 -- Cách hoạt động:
 --   * Mỗi user có profiles.login_code (duy nhất, viết hoa). User bộ phận dùng chính
@@ -130,6 +131,7 @@ GRANT EXECUTE ON FUNCTION public.resolve_login_email(text) TO anon, authenticate
 -- 4. RPC quản trị (bỏ các bản cũ nhận email / username / password)
 -- ---------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.admin_create_user(text, text, text, text, text, text, text);
+DROP FUNCTION IF EXISTS public.admin_update_user(uuid, text, text, text, text, boolean, text);
 DROP FUNCTION IF EXISTS public.admin_update_user(uuid, text, text, text, text, boolean, text, text, text);
 DROP FUNCTION IF EXISTS public.get_all_users();
 

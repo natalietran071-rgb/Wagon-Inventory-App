@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import { vi } from '../i18n/vi';
 import { zh } from '../i18n/zh';
 import { en } from '../i18n/en';
 
@@ -13,9 +14,9 @@ interface LanguageContextType {
 export type TrParams = Record<string, unknown> | unknown[];
 
 // Từ điển: khóa là chính câu tiếng Việt trong mã nguồn (hoặc khóa ngắn cho menu).
-// Tiếng Việt là ngôn ngữ gốc nên không cần từ điển riêng: tr(key) trả về key.
+// Tiếng Việt chỉ cần bản dịch cho các khóa ngắn (menu, cột); câu tiếng Việt thì tr(key) trả về key.
 const translations: Record<Language, Record<string, string>> = {
-  vi: {},
+  vi,
   en,
   zh,
 };

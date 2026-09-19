@@ -1320,6 +1320,42 @@ const Inventory = () => {
                 </tr>
               )}
             </tbody>
+            {paginatedItems.length > 0 && (() => {
+              // SUBTOTAL(9): chỉ cộng các dòng đang được tick; chưa tick dòng nào thì cộng cả trang đang hiển thị.
+              const usePeriod = Boolean(reportFromDate && reportToDate);
+              const selectedSet = new Set(selectedRows);
+              const rows = selectedSet.size > 0 ? paginatedItems.filter(i => selectedSet.has(i.id)) : paginatedItems;
+              const sum = rows.reduce((acc, item) => {
+                acc.start += Number(item.start_stock || 0);
+                acc.in += Number(usePeriod ? (item.in_period || 0) : (item.in_qty || 0));
+                acc.out += Number(usePeriod ? (item.out_period || 0) : (item.out_qty || 0));
+                acc.end += Number(item.end_stock || 0);
+                return acc;
+              }, { start: 0, in: 0, out: 0, end: 0 });
+              const isSelection = selectedSet.size > 0;
+              const fmt = (n: number) => n.toLocaleString('en-US');
+              return (
+                <tfoot>
+                  <tr className={`border-t-2 ${isSelection ? 'border-primary bg-primary-container/20' : 'border-outline-variant/30 bg-surface-container-low/60'}`}>
+                    {canAdmin && <td className="px-2 py-3 w-8"></td>}
+                    <td className="px-4 py-3 hidden md:table-cell font-black text-[11px] uppercase tracking-wider text-on-surface">Σ {tr("Tổng")}</td>
+                    <td className="px-3 py-3 text-[11px] font-bold text-on-surface-variant">
+                      {isSelection ? tr("{0} dòng đã chọn", [rows.length]) : tr("{0} dòng trên trang", [rows.length])}
+                    </td>
+                    <td className="px-3 py-3 hidden md:table-cell"></td>
+                    <td className="px-3 py-3 hidden xl:table-cell"></td>
+                    <td className="px-3 py-3 hidden md:table-cell"></td>
+                    <td className="px-3 py-3 md:hidden lg:table-cell"></td>
+                    <td className="px-3 py-3 hidden xl:table-cell"></td>
+                    <td className="px-4 py-3 text-right font-black text-[11px] data-value hidden lg:table-cell text-on-surface-variant">{fmt(sum.start)}</td>
+                    <td className="px-3 py-3 text-right font-black text-[11px] data-value hidden lg:table-cell text-primary">{sum.in > 0 ? `+${fmt(sum.in)}` : fmt(sum.in)}</td>
+                    <td className="px-3 py-3 text-right font-black text-[11px] data-value hidden lg:table-cell text-secondary">{fmt(sum.out)}</td>
+                    <td className={`px-4 py-3 text-right font-black text-sm data-value ${sum.end < 0 ? 'text-error' : 'text-primary'}`}>{fmt(sum.end)}</td>
+                    {canAdmin && <td className="px-3 py-3 hidden lg:table-cell"></td>}
+                  </tr>
+                </tfoot>
+              );
+            })()}
           </table>
         </div>
         <div className="px-4 md:px-8 py-4 md:py-6 border-t border-surface-container flex flex-col sm:flex-row justify-between items-center bg-surface-container-low/30 gap-4">

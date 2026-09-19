@@ -492,6 +492,21 @@ const Inventory = () => {
   const totalPages = Math.ceil(totalFilteredCount / itemsPerPage) || 1;
   const paginatedItems = items;
 
+  // SUBTOTAL(9): chỉ cộng các dòng đang được tick; chưa tick dòng nào thì cộng cả trang đang hiển thị.
+  const subtotal = useMemo(() => {
+    const usePeriod = Boolean(reportFromDate && reportToDate);
+    const selectedSet = new Set(selectedRows);
+    const rows = selectedSet.size > 0 ? paginatedItems.filter(i => selectedSet.has(i.id)) : paginatedItems;
+    const sum = rows.reduce((acc, item) => {
+      acc.start += Number(item.start_stock || 0);
+      acc.in += Number(usePeriod ? (item.in_period || 0) : (item.in_qty || 0));
+      acc.out += Number(usePeriod ? (item.out_period || 0) : (item.out_qty || 0));
+      acc.end += Number(item.end_stock || 0);
+      return acc;
+    }, { start: 0, in: 0, out: 0, end: 0 });
+    return { ...sum, count: rows.length, isSelection: selectedSet.size > 0 };
+  }, [paginatedItems, selectedRows, reportFromDate, reportToDate]);
+
   // Calculations for Dashboard Cards
   const [deletedItems, setDeletedItems] = useState<any[]>([]);
 
@@ -1185,10 +1200,29 @@ const Inventory = () => {
         <div className="overflow-x-auto no-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
+              {paginatedItems.length > 0 && (
+                // Hàng tổng (SUBTOTAL 9) nằm ngay trên tiêu đề cột, thẳng hàng với Tồn đầu / Nhập / Xuất / Tồn cuối.
+                <tr className={`border-b ${subtotal.isSelection ? 'bg-primary-container/25 border-primary/40' : 'bg-surface-container-low/70 border-outline-variant/20'}`}>
+                  {canAdmin && <td className="px-2 py-2 w-8"></td>}
+                  <td className="px-4 py-2 hidden md:table-cell font-black text-[10px] uppercase tracking-widest text-on-surface">Σ {tr("Tổng")}</td>
+                  <td className="px-3 py-2 text-[11px] font-bold text-on-surface-variant" colSpan={2}>
+                    {subtotal.isSelection ? tr("{0} dòng đã chọn", [subtotal.count]) : tr("{0} dòng trên trang", [subtotal.count])}
+                  </td>
+                  <td className="px-3 py-2 hidden xl:table-cell"></td>
+                  <td className="px-3 py-2 hidden md:table-cell"></td>
+                  <td className="px-3 py-2 md:hidden lg:table-cell"></td>
+                  <td className="px-3 py-2 hidden xl:table-cell"></td>
+                  <td className="px-4 py-2 text-right font-black text-xs data-value hidden lg:table-cell text-on-surface-variant">{subtotal.start.toLocaleString('en-US')}</td>
+                  <td className="px-3 py-2 text-right font-black text-xs data-value hidden lg:table-cell text-primary">{subtotal.in > 0 ? `+${subtotal.in.toLocaleString('en-US')}` : subtotal.in.toLocaleString('en-US')}</td>
+                  <td className="px-3 py-2 text-right font-black text-xs data-value hidden lg:table-cell text-secondary">{subtotal.out.toLocaleString('en-US')}</td>
+                  <td className={`px-4 py-2 text-right font-black text-sm data-value ${subtotal.end < 0 ? 'text-error' : 'text-primary'}`}>{subtotal.end.toLocaleString('en-US')}</td>
+                  {canAdmin && <td className="px-3 py-2 hidden lg:table-cell"></td>}
+                </tr>
+              )}
               <tr className="bg-surface-container-low/50">
                 {canAdmin && (
                   <th className="py-4 px-2 w-8">
-                    <input 
+                    <input
                       type="checkbox"
                       className="w-3.5 h-3.5 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
                       onChange={handleSelectAll}
@@ -1320,42 +1354,6 @@ const Inventory = () => {
                 </tr>
               )}
             </tbody>
-            {paginatedItems.length > 0 && (() => {
-              // SUBTOTAL(9): chỉ cộng các dòng đang được tick; chưa tick dòng nào thì cộng cả trang đang hiển thị.
-              const usePeriod = Boolean(reportFromDate && reportToDate);
-              const selectedSet = new Set(selectedRows);
-              const rows = selectedSet.size > 0 ? paginatedItems.filter(i => selectedSet.has(i.id)) : paginatedItems;
-              const sum = rows.reduce((acc, item) => {
-                acc.start += Number(item.start_stock || 0);
-                acc.in += Number(usePeriod ? (item.in_period || 0) : (item.in_qty || 0));
-                acc.out += Number(usePeriod ? (item.out_period || 0) : (item.out_qty || 0));
-                acc.end += Number(item.end_stock || 0);
-                return acc;
-              }, { start: 0, in: 0, out: 0, end: 0 });
-              const isSelection = selectedSet.size > 0;
-              const fmt = (n: number) => n.toLocaleString('en-US');
-              return (
-                <tfoot>
-                  <tr className={`border-t-2 ${isSelection ? 'border-primary bg-primary-container/20' : 'border-outline-variant/30 bg-surface-container-low/60'}`}>
-                    {canAdmin && <td className="px-2 py-3 w-8"></td>}
-                    <td className="px-4 py-3 hidden md:table-cell font-black text-[11px] uppercase tracking-wider text-on-surface">Σ {tr("Tổng")}</td>
-                    <td className="px-3 py-3 text-[11px] font-bold text-on-surface-variant">
-                      {isSelection ? tr("{0} dòng đã chọn", [rows.length]) : tr("{0} dòng trên trang", [rows.length])}
-                    </td>
-                    <td className="px-3 py-3 hidden md:table-cell"></td>
-                    <td className="px-3 py-3 hidden xl:table-cell"></td>
-                    <td className="px-3 py-3 hidden md:table-cell"></td>
-                    <td className="px-3 py-3 md:hidden lg:table-cell"></td>
-                    <td className="px-3 py-3 hidden xl:table-cell"></td>
-                    <td className="px-4 py-3 text-right font-black text-[11px] data-value hidden lg:table-cell text-on-surface-variant">{fmt(sum.start)}</td>
-                    <td className="px-3 py-3 text-right font-black text-[11px] data-value hidden lg:table-cell text-primary">{sum.in > 0 ? `+${fmt(sum.in)}` : fmt(sum.in)}</td>
-                    <td className="px-3 py-3 text-right font-black text-[11px] data-value hidden lg:table-cell text-secondary">{fmt(sum.out)}</td>
-                    <td className={`px-4 py-3 text-right font-black text-sm data-value ${sum.end < 0 ? 'text-error' : 'text-primary'}`}>{fmt(sum.end)}</td>
-                    {canAdmin && <td className="px-3 py-3 hidden lg:table-cell"></td>}
-                  </tr>
-                </tfoot>
-              );
-            })()}
           </table>
         </div>
         <div className="px-4 md:px-8 py-4 md:py-6 border-t border-surface-container flex flex-col sm:flex-row justify-between items-center bg-surface-container-low/30 gap-4">

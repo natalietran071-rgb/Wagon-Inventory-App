@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import * as XLSX from 'xlsx';
+import { tr } from '../contexts/LanguageContext';
 
 const ItemManagement = () => {
   const { profile } = useAuth();
@@ -91,7 +92,7 @@ const ItemManagement = () => {
 
   const approvePendingInbound = async (p: any) => {
     if (!p.erp?.trim() || !p.name?.trim()) {
-      alert('Cần có Mã ERP và Tên vật tư trước khi xác nhận.');
+      alert(tr("Cần có Mã ERP và Tên vật tư trước khi xác nhận."));
       return;
     }
     setPendingModalSaving(true);
@@ -103,21 +104,21 @@ const ItemManagement = () => {
         // Update existing record
         const { error: updErr } = await supabase.from('inventory').update({
           name: p.name, name_zh: p.name_zh, category: p.category,
-          unit: p.unit || 'Cái (PCS)', spec: p.spec, pos: p.pos,
+          unit: p.unit || tr("Cái (PCS)"), spec: p.spec, pos: p.pos,
           price: p.price || 0, critical: p.critical || false, is_incomplete: false,
           updated_at: new Date().toISOString(),
         }).eq('erp', erpTrimmed);
-        if (updErr) { alert('Lỗi cập nhật: ' + updErr.message); setPendingModalSaving(false); return; }
+        if (updErr) { alert(tr("Lỗi cập nhật:") + updErr.message); setPendingModalSaving(false); return; }
       } else {
         // Insert new record
         const { error: insErr } = await supabase.from('inventory').insert([{
           erp: erpTrimmed, name: p.name, name_zh: p.name_zh, category: p.category,
-          unit: p.unit || 'Cái (PCS)', spec: p.spec, pos: p.pos,
+          unit: p.unit || tr("Cái (PCS)"), spec: p.spec, pos: p.pos,
           start_stock: p.start_stock || 0, end_stock: p.start_stock || 0,
           price: p.price || 0, critical: p.critical || false,
           in_qty: 0, out_qty: 0, created_at: new Date().toISOString(), is_incomplete: false,
         }]);
-        if (insErr) { alert('Lỗi thêm mới: ' + insErr.message); setPendingModalSaving(false); return; }
+        if (insErr) { alert(tr("Lỗi thêm mới:") + insErr.message); setPendingModalSaving(false); return; }
       }
       if (p.order_id && p.qty > 0) {
         await supabase.from('inbound_records').insert([{
@@ -146,7 +147,7 @@ const ItemManagement = () => {
         category: editingPending.category, unit: editingPending.unit, spec: editingPending.spec,
         pos: editingPending.pos, start_stock: editingPending.start_stock, price: editingPending.price,
       }).eq('id', editingPending.id);
-      if (error) { alert('Lỗi lưu: ' + error.message); return; }
+      if (error) { alert(tr("Lỗi lưu:") + error.message); return; }
       setShowPendingModal(false);
       setEditingPending(null);
       fetchPendingInbound();
@@ -159,7 +160,7 @@ const ItemManagement = () => {
     setDeletingPending(true);
     try {
       const { error } = await supabase.from('inbound_upload_pending').delete().eq('id', p.id);
-      if (error) { alert('Lỗi xóa: ' + error.message); return; }
+      if (error) { alert(tr("Lỗi xóa:") + error.message); return; }
       setDeletePendingConfirm(null);
       fetchPendingInbound();
     } finally {
@@ -222,9 +223,9 @@ const ItemManagement = () => {
       .eq('erp', editingItem.erp);
     
     if (error) {
-      alert('Lỗi lưu thay đổi: ' + error.message);
+      alert(tr("Lỗi lưu thay đổi:") + error.message);
     } else {
-      alert('Đã cập nhật thông tin thành công!');
+      alert(tr("Đã cập nhật thông tin thành công!"));
       setEditingItem(null);
       fetchItemsByDate();
     }
@@ -250,15 +251,15 @@ const ItemManagement = () => {
   const exportToExcel = () => {
     import('xlsx').then(XLSX => {
       const exportData = dbItems.map(item => ({
-        'Thời gian tạo': new Date(item.created_at).toLocaleString(),
-        'Mã ERP': item.erp,
-        'Tên Vật Tư': item.name,
-        'Tên Tiếng Trung': item.name_zh || '',
-        'Quy cách': item.spec || '',
-        'Đơn vị': item.unit,
-        'Vị trí': item.pos || '',
-        'Tồn Đầu Kỳ': item.start_stock,
-        'Tồn Cuối': item.end_stock
+        [tr("Thời gian tạo")]: new Date(item.created_at).toLocaleString(),
+        [tr("Mã ERP")]: item.erp,
+        [tr("Tên Vật Tư")]: item.name,
+        [tr("Tên Tiếng Trung")]: item.name_zh || '',
+        [tr("Quy cách")]: item.spec || '',
+        [tr("Đơn vị")]: item.unit,
+        [tr("Vị trí")]: item.pos || '',
+        [tr("Tồn Đầu Kỳ")]: item.start_stock,
+        [tr("Tồn Cuối")]: item.end_stock
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -273,17 +274,17 @@ const ItemManagement = () => {
     if (!showSingleDeleteConfirm) return;
     const { error } = await supabase.from('inventory').delete().eq('erp', showSingleDeleteConfirm);
     if (!error) {
-      alert('Xóa thành công');
+      alert(tr("Xóa thành công"));
       fetchItemsByDate();
     } else {
-      alert('Không thể xóa vật tư. Có thể đang bị ràng buộc dữ liệu.');
+      alert(tr("Không thể xóa vật tư. Có thể đang bị ràng buộc dữ liệu."));
     }
     setShowSingleDeleteConfirm(null);
   };
 
   const handleDeleteFilteredListings = () => {
      if (!fromDate && !toDate && !searchQuery) {
-        alert('Vui lòng sử dụng tính năng "Tìm kiếm" hoặc "Lọc theo ngày" để chọn vùng dữ liệu trước khi xóa toàn bộ!');
+        alert(tr("Vui lòng sử dụng tính năng \"Tìm kiếm\" hoặc \"Lọc theo ngày\" để chọn vùng dữ liệu trước khi xóa toàn bộ!"));
         return;
      }
      if (filteredDbItems.length === 0) return;
@@ -303,11 +304,11 @@ const ItemManagement = () => {
            if (error) throw error;
            deletedCount += chunk.length;
         }
-        alert(`Đã xóa thành công ${deletedCount} mã vật tư.`);
+        alert(tr("Đã xóa thành công {0} mã vật tư.", [deletedCount]));
         fetchItemsByDate();
      } catch (err: any) {
         console.error('Lỗi khi xóa:', err);
-        alert('Không thể xóa số lượng lớn. Có thể một số mặt hàng bị ràng buộc ở các bảng khác (Kiểm kê, Yêu cầu vật tư...).');
+        alert(tr("Không thể xóa số lượng lớn. Có thể một số mặt hàng bị ràng buộc ở các bảng khác (Kiểm kê, Yêu cầu vật tư...)."));
      } finally {
         setLoading(false);
      }
@@ -325,12 +326,12 @@ const ItemManagement = () => {
         if (error) throw error;
         deletedCount += chunk.length;
       }
-      alert(`Đã xóa thành công ${deletedCount} mã vật tư đã chọn.`);
+      alert(tr("Đã xóa thành công {0} mã vật tư đã chọn.", [deletedCount]));
       setSelectedRows([]);
       fetchItemsByDate();
     } catch (err: any) {
       console.error('Lỗi khi xóa:', err);
-      alert('Không thể xóa. Có thể mã hàng đã được liên kết với các bảng dữ liệu khác.');
+      alert(tr("Không thể xóa. Có thể mã hàng đã được liên kết với các bảng dữ liệu khác."));
     } finally {
       setLoading(false);
     }
@@ -338,7 +339,7 @@ const ItemManagement = () => {
 
   useEffect(() => {
     if (profile && profile.role !== 'admin' && profile.role !== 'editor') {
-      alert('Bạn không có quyền truy cập trang này.');
+      alert(tr("Bạn không có quyền truy cập trang này."));
       navigate('/');
     }
   }, [profile, navigate]);
@@ -346,7 +347,7 @@ const ItemManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.erp || !formData.name) {
-      alert('Vui lòng điền đầy đủ Mã ERP và Tên vật tư.');
+      alert(tr("Vui lòng điền đầy đủ Mã ERP và Tên vật tư."));
       return;
     }
 
@@ -365,7 +366,7 @@ const ItemManagement = () => {
       }
 
       if (existing) {
-        alert('Mã ERP này đã tồn tại trong hệ thống!');
+        alert(tr("Mã ERP này đã tồn tại trong hệ thống!"));
         setLoading(false);
         return;
       }
@@ -393,12 +394,12 @@ const ItemManagement = () => {
         throw error;
       }
 
-      alert('Thêm vật tư thành công!');
+      alert(tr("Thêm vật tư thành công!"));
       fetchItemsByDate();
       setFormData({ erp: '', unit: 'Cái (PCS)', name: '', name_zh: '', category: '', spec: '', pos: '', start_stock: 0, price: 0, critical: false });
     } catch (err: any) {
       console.error('Submit error:', err);
-      alert('Lỗi khi lưu vật tư: ' + (err.message || 'Đã xảy ra lỗi không xác định.'));
+      alert(tr("Lỗi khi lưu vật tư:") + (err.message || tr("Đã xảy ra lỗi không xác định.")));
     } finally {
       setLoading(false);
     }
@@ -467,7 +468,7 @@ const ItemManagement = () => {
       }
 
       if (headerRowIndex === -1) {
-        alert('Không tìm thấy dòng tiêu đề (Header) trong file Excel.\nVui lòng đảm bảo file có chứa các cột như "Mã ERP", "Tên Vật Tư".\nBạn có thể tải Template về để xem mẫu chuẩn.');
+        alert(tr("Không tìm thấy dòng tiêu đề (Header) trong file Excel.\nVui lòng đảm bảo file có chứa các cột như \"Mã ERP\", \"Tên Vật Tư\".\nBạn có thể tải Template về để xem mẫu chuẩn."));
         setImporting(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
@@ -477,7 +478,7 @@ const ItemManagement = () => {
       const dataRows = rawData.slice(headerRowIndex + 1);
       
       if (dataRows.length > 20000) {
-        alert(`Số lượng dữ liệu (${dataRows.length} dòng) vượt quá giới hạn 20,000 dòng/lần tải. Vui lòng chia nhỏ file Excel ra hoặc xóa bớt để đảm bảo tốc độ và độ ổn định của hệ thống!`);
+        alert(tr("Số lượng dữ liệu ({0} dòng) vượt quá giới hạn 20,000 dòng/lần tải. Vui lòng chia nhỏ file Excel ra hoặc xóa bớt để đảm bảo tốc độ và độ ổn định của hệ thống!", [dataRows.length]));
         setImporting(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
@@ -494,7 +495,7 @@ const ItemManagement = () => {
       });
 
       if (!jsonData || jsonData.length === 0) {
-        alert('File Excel không có dữ liệu hoặc sai định dạng.');
+        alert(tr("File Excel không có dữ liệu hoặc sai định dạng."));
         setImporting(false);
         return;
       }
@@ -562,7 +563,7 @@ const ItemManagement = () => {
           _has_real_erp: !!inputErp,
           name_zh: getVal(row, ['Tên Vật Tư (CN)', 'Tên Vật Tư (ZH)', 'Tên Tiếng Trung', 'Chinese Name'])?.toString().trim() || '',
           category: getVal(row, ['Phân Loại', 'Category', 'Nhóm'])?.toString().trim() || '',
-          unit: getVal(row, ['Đơn Vị Tính', 'ĐVT', 'Unit'])?.toString().trim() || 'Cái (PCS)',
+          unit: getVal(row, ['Đơn Vị Tính', 'ĐVT', 'Unit'])?.toString().trim() || tr("Cái (PCS)"),
           spec: getVal(row, ['Quy Cách', 'Spec', 'Kích Thước'])?.toString().trim() || '',
           pos: getVal(row, ['Vị Trí', 'Location', 'Khu Vực'])?.toString().trim() || '',
           start_stock: (rawOrderId && !isOpeningStock) ? 0 : startStock,
@@ -604,7 +605,7 @@ const ItemManagement = () => {
       setDuplicateCount(fileDupCount);
 
       if (itemsToInsert.length === 0) {
-        alert(`Hệ thống đc được ${jsonData.length} dòng từ file Excel, nhưng KHÔNG CÓ dòng nào được parse.\nVui lòng kiểm tra lại định dạng file.`);
+        alert(tr("Hệ thống đc được {0} dòng từ file Excel, nhưng KHÔNG CÓ dòng nào được parse.\nVui lòng kiểm tra lại định dạng file.", [jsonData.length]));
         setImporting(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
@@ -615,7 +616,7 @@ const ItemManagement = () => {
       
     } catch (err: any) {
       console.error('Excel processing error:', err);
-      alert('Lỗi khi xử lý file Excel: ' + (err.message || 'Vui lòng kiểm tra lại định dạng file.'));
+      alert(tr("Lỗi khi xử lý file Excel:") + (err.message || tr("Vui lòng kiểm tra lại định dạng file.")));
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -675,7 +676,7 @@ const ItemManagement = () => {
           name:        item.name || '',
           name_zh:     item.name_zh || '',
           category:    item.category || '',
-          unit:        item.unit || 'Cái (PCS)',
+          unit:        item.unit || tr("Cái (PCS)"),
           spec:        item.spec || '',
           pos:         item.pos || '',
           start_stock: item.start_stock || 0,
@@ -779,7 +780,7 @@ const ItemManagement = () => {
                   name: failedItem.name || '',
                   name_zh: failedItem.name_zh || '',
                   category: failedItem.category || '',
-                  unit: failedItem.unit || 'Cái (PCS)',
+                  unit: failedItem.unit || tr("Cái (PCS)"),
                   spec: failedItem.spec || '',
                   pos: failedItem.pos || '',
                   start_stock: failedItem.start_stock || 0,
@@ -849,19 +850,19 @@ const ItemManagement = () => {
 
       const insertFailedCount = pendingToInsert.filter(p => p.reason === 'insert_failed').length;
       const pendingMsg = pendingInserted > 0
-        ? `\n⚠️ ${pendingInserted} dòng bất thường → chuyển vào tab Chờ xử lý${insertFailedCount > 0 ? ` (${insertFailedCount} lỗi lưu kho)` : ''}`
+        ? tr("\n⚠️ {0} dòng bất thường → chuyển vào tab Chờ xử lý{1}", [pendingInserted, insertFailedCount > 0 ? tr(" ({0} lỗi lưu kho)", [insertFailedCount]) : ''])
         : '';
       const pendingFailMsg = pendingFailedCount > 0
-        ? `\n❌ ${pendingFailedCount} dòng không thể lưu vào tab Chờ xử lý (lỗi database)` : '';
+        ? tr("\n❌ {0} dòng không thể lưu vào tab Chờ xử lý (lỗi database)", [pendingFailedCount]) : '';
 
       if (errorCount > 0 || pendingFailedCount > 0) {
-        alert(`Tải lên hoàn tất nhưng có lỗi.\n\nThành công: ${successCount} item${pendingMsg}${pendingFailMsg}`);
+        alert(tr("Tải lên hoàn tất nhưng có lỗi.\n\nThành công: {0} item{1}{2}", [successCount, pendingMsg, pendingFailMsg]));
       } else {
-        alert(`✅ Tải lên thành công ${successCount} item${allInboundRecords.length > 0 ? ` và ${allInboundRecords.length} phiếu nhập` : ''}!${pendingMsg}`);
+        alert(tr("✅ Tải lên thành công {0} item{1}!{2}", [successCount, allInboundRecords.length > 0 ? tr(" và {0} phiếu nhập", [allInboundRecords.length]) : '', pendingMsg]));
       }
     } catch (err: any) {
       console.error('Upload error:', err);
-      alert('Lỗi khi tải dữ liệu lên server: ' + err.message);
+      alert(tr("Lỗi khi tải dữ liệu lên server:") + err.message);
     } finally {
       setIsUploading(false);
       setParsedItems([]);
@@ -877,10 +878,10 @@ const ItemManagement = () => {
     const toApprove = pendingItems.filter(p => selectedPendingIds.includes(p.id) && p.erp?.trim() && p.name?.trim());
     const skipped = selectedPendingIds.length - toApprove.length;
     if (toApprove.length === 0) {
-      alert('Không có item nào hợp lệ trong lựa chọn (cần có Mã ERP và Tên vật tư).');
+      alert(tr("Không có item nào hợp lệ trong lựa chọn (cần có Mã ERP và Tên vật tư)."));
       return;
     }
-    if (!window.confirm(`Xác nhận đưa ${toApprove.length} item vào hệ thống?${skipped > 0 ? `\n(${skipped} item thiếu ERP/Tên sẽ bỏ qua)` : ''}`)) return;
+    if (!window.confirm(`Xác nhận đưa ${toApprove.length} item vào hệ thống?${skipped > 0 ? tr("({0} item thiếu ERP/Tên sẽ bỏ qua)", [skipped]) : ''}`)) return;
     setBulkPendingLoading(true);
     try {
       const CHUNK = 200;
@@ -892,7 +893,7 @@ const ItemManagement = () => {
       }
       const newItems = toApprove.filter(p => !existingErpSet.has(p.erp.trim())).map(p => ({
         erp: p.erp.trim(), name: p.name, name_zh: p.name_zh || '', category: p.category || '',
-        unit: p.unit || 'Cái (PCS)', spec: p.spec || '', pos: p.pos || '',
+        unit: p.unit || tr("Cái (PCS)"), spec: p.spec || '', pos: p.pos || '',
         start_stock: p.start_stock || 0, end_stock: p.start_stock || 0,
         price: p.price || 0, critical: p.critical || false,
         in_qty: 0, out_qty: 0, is_incomplete: false, created_at: new Date().toISOString(),
@@ -904,7 +905,7 @@ const ItemManagement = () => {
       for (const p of existingItems) {
         await supabase.from('inventory').update({
           name: p.name, name_zh: p.name_zh || '', category: p.category || '',
-          unit: p.unit || 'Cái (PCS)', spec: p.spec || '', pos: p.pos || '',
+          unit: p.unit || tr("Cái (PCS)"), spec: p.spec || '', pos: p.pos || '',
           price: p.price || 0, critical: p.critical || false, is_incomplete: false,
         }).eq('erp', p.erp.trim());
       }
@@ -922,11 +923,11 @@ const ItemManagement = () => {
         await supabase.from('inbound_upload_pending').delete().in('id', ids.slice(i, i + CHUNK));
       }
       setSelectedPendingIds([]);
-      alert(`✅ Đã xác nhận ${toApprove.length} item!`);
+      alert(tr("✅ Đã xác nhận {0} item!", [toApprove.length]));
       fetchPendingInbound();
       fetchItemsByDate();
     } catch (err: any) {
-      alert('Lỗi: ' + err.message);
+      alert(tr("Lỗi:") + err.message);
     } finally {
       setBulkPendingLoading(false);
     }
@@ -934,7 +935,7 @@ const ItemManagement = () => {
 
   const bulkDeleteSelected = async () => {
     if (selectedPendingIds.length === 0) return;
-    if (!window.confirm(`Xóa ${selectedPendingIds.length} item đã chọn khỏi tab chờ xử lý?\nDữ liệu đã nhập kho trước đó không bị ảnh hưởng.`)) return;
+    if (!window.confirm(tr("Xóa {0} item đã chọn khỏi tab chờ xử lý?\nDữ liệu đã nhập kho trước đó không bị ảnh hưởng.", [selectedPendingIds.length]))) return;
     setBulkPendingLoading(true);
     try {
       const CHUNK = 200;
@@ -944,7 +945,7 @@ const ItemManagement = () => {
       setSelectedPendingIds([]);
       fetchPendingInbound();
     } catch (err: any) {
-      alert('Lỗi: ' + err.message);
+      alert(tr("Lỗi:") + err.message);
     } finally {
       setBulkPendingLoading(false);
     }
@@ -970,19 +971,19 @@ const ItemManagement = () => {
   }, [pendingItems, pendingSearch, pendingReasonFilter]);
 
   const PENDING_REASON: Record<string, string> = {
-    missing_erp: 'Thiếu Mã ERP',
-    missing_name: 'Thiếu Tên vật tư',
-    missing_erp_and_name: 'Thiếu ERP & Tên',
-    duplicate_erp_in_file: 'Trùng hoàn toàn trong file',
-    name_mismatch_with_master: 'Tên khác Master ERP',
-    insert_failed: 'Lỗi lưu kho (cần xử lý lại)',
+    missing_erp: tr("Thiếu Mã ERP"),
+    missing_name: tr("Thiếu Tên vật tư"),
+    missing_erp_and_name: tr("Thiếu ERP & Tên"),
+    duplicate_erp_in_file: tr("Trùng hoàn toàn trong file"),
+    name_mismatch_with_master: tr("Tên khác Master ERP"),
+    insert_failed: tr("Lỗi lưu kho (cần xử lý lại)"),
   };
 
   const getPendingReasonLabel = (reason: string) => {
     if (!reason) return '';
     if (reason.startsWith('name_mismatch_with_master')) {
       const masterName = reason.split('|')[1];
-      return masterName ? `Tên khác Master: "${masterName}"` : 'Tên khác Master ERP';
+      return masterName ? tr("Tên khác Master: \"{0}\"", [masterName]) : tr("Tên khác Master ERP");
     }
     return PENDING_REASON[reason] || reason;
   };
@@ -993,11 +994,11 @@ const ItemManagement = () => {
       <div className="flex gap-1 bg-surface-container rounded-2xl p-1 w-fit">
         <button onClick={() => setActiveMainTab('items')}
           className={`px-5 py-2 rounded-xl text-sm font-bold transition-colors ${activeMainTab === 'items' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
-          Danh sách vật tư
+          {tr("Danh sách vật tư")}
         </button>
         <button onClick={() => setActiveMainTab('pending')}
           className={`px-5 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 ${activeMainTab === 'pending' ? 'bg-amber-500 text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
-          Chờ xử lý
+          {tr("Chờ xử lý")}
           {pendingCount > 0 && <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${activeMainTab === 'pending' ? 'bg-white/20' : 'bg-amber-500 text-white'}`}>{pendingCount}</span>}
         </button>
       </div>
@@ -1009,15 +1010,15 @@ const ItemManagement = () => {
             <div className="flex items-start gap-3 flex-1">
               <span className="material-symbols-outlined text-amber-500 text-2xl shrink-0">warning</span>
               <div>
-                <p className="text-sm font-bold text-on-surface">Dữ liệu cần xem xét trước khi nhập kho</p>
-                <p className="text-xs text-on-surface-variant mt-0.5">Bao gồm: thiếu ERP/Tên, trùng hoàn toàn trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm <strong className="text-amber-600">Xác nhận</strong> để đưa vào hệ thống.</p>
+                <p className="text-sm font-bold text-on-surface">{tr("Dữ liệu cần xem xét trước khi nhập kho")}</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">{tr("Bao gồm: thiếu ERP/Tên, trùng hoàn toàn trong file, hoặc tên khác Master ERP. Sửa thông tin rồi bấm")} <strong className="text-amber-600">{tr("Xác nhận")}</strong> {tr("để đưa vào hệ thống.")}</p>
               </div>
             </div>
           </div>
 
           {selectedPendingIds.length > 0 && (
             <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-primary/5 border border-primary/20 rounded-xl">
-              <span className="text-xs font-bold text-primary">Đã chọn {selectedPendingIds.length} mục</span>
+              <span className="text-xs font-bold text-primary">{tr("Đã chọn")} {selectedPendingIds.length} {tr("mục")}</span>
               <div className="flex gap-2 ml-auto">
                 <button
                   onClick={bulkApproveSelected}
@@ -1025,7 +1026,7 @@ const ItemManagement = () => {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-sm">check_circle</span>
-                  Xác nhận ({pendingItems.filter(p => selectedPendingIds.includes(p.id) && p.erp?.trim() && p.name?.trim()).length})
+                  {tr("Xác nhận (")}{pendingItems.filter(p => selectedPendingIds.includes(p.id) && p.erp?.trim() && p.name?.trim()).length})
                 </button>
                 <button
                   onClick={bulkDeleteSelected}
@@ -1033,23 +1034,23 @@ const ItemManagement = () => {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-error/10 text-error rounded-lg text-xs font-bold hover:bg-error/20 transition-colors disabled:opacity-50 border border-error/20"
                 >
                   <span className="material-symbols-outlined text-sm">delete_sweep</span>
-                  Xóa ({selectedPendingIds.length})
+                  {tr("Xóa (")}{selectedPendingIds.length})
                 </button>
-                <button onClick={() => setSelectedPendingIds([])} className="px-2 py-1.5 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors">Bỏ chọn</button>
+                <button onClick={() => setSelectedPendingIds([])} className="px-2 py-1.5 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors">{tr("Bỏ chọn")}</button>
               </div>
             </div>
           )}
 
           <div className="flex items-center justify-between mb-3 px-1">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-on-surface-variant">Tổng SL cần nhập:</span>
+              <span className="text-xs text-on-surface-variant">{tr("Tổng SL cần nhập:")}</span>
               <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-black">
                 {pendingItems.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}
               </span>
             </div>
             {(pendingSearch.trim() || pendingReasonFilter) && (
               <span className="text-xs text-on-surface-variant">
-                Lọc: <strong className="text-primary">{filteredPendingItems.length}</strong> / {pendingCount} mã
+                {tr("Lọc:")} <strong className="text-primary">{filteredPendingItems.length}</strong> / {pendingCount} {tr("mã")}
                 {' · SL: '}<strong className="text-primary">{filteredPendingItems.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}</strong>
               </span>
             )}
@@ -1063,7 +1064,7 @@ const ItemManagement = () => {
               if (key) reasonCounts[key] = (reasonCounts[key] || 0) + 1;
             });
             const chips = [
-              { key: '', label: 'Tất cả', count: pendingItems.length },
+              { key: '', label: tr("Tất cả"), count: pendingItems.length },
               ...Object.entries(PENDING_REASON)
                 .filter(([k]) => reasonCounts[k] > 0)
                 .map(([k, label]) => ({ key: k, label, count: reasonCounts[k] })),
@@ -1099,17 +1100,17 @@ const ItemManagement = () => {
             <input
               value={pendingSearch}
               onChange={e => setPendingSearch(e.target.value)}
-              placeholder="Tìm mã ERP, tên vật tư, Order ID..."
+              placeholder={tr("Tìm mã ERP, tên vật tư, Order ID...")}
               className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm border border-outline-variant/40 shadow-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all"
             />
           </div>
 
           {pendingLoading ? (
-            <p className="text-center py-12 text-on-surface-variant/40">Đang tải...</p>
+            <p className="text-center py-12 text-on-surface-variant/40">{tr("Đang tải...")}</p>
           ) : filteredPendingItems.length === 0 ? (
             <div className="text-center py-16 bg-surface-container-low rounded-2xl">
               <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 block mb-2">{pendingSearch ? 'search_off' : 'check_circle'}</span>
-              <p className="text-sm text-on-surface-variant/50">{pendingSearch || pendingReasonFilter ? `Không có kết quả phù hợp với bộ lọc hiện tại` : 'Không có mục nào đang chờ xử lý'}</p>
+              <p className="text-sm text-on-surface-variant/50">{pendingSearch || pendingReasonFilter ? `Không có kết quả phù hợp với bộ lọc hiện tại` : tr("Không có mục nào đang chờ xử lý")}</p>
             </div>
           ) : (
             <div className="bg-surface-container-low rounded-2xl overflow-hidden">
@@ -1124,14 +1125,14 @@ const ItemManagement = () => {
                           onChange={e => setSelectedPendingIds(e.target.checked ? filteredPendingItems.map(p => p.id) : [])}
                         />
                       </th>
-                      <th className="px-4 py-3">Mã ERP</th>
-                      <th className="px-4 py-3">Tên vật tư</th>
-                      <th className="px-4 py-3 hidden md:table-cell">Quy Cách</th>
+                      <th className="px-4 py-3">{tr("Mã ERP")}</th>
+                      <th className="px-4 py-3">{tr("Tên vật tư")}</th>
+                      <th className="px-4 py-3 hidden md:table-cell">{tr("Quy Cách")}</th>
                       <th className="px-4 py-3 hidden lg:table-cell">Order ID</th>
-                      <th className="px-4 py-3 hidden lg:table-cell text-right">SL Nhập</th>
-                      <th className="px-4 py-3 hidden lg:table-cell text-right">Tồn Đầu</th>
-                      <th className="px-4 py-3">Lý do</th>
-                      <th className="px-4 py-3 text-right">Thao tác</th>
+                      <th className="px-4 py-3 hidden lg:table-cell text-right">{tr("SL Nhập")}</th>
+                      <th className="px-4 py-3 hidden lg:table-cell text-right">{tr("Tồn Đầu")}</th>
+                      <th className="px-4 py-3">{tr("Lý do")}</th>
+                      <th className="px-4 py-3 text-right">{tr("Thao tác")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1144,8 +1145,8 @@ const ItemManagement = () => {
                             onChange={() => setSelectedPendingIds(prev => prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id])}
                           />
                         </td>
-                        <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
-                        <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">Chưa có tên</span>}</td>
+                        <td className="px-4 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp || <span className="italic text-on-surface-variant/40">{tr("Trống")}</span>}</td>
+                        <td className="px-4 py-3">{p.name || <span className="italic text-error/50 text-xs">{tr("Chưa có tên")}</span>}</td>
                         <td className="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{p.spec || '—'}</td>
                         <td className="px-4 py-3 hidden lg:table-cell text-on-surface-variant text-xs">{p.order_id || '—'}</td>
                         <td className="px-4 py-3 hidden lg:table-cell text-right text-xs font-semibold">{p.qty > 0 ? p.qty.toLocaleString('en-US') : <span className="text-on-surface-variant/40">0</span>}</td>
@@ -1153,9 +1154,9 @@ const ItemManagement = () => {
                         <td className="px-4 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full text-xs font-semibold">{getPendingReasonLabel(p.reason)}</span></td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1 justify-end">
-                            <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
-                            <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
-                            <button onClick={e => { e.stopPropagation(); setDeletePendingConfirm(p); }} className="p-1.5 rounded-lg text-outline-variant hover:text-error hover:bg-error/10 transition-colors" title="Xóa"><span className="material-symbols-outlined text-base">delete</span></button>
+                            <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="p-1.5 rounded-lg text-outline-variant hover:text-primary hover:bg-primary/10 transition-colors" title={tr("Sửa")}><span className="material-symbols-outlined text-base">edit</span></button>
+                            <button onClick={() => { setEditingPending({...p}); setShowPendingModal(true); }} className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>{tr("Xác nhận")}</button>
+                            <button onClick={e => { e.stopPropagation(); setDeletePendingConfirm(p); }} className="p-1.5 rounded-lg text-outline-variant hover:text-error hover:bg-error/10 transition-colors" title={tr("Xóa")}><span className="material-symbols-outlined text-base">delete</span></button>
                           </div>
                         </td>
                       </tr>
@@ -1171,13 +1172,13 @@ const ItemManagement = () => {
       {activeMainTab === 'items' && <>
       <div className="flex flex-col md:flex-row md:items-center justify-between items-start gap-4">
         <div>
-          <h2 className="text-3xl md:text-4xl font-extrabold font-manrope text-on-surface tracking-tight mb-2">Quản Lý Mã Vật Tư</h2>
-          <p className="text-on-surface-variant md:text-lg">Xem và chỉnh sửa danh sách vật tư. Đăng ký mã mới tại <strong>Master ERP</strong>.</p>
+          <h2 className="text-3xl md:text-4xl font-extrabold font-manrope text-on-surface tracking-tight mb-2">{tr("Quản Lý Mã Vật Tư")}</h2>
+          <p className="text-on-surface-variant md:text-lg">{tr("Xem và chỉnh sửa danh sách vật tư. Đăng ký mã mới tại")} <strong>Master ERP</strong>.</p>
         </div>
         <div className="flex flex-wrap gap-3 items-center">
-          <div className="flex flex-col items-center justify-center px-5 py-3 bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant/30 text-center gap-1 opacity-60 cursor-not-allowed" title="Tính năng đang phát triển">
+          <div className="flex flex-col items-center justify-center px-5 py-3 bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant/30 text-center gap-1 opacity-60 cursor-not-allowed" title={tr("Tính năng đang phát triển")}>
             <span className="material-symbols-outlined text-xl text-primary">add_a_photo</span>
-            <span className="text-[10px] font-bold text-on-surface-variant">Ảnh Minh Họa</span>
+            <span className="text-[10px] font-bold text-on-surface-variant">{tr("Ảnh Minh Họa")}</span>
           </div>
           <button
             type="button"
@@ -1185,7 +1186,7 @@ const ItemManagement = () => {
             className="px-6 py-3 bg-surface-container-high text-on-surface-variant rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-surface-container-highest transition-all"
           >
             <span className="material-symbols-outlined">download</span>
-            Tải Template
+            {tr("Tải Template")}
           </button>
           <button
             type="button"
@@ -1194,7 +1195,7 @@ const ItemManagement = () => {
             className="px-6 py-3 bg-secondary text-on-secondary rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg shadow-secondary/20 hover:opacity-90 transition-all disabled:opacity-50"
           >
             <span className="material-symbols-outlined">{importing ? 'sync' : 'upload_file'}</span>
-            {importing ? 'Đang tải...' : 'Upload Excel (Bulk)'}
+            {importing ? tr("Đang tải...") : 'Upload Excel (Bulk)'}
           </button>
           <input
             type="file"
@@ -1212,18 +1213,17 @@ const ItemManagement = () => {
             <div className="flex items-center gap-3 text-primary">
               <span className="material-symbols-outlined text-3xl">table_view</span>
               <div>
-                <h3 className="font-manrope font-bold text-xl">Xác nhận Dữ liệu Upload</h3>
+                <h3 className="font-manrope font-bold text-xl">{tr("Xác nhận Dữ liệu Upload")}</h3>
                 <p className="text-sm text-on-surface-variant font-medium">
-                  Hệ thống đã đọc được <span className="text-on-surface font-bold">{totalRows.toLocaleString('en-US')}</span> dòng.
-                  Tìm thấy <span className="text-primary font-bold">{(parsedItems.length - missingCount - duplicateCount).toLocaleString('en-US')}</span> vật tư hợp lệ.
-                  {missingCount > 0 && <span className="text-amber-600 ml-1 font-semibold">(⚠️ {missingCount.toLocaleString('en-US')} dòng thiếu ERP/Tên → <strong>Tab Chờ xử lý</strong>)</span>}
-                  {duplicateCount > 0 && <span className="text-orange-600 ml-1 font-semibold">(⚠️ {duplicateCount.toLocaleString('en-US')} dòng trùng Mã ERP trong file → <strong>Tab Chờ xử lý</strong>)</span>}
+                  {tr("Hệ thống đã đọc được")} <span className="text-on-surface font-bold">{totalRows.toLocaleString('en-US')}</span> {tr("dòng. Tìm thấy")} <span className="text-primary font-bold">{(parsedItems.length - missingCount - duplicateCount).toLocaleString('en-US')}</span> {tr("vật tư hợp lệ.")}
+                  {missingCount > 0 && <span className="text-amber-600 ml-1 font-semibold">(⚠️ {missingCount.toLocaleString('en-US')} {tr("dòng thiếu ERP/Tên →")} <strong>{tr("Tab Chờ xử lý")}</strong>)</span>}
+                  {duplicateCount > 0 && <span className="text-orange-600 ml-1 font-semibold">(⚠️ {duplicateCount.toLocaleString('en-US')} {tr("dòng trùng Mã ERP trong file →")} <strong>{tr("Tab Chờ xử lý")}</strong>)</span>}
                 </p>
               </div>
             </div>
             
             <div className="flex items-center gap-3 bg-surface-container-low p-3 rounded-xl border border-outline-variant/10">
-               <label className="text-xs font-bold text-on-surface-variant uppercase">Ngày mặc định (nếu ô Excel trống):</label>
+               <label className="text-xs font-bold text-on-surface-variant uppercase">{tr("Ngày mặc định (nếu ô Excel trống):")}</label>
                <input 
                   type="date"
                   value={bulkImportDate}
@@ -1237,13 +1237,13 @@ const ItemManagement = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-surface-container-low">
-                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase">Mã ERP</th>
-                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase">Tên Vật Tư (VN)</th>
-                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase">Tên Vật Tư (CN)</th>
-                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase">Đơn Vị</th>
-                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase text-right">Tồn Đầu / Nhập</th>
-                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase text-right">Ngày</th>
-                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase text-right">Đơn Nhập</th>
+                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase">{tr("Mã ERP")}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase">{tr("Tên Vật Tư (VN)")}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase">{tr("Tên Vật Tư (CN)")}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase">{tr("Đơn Vị")}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase text-right">{tr("Tồn Đầu / Nhập")}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase text-right">{tr("Ngày")}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase text-right">{tr("Đơn Nhập")}</th>
                 </tr>
               </thead>
               <tbody className="text-sm divide-y divide-outline-variant/10">
@@ -1254,7 +1254,7 @@ const ItemManagement = () => {
                     <td className="px-4 py-3 text-on-surface-variant">{item.name_zh || '-'}</td>
                     <td className="px-4 py-3 text-on-surface-variant">{item.unit}</td>
                     <td className="px-4 py-3 text-right font-bold text-secondary">{(item._temp_qty || item.start_stock).toLocaleString('en-US')}</td>
-                    <td className="px-4 py-3 text-right text-on-surface-variant whitespace-nowrap">{item._temp_date ? new Date(item._temp_date).toLocaleDateString('vi-VN') : 'Mặc định'}</td>
+                    <td className="px-4 py-3 text-right text-on-surface-variant whitespace-nowrap">{item._temp_date ? new Date(item._temp_date).toLocaleDateString('vi-VN') : tr("Mặc định")}</td>
                     <td className="px-4 py-3 text-right text-xs bg-secondary-container text-on-secondary-container max-w-[100px] truncate">{item._temp_order_id || '-'}</td>
                   </tr>
                 ))}
@@ -1262,7 +1262,7 @@ const ItemManagement = () => {
             </table>
             {parsedItems.length > 5 && (
               <div className="px-4 py-3 bg-surface-container-low/30 text-center text-xs font-medium text-on-surface-variant">
-                ... và {parsedItems.length - 5} vật tư khác
+                ... và {parsedItems.length - 5} {tr("vật tư khác")}
               </div>
             )}
           </div>
@@ -1270,7 +1270,7 @@ const ItemManagement = () => {
           {isUploading && (
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-bold text-primary">
-                <span>Đang tải lên hệ thống...</span>
+                <span>{tr("Đang tải lên hệ thống...")}</span>
                 <span>{uploadProgress}%</span>
               </div>
               <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
@@ -1288,7 +1288,7 @@ const ItemManagement = () => {
               disabled={isUploading}
               className="px-6 py-3 bg-surface-container-high text-on-surface-variant rounded-xl font-bold text-sm hover:bg-surface-container-highest transition-all disabled:opacity-50 flex-1"
             >
-              Hủy bỏ
+              {tr("Hủy bỏ")}
             </button>
             <button 
               onClick={confirmUpload}
@@ -1298,12 +1298,12 @@ const ItemManagement = () => {
               {isUploading ? (
                 <>
                   <span className="material-symbols-outlined animate-spin">sync</span>
-                  Đang xử lý...
+                  {tr("Đang xử lý...")}
                 </>
               ) : (
                 <>
                   <span className="material-symbols-outlined">cloud_upload</span>
-                  Xác nhận Upload {parsedItems.length - missingCount - duplicateCount} vật tư{(missingCount + duplicateCount) > 0 ? ` + ${missingCount + duplicateCount} chờ xử lý` : ''}
+                  {tr("Xác nhận Upload")} {parsedItems.length - missingCount - duplicateCount} {tr("vật tư")}{(missingCount + duplicateCount) > 0 ? ` + ${missingCount + duplicateCount} chờ xử lý` : ''}
                 </>
               )}
             </button>
@@ -1317,14 +1317,14 @@ const ItemManagement = () => {
           <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
             <h3 className="font-manrope font-bold text-lg md:text-xl flex items-center gap-2">
               <span className="material-symbols-outlined text-primary">history</span>
-              Danh sách quản lý mã vật tư
+              {tr("Danh sách quản lý mã vật tư")}
             </h3>
             
             <div className="flex gap-2 md:gap-4 items-center flex-wrap w-full xl:w-auto">
               <div className="flex-1 xl:flex-none relative bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10 flex items-center gap-2 w-full md:w-auto">
                 <input 
                   type="text"
-                  placeholder="Tìm kiếm: Mã ERP, tên, quy cách..."
+                  placeholder={tr("Tìm kiếm: Mã ERP, tên, quy cách...")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -1345,19 +1345,19 @@ const ItemManagement = () => {
                   className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary shrink-0"
                 />
                 <label htmlFor="incomplete-filter" className="text-[10px] md:text-xs font-bold text-on-surface cursor-pointer whitespace-nowrap">
-                  Thiếu thông tin
+                  {tr("Thiếu thông tin")}
                 </label>
               </div>
               <div className="flex items-center gap-2 bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10 flex-wrap w-full sm:w-auto">
                 <span className="material-symbols-outlined text-[10px] md:text-sm text-on-surface-variant shrink-0">calendar_today</span>
-                <span className="text-[10px] md:text-xs font-medium text-on-surface-variant whitespace-nowrap">Từ</span>
+                <span className="text-[10px] md:text-xs font-medium text-on-surface-variant whitespace-nowrap">{tr("Từ")}</span>
                 <input 
                   type="date" 
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
                   className="bg-transparent border-none text-[10px] md:text-xs font-bold focus:ring-0 cursor-pointer p-0 min-w-[90px]"
                 />
-                <span className="text-[10px] md:text-xs font-medium text-on-surface-variant ml-2 whitespace-nowrap">Đến</span>
+                <span className="text-[10px] md:text-xs font-medium text-on-surface-variant ml-2 whitespace-nowrap">{tr("Đến")}</span>
                 <input 
                   type="date" 
                   value={toDate}
@@ -1375,7 +1375,7 @@ const ItemManagement = () => {
                     className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-error text-on-error px-4 py-2 rounded-xl hover:opacity-90 transition-colors font-bold text-[10px] md:text-xs shadow-lg shadow-error/20"
                   >
                     <span className="material-symbols-outlined text-sm">delete</span>
-                    Xóa {selectedRows.length} mục
+                    {tr("Xóa")} {selectedRows.length} {tr("mục")}
                   </button>
                 )}
                 {(fromDate || toDate || searchQuery) && filteredDbItems.length > 0 && selectedRows.length === 0 && (
@@ -1384,7 +1384,7 @@ const ItemManagement = () => {
                      className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-error-container text-on-error-container px-4 py-2 rounded-xl hover:bg-error hover:text-on-error transition-colors font-bold text-[10px] md:text-xs"
                    >
                      <span className="material-symbols-outlined text-sm">delete_sweep</span>
-                     Xóa đã lọc
+                     {tr("Xóa đã lọc")}
                    </button>
                 )}
                 <button 
@@ -1392,7 +1392,7 @@ const ItemManagement = () => {
                   className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-surface-container-high px-4 py-2 rounded-xl text-primary hover:bg-primary-container hover:text-on-primary-container transition-colors font-bold text-[10px] md:text-xs"
                 >
                   <span className="material-symbols-outlined text-sm">download</span>
-                  Xuất Excel
+                  {tr("Xuất Excel")}
                 </button>
               </div>
             </div>
@@ -1409,12 +1409,12 @@ const ItemManagement = () => {
                       checked={filteredDbItems.length > 0 && selectedRows.length === filteredDbItems.length}
                     />
                   </th>
-                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase">Mã / Tên</th>
-                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase hidden md:table-cell">Tên Vật Tư (VN)</th>
-                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase hidden md:table-cell">Quy cách</th>
-                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase hidden sm:table-cell">Đơn Vị</th>
-                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase text-right hidden lg:table-cell">Số lượng nhập</th>
-                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase text-right">Thao tác</th>
+                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase">{tr("Mã / Tên")}</th>
+                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase hidden md:table-cell">{tr("Tên Vật Tư (VN)")}</th>
+                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase hidden md:table-cell">{tr("Quy cách")}</th>
+                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase hidden sm:table-cell">{tr("Đơn Vị")}</th>
+                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase text-right hidden lg:table-cell">{tr("Số lượng nhập")}</th>
+                  <th className="px-1 md:px-4 py-2 md:py-3 text-[10px] md:text-xs font-bold text-on-surface-variant uppercase text-right">{tr("Thao tác")}</th>
                 </tr>
               </thead>
               <tbody className="text-[10px] md:text-sm divide-y divide-outline-variant/10">
@@ -1430,16 +1430,16 @@ const ItemManagement = () => {
                         />
                       </td>
                       <td className="px-1 md:px-4 py-2 md:py-3 font-bold text-primary">
-                        <div className="text-[10px] md:text-sm">{item.erp || <span className="text-error italic text-[9px]">Thiếu mã</span>}</div>
+                        <div className="text-[10px] md:text-sm">{item.erp || <span className="text-error italic text-[9px]">{tr("Thiếu mã")}</span>}</div>
                         <div className="md:hidden mt-0.5">
-                          <div className="font-medium text-on-surface line-clamp-1 text-[9px]">{item.name || <span className="text-error italic text-[9px]">Thiếu Tên</span>}</div>
+                          <div className="font-medium text-on-surface line-clamp-1 text-[9px]">{item.name || <span className="text-error italic text-[9px]">{tr("Thiếu Tên")}</span>}</div>
                           {item.spec && <div className="text-on-surface-variant line-clamp-1 font-normal text-[8px] mt-0.5 -ml-px">{item.spec}</div>}
                         </div>
                       </td>
                       <td className="px-1 md:px-4 py-2 md:py-3 font-medium hidden md:table-cell">
-                        {item.name || <span className="text-error italic block text-[10px]">Thiếu Tên</span>}
+                        {item.name || <span className="text-error italic block text-[10px]">{tr("Thiếu Tên")}</span>}
                         {item.is_incomplete && (
-                          <span className="inline-block mt-1 bg-error/10 text-error px-2 py-0.5 rounded text-[8px] md:text-[10px] font-bold uppercase tracking-wider">Cần bổ sung</span>
+                          <span className="inline-block mt-1 bg-error/10 text-error px-2 py-0.5 rounded text-[8px] md:text-[10px] font-bold uppercase tracking-wider">{tr("Cần bổ sung")}</span>
                         )}
                       </td>
                       <td className="px-1 md:px-4 py-2 md:py-3 text-on-surface-variant hidden md:table-cell">
@@ -1452,7 +1452,7 @@ const ItemManagement = () => {
                          {item.start_stock.toLocaleString('en-US')}
                       </td>
                       <td className="px-1 md:px-4 py-2 md:py-3 text-right">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); }} className="text-on-surface-variant hover:text-primary hover:bg-primary/10 p-1 md:p-1.5 rounded-lg transition-colors" title="Sửa thông tin">
+                        <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); }} className="text-on-surface-variant hover:text-primary hover:bg-primary/10 p-1 md:p-1.5 rounded-lg transition-colors" title={tr("Sửa thông tin")}>
                           <span className="material-symbols-outlined text-[13px] md:text-sm">edit</span>
                         </button>
                       </td>
@@ -1462,7 +1462,7 @@ const ItemManagement = () => {
                 })}
                 {filteredDbItems.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-on-surface-variant italic">Không có dữ liệu phù hợp.</td>
+                    <td colSpan={7} className="px-4 py-8 text-center text-on-surface-variant italic">{tr("Không có dữ liệu phù hợp.")}</td>
                   </tr>
                 )}
               </tbody>
@@ -1482,7 +1482,7 @@ const ItemManagement = () => {
                   <span className="material-symbols-outlined text-amber-600">pending_actions</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-on-surface text-lg">Chỉnh sửa mục chờ xử lý</h3>
+                  <h3 className="font-bold text-on-surface text-lg">{tr("Chỉnh sửa mục chờ xử lý")}</h3>
                   <p className="text-xs text-on-surface-variant mt-0.5"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full font-semibold">{getPendingReasonLabel(editingPending.reason)}</span></p>
                 </div>
               </div>
@@ -1494,37 +1494,37 @@ const ItemManagement = () => {
             <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 md:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Mã ERP <span className="text-error">*</span></label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Mã ERP")} <span className="text-error">*</span></label>
                   <input value={editingPending.erp || ''} onChange={e => setEditingPending((x: any) => ({...x, erp: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm font-mono border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Nhập mã ERP..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm font-mono border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Nhập mã ERP...")} />
                 </div>
                 <div className="col-span-2 md:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Đơn Vị</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Đơn Vị")}</label>
                   <input value={editingPending.unit || ''} onChange={e => setEditingPending((x: any) => ({...x, unit: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Cái (PCS)..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Cái (PCS)...")} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tên Vật Tư (VN) <span className="text-error">*</span></label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Tên Vật Tư (VN)")} <span className="text-error">*</span></label>
                   <input value={editingPending.name || ''} onChange={e => setEditingPending((x: any) => ({...x, name: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Nhập tên tiếng Việt..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Nhập tên tiếng Việt...")} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tên Vật Tư (CN)</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Tên Vật Tư (CN)")}</label>
                   <input value={editingPending.name_zh || ''} onChange={e => setEditingPending((x: any) => ({...x, name_zh: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Tên tiếng Trung..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Tên tiếng Trung...")} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Quy Cách</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Quy Cách")}</label>
                   <input value={editingPending.spec || ''} onChange={e => setEditingPending((x: any) => ({...x, spec: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Kích thước, chất liệu..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Kích thước, chất liệu...")} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Vị Trí</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Vị Trí")}</label>
                   <input value={editingPending.pos || ''} onChange={e => setEditingPending((x: any) => ({...x, pos: e.target.value}))}
                     className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Zone-A..." />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tồn Đầu Kỳ</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Tồn Đầu Kỳ")}</label>
                   <input type="number" value={editingPending.start_stock || 0} onChange={e => setEditingPending((x: any) => ({...x, start_stock: parseInt(e.target.value) || 0}))}
                     className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" />
                 </div>
@@ -1532,9 +1532,9 @@ const ItemManagement = () => {
               {/* Read-only info */}
               {(editingPending.order_id || editingPending.qty) && (
                 <div className="flex gap-3 bg-surface-container p-3 rounded-xl text-xs text-on-surface-variant">
-                  {editingPending.order_id && <span>Đơn nhập: <strong className="text-on-surface">{editingPending.order_id}</strong></span>}
+                  {editingPending.order_id && <span>{tr("Đơn nhập:")} <strong className="text-on-surface">{editingPending.order_id}</strong></span>}
                   {editingPending.qty > 0 && <span>SL: <strong className="text-on-surface">{editingPending.qty}</strong></span>}
-                  {editingPending.date && <span>Ngày: <strong className="text-on-surface">{editingPending.date}</strong></span>}
+                  {editingPending.date && <span>{tr("Ngày:")} <strong className="text-on-surface">{editingPending.date}</strong></span>}
                 </div>
               )}
             </div>
@@ -1542,17 +1542,17 @@ const ItemManagement = () => {
             <div className="px-6 py-4 border-t border-outline-variant/20 flex gap-3 bg-surface-container-lowest">
               <button onClick={() => { setShowPendingModal(false); setEditingPending(null); }} disabled={pendingModalSaving}
                 className="px-4 py-2.5 rounded-xl text-sm font-bold text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-50">
-                Đóng
+                {tr("Đóng")}
               </button>
               <button onClick={savePendingOnly} disabled={pendingModalSaving}
                 className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                 <span className="material-symbols-outlined text-base">save</span>
-                {pendingModalSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                {pendingModalSaving ? tr("Đang lưu...") : tr("Lưu thay đổi")}
               </button>
               <button onClick={() => approvePendingInbound(editingPending)} disabled={pendingModalSaving}
                 className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
                 <span className="material-symbols-outlined text-base">check_circle</span>
-                {pendingModalSaving ? 'Đang xử lý...' : 'Xác nhận & Nhập kho'}
+                {pendingModalSaving ? tr("Đang xử lý...") : tr("Xác nhận & Nhập kho")}
               </button>
             </div>
           </div>
@@ -1566,22 +1566,22 @@ const ItemManagement = () => {
             <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
               <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
             </div>
-            <h3 className="text-xl font-black text-on-surface mb-2">Cảnh báo xóa vật tư</h3>
+            <h3 className="text-xl font-black text-on-surface mb-2">{tr("Cảnh báo xóa vật tư")}</h3>
             <p className="text-on-surface-variant text-sm mb-6 leading-relaxed">
-              Bạn có chắc chắn muốn xóa vật tư <strong className="text-error">{showSingleDeleteConfirm}</strong>? Toàn bộ phiếu nhập, xuất và kiểm kê liên quan nên được xử lý trước. Hành động này không thể hoàn tác!
+              {tr("Bạn có chắc chắn muốn xóa vật tư")} <strong className="text-error">{showSingleDeleteConfirm}</strong>{tr("? Toàn bộ phiếu nhập, xuất và kiểm kê liên quan nên được xử lý trước. Hành động này không thể hoàn tác!")}
             </p>
             <div className="flex gap-3">
               <button 
                 onClick={() => setShowSingleDeleteConfirm(null)}
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
               >
-                Hủy
+                {tr("Hủy")}
               </button>
               <button 
                 onClick={executeSingleDelete}
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-error text-on-error shadow-lg shadow-error/20 hover:opacity-90 transition-opacity"
               >
-                Xác nhận xóa
+                {tr("Xác nhận xóa")}
               </button>
             </div>
           </div>
@@ -1595,9 +1595,9 @@ const ItemManagement = () => {
             <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
               <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
             </div>
-            <h3 className="text-xl font-black text-on-surface mb-2">Xóa các vật tư đã chọn</h3>
+            <h3 className="text-xl font-black text-on-surface mb-2">{tr("Xóa các vật tư đã chọn")}</h3>
             <p className="text-on-surface-variant text-sm mb-6 leading-relaxed">
-              Bạn có chắc chắn muốn XÓA HOÀN TOÀN <strong className="text-error">{selectedRows.length.toLocaleString('en-US')}</strong> vật tư đã tick chọn? Mọi thông tin tồn kho, nhập/xuất liên quan sẽ biến mất. Hành động này không thể hoàn tác!
+              {tr("Bạn có chắc chắn muốn XÓA HOÀN TOÀN")} <strong className="text-error">{selectedRows.length.toLocaleString('en-US')}</strong> {tr("vật tư đã tick chọn? Mọi thông tin tồn kho, nhập/xuất liên quan sẽ biến mất. Hành động này không thể hoàn tác!")}
             </p>
             <div className="flex gap-3">
               <button 
@@ -1605,14 +1605,14 @@ const ItemManagement = () => {
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
                 disabled={loading}
               >
-                Hủy
+                {tr("Hủy")}
               </button>
               <button 
                 onClick={executeDeleteSelected}
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-error text-on-error shadow-lg shadow-error/20 hover:opacity-90 transition-opacity"
                 disabled={loading}
               >
-                {loading ? 'Đang xóa...' : 'Xóa đã chọn'}
+                {loading ? tr("Đang xóa...") : tr("Xóa đã chọn")}
               </button>
             </div>
           </div>
@@ -1626,9 +1626,9 @@ const ItemManagement = () => {
             <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
               <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
             </div>
-            <h3 className="text-xl font-black text-on-surface mb-2">CẢNH BÁO NGUY HIỂM</h3>
+            <h3 className="text-xl font-black text-on-surface mb-2">{tr("CẢNH BÁO NGUY HIỂM")}</h3>
             <p className="text-on-surface-variant text-sm mb-6 leading-relaxed">
-              Bạn có chắc chắn muốn XÓA HOÀN TOÀN <strong className="text-error">{filteredDbItems.length}</strong> vật tư đang hiển thị trong bộ lọc này? Mọi thông tin tồn kho, nhập/xuất liên quan sẽ biến mất. Hành động này không thể hoàn tác!
+              {tr("Bạn có chắc chắn muốn XÓA HOÀN TOÀN")} <strong className="text-error">{filteredDbItems.length}</strong> {tr("vật tư đang hiển thị trong bộ lọc này? Mọi thông tin tồn kho, nhập/xuất liên quan sẽ biến mất. Hành động này không thể hoàn tác!")}
             </p>
             <div className="flex gap-3">
               <button 
@@ -1636,14 +1636,14 @@ const ItemManagement = () => {
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
                 disabled={loading}
               >
-                Hủy
+                {tr("Hủy")}
               </button>
               <button 
                 onClick={executeBulkDelete}
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-error text-on-error shadow-lg shadow-error/20 hover:opacity-90 transition-opacity"
                 disabled={loading}
               >
-                {loading ? 'Đang xóa...' : 'Xóa toàn bộ'}
+                {loading ? tr("Đang xóa...") : tr("Xóa toàn bộ")}
               </button>
             </div>
           </div>
@@ -1658,9 +1658,9 @@ const ItemManagement = () => {
               <div>
                 <h3 className="text-2xl font-bold font-manrope text-on-surface flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary">edit_square</span>
-                  Chỉnh sửa vật tư: {editingItem.erp}
+                  {tr("Chỉnh sửa vật tư:")} {editingItem.erp}
                 </h3>
-                <p className="text-on-surface-variant text-sm mt-1 font-medium">Cập nhật toàn bộ thông tin mã vật tư.</p>
+                <p className="text-on-surface-variant text-sm mt-1 font-medium">{tr("Cập nhật toàn bộ thông tin mã vật tư.")}</p>
               </div>
               <button 
                 onClick={() => setEditingItem(null)}
@@ -1674,17 +1674,17 @@ const ItemManagement = () => {
             <div className="p-8 overflow-y-auto space-y-8 bg-surface">
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="col-span-2 lg:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Mã ERP")}</label>
                   <input 
                     className="w-full bg-surface-container border-0 rounded-xl px-4 py-3 outline-none text-on-surface-variant font-medium cursor-not-allowed opacity-70" 
                     type="text" 
                     value={editingItem.erp}
                     disabled
                   />
-                  <p className="text-[10px] text-error mt-1">Không thể đổi mã ERP.</p>
+                  <p className="text-[10px] text-error mt-1">{tr("Không thể đổi mã ERP.")}</p>
                 </div>
                 <div className="col-span-2 lg:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Tên Vật Tư (VN) <span className="text-error">*</span></label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Tên Vật Tư (VN)")} <span className="text-error">*</span></label>
                   <input 
                     className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-on-surface font-medium" 
                     type="text" 
@@ -1693,7 +1693,7 @@ const ItemManagement = () => {
                   />
                 </div>
                 <div className="col-span-2 lg:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Tên Vật Tư (CN)</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Tên Vật Tư (CN)")}</label>
                   <input 
                     className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-on-surface font-medium" 
                     type="text" 
@@ -1703,7 +1703,7 @@ const ItemManagement = () => {
                 </div>
                 
                 <div className="col-span-2 lg:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Phân loại</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Phân loại")}</label>
                   <input 
                     className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-on-surface font-medium" 
                     type="text" 
@@ -1713,7 +1713,7 @@ const ItemManagement = () => {
                 </div>
                 
                 <div className="col-span-2 lg:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Đơn Vị Tính</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Đơn Vị Tính")}</label>
                   <input 
                     list="edit-unit-options"
                     className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-on-surface font-medium" 
@@ -1734,7 +1734,7 @@ const ItemManagement = () => {
                 </div>
                 
                 <div className="col-span-2 lg:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Vị Trí Mặc Định</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Vị Trí Mặc Định")}</label>
                   <input 
                     className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-on-surface font-medium" 
                     type="text" 
@@ -1744,18 +1744,18 @@ const ItemManagement = () => {
                 </div>
 
                 <div className="col-span-2 lg:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số lượng đầu kỳ</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Số lượng đầu kỳ")}</label>
                   <input 
                     className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-on-surface font-bold text-primary" 
                     type="number" 
                     value={editingItem.start_stock || 0}
                     onChange={(e) => setEditingItem({ ...editingItem, start_stock: e.target.value })}
                   />
-                  <p className="text-[10px] text-outline-variant mt-1 italic">Thay đổi số đầu kỳ sẽ làm số Tồn Cuối thay đổi theo.</p>
+                  <p className="text-[10px] text-outline-variant mt-1 italic">{tr("Thay đổi số đầu kỳ sẽ làm số Tồn Cuối thay đổi theo.")}</p>
                 </div>
 
                 <div className="col-span-2 lg:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Đơn Giá (VND)</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Đơn Giá (VND)")}</label>
                   <input 
                     className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-on-surface font-medium" 
                     type="number" 
@@ -1772,12 +1772,12 @@ const ItemManagement = () => {
                       checked={editingItem.critical}
                       onChange={(e) => setEditingItem({ ...editingItem, critical: e.target.checked })}
                     />
-                    <span className="text-sm font-bold text-on-surface">Vật Tư Quan Trọng</span>
+                    <span className="text-sm font-bold text-on-surface">{tr("Vật Tư Quan Trọng")}</span>
                   </label>
                 </div>
 
                 <div className="col-span-2 lg:col-span-3">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Thông Số Kỹ Thuật (Spec) / Quy Cách</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Thông Số Kỹ Thuật (Spec) / Quy Cách")}</label>
                   <textarea 
                     className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-on-surface font-medium resize-none" 
                     rows={3}
@@ -1794,7 +1794,7 @@ const ItemManagement = () => {
                 className="px-6 py-3 font-bold text-on-surface-variant hover:bg-surface-container-low rounded-xl transition-colors text-sm"
                 type="button"
               >
-                Trở lại
+                {tr("Trở lại")}
               </button>
               <button 
                 onClick={handleSaveEdit}
@@ -1802,7 +1802,7 @@ const ItemManagement = () => {
                 type="button"
               >
                 <span className="material-symbols-outlined text-[18px]">save</span>
-                Lưu Thay Đổi
+                {tr("Lưu Thay Đổi")}
               </button>
             </div>
           </div>
@@ -1820,7 +1820,7 @@ const ItemManagement = () => {
                   <span className="material-symbols-outlined text-amber-600">pending_actions</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-on-surface text-lg">Chỉnh sửa mục chờ xử lý</h3>
+                  <h3 className="font-bold text-on-surface text-lg">{tr("Chỉnh sửa mục chờ xử lý")}</h3>
                   <p className="text-xs text-on-surface-variant mt-0.5">
                     <span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded-full font-semibold">
                       {PENDING_REASON[editingPending.reason] || editingPending.reason}
@@ -1835,63 +1835,63 @@ const ItemManagement = () => {
             <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 md:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Mã ERP <span className="text-error">*</span></label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Mã ERP")} <span className="text-error">*</span></label>
                   <input value={editingPending.erp || ''} onChange={e => setEditingPending((x: any) => ({...x, erp: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm font-mono border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Nhập mã ERP..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm font-mono border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Nhập mã ERP...")} />
                 </div>
                 <div className="col-span-2 md:col-span-1">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Đơn Vị</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Đơn Vị")}</label>
                   <input value={editingPending.unit || ''} onChange={e => setEditingPending((x: any) => ({...x, unit: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Cái (PCS)..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Cái (PCS)...")} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tên Vật Tư (VN) <span className="text-error">*</span></label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Tên Vật Tư (VN)")} <span className="text-error">*</span></label>
                   <input value={editingPending.name || ''} onChange={e => setEditingPending((x: any) => ({...x, name: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Nhập tên tiếng Việt..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Nhập tên tiếng Việt...")} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tên Vật Tư (CN)</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Tên Vật Tư (CN)")}</label>
                   <input value={editingPending.name_zh || ''} onChange={e => setEditingPending((x: any) => ({...x, name_zh: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Tên tiếng Trung..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Tên tiếng Trung...")} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Quy Cách</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Quy Cách")}</label>
                   <input value={editingPending.spec || ''} onChange={e => setEditingPending((x: any) => ({...x, spec: e.target.value}))}
-                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Kích thước, chất liệu..." />
+                    className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder={tr("Kích thước, chất liệu...")} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Vị Trí</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Vị Trí")}</label>
                   <input value={editingPending.pos || ''} onChange={e => setEditingPending((x: any) => ({...x, pos: e.target.value}))}
                     className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" placeholder="Zone-A..." />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tồn Đầu Kỳ</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Tồn Đầu Kỳ")}</label>
                   <input type="number" value={editingPending.start_stock || 0} onChange={e => setEditingPending((x: any) => ({...x, start_stock: parseInt(e.target.value) || 0}))}
                     className="w-full px-3 py-2.5 bg-surface-container rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all" />
                 </div>
               </div>
               {(editingPending.order_id || editingPending.qty > 0) && (
                 <div className="flex gap-3 bg-surface-container p-3 rounded-xl text-xs text-on-surface-variant">
-                  {editingPending.order_id && <span>Đơn nhập: <strong className="text-on-surface">{editingPending.order_id}</strong></span>}
+                  {editingPending.order_id && <span>{tr("Đơn nhập:")} <strong className="text-on-surface">{editingPending.order_id}</strong></span>}
                   {editingPending.qty > 0 && <span>SL: <strong className="text-on-surface">{editingPending.qty}</strong></span>}
-                  {editingPending.date && <span>Ngày: <strong className="text-on-surface">{editingPending.date}</strong></span>}
+                  {editingPending.date && <span>{tr("Ngày:")} <strong className="text-on-surface">{editingPending.date}</strong></span>}
                 </div>
               )}
             </div>
             <div className="px-6 py-4 border-t border-outline-variant/20 flex gap-3 bg-surface-container-lowest">
               <button onClick={() => { setShowPendingModal(false); setEditingPending(null); }} disabled={pendingModalSaving}
                 className="px-4 py-2.5 rounded-xl text-sm font-bold text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-50">
-                Đóng
+                {tr("Đóng")}
               </button>
               <button onClick={savePendingOnly} disabled={pendingModalSaving}
                 className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                 <span className="material-symbols-outlined text-base">save</span>
-                {pendingModalSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                {pendingModalSaving ? tr("Đang lưu...") : tr("Lưu thay đổi")}
               </button>
               <button onClick={() => approvePendingInbound(editingPending)} disabled={pendingModalSaving}
                 className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
                 <span className="material-symbols-outlined text-base">check_circle</span>
-                {pendingModalSaving ? 'Đang xử lý...' : 'Xác nhận & Nhập kho'}
+                {pendingModalSaving ? tr("Đang xử lý...") : tr("Xác nhận & Nhập kho")}
               </button>
             </div>
           </div>
@@ -1906,20 +1906,20 @@ const ItemManagement = () => {
               <div className="w-14 h-14 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-5">
                 <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>delete</span>
               </div>
-              <h3 className="text-lg font-black text-on-surface mb-2">Xóa khỏi danh sách chờ?</h3>
+              <h3 className="text-lg font-black text-on-surface mb-2">{tr("Xóa khỏi danh sách chờ?")}</h3>
               <p className="text-sm text-on-surface-variant leading-relaxed">
-                Bạn có chắc muốn xóa dòng{deletePendingConfirm.erp ? <> mã <strong className="text-error font-mono">{deletePendingConfirm.erp}</strong></> : ' này'} khỏi tab Chờ xử lý? Dữ liệu sẽ bị xóa hoàn toàn.
+                {tr("Bạn có chắc muốn xóa dòng")}{deletePendingConfirm.erp ? <> {tr("mã")} <strong className="text-error font-mono">{deletePendingConfirm.erp}</strong></> : tr("này")} {tr("khỏi tab Chờ xử lý? Dữ liệu sẽ bị xóa hoàn toàn.")}
               </p>
             </div>
             <div className="px-6 pb-6 flex gap-3">
               <button onClick={() => setDeletePendingConfirm(null)} disabled={deletingPending}
                 className="flex-1 py-2.5 rounded-xl border border-outline-variant/40 font-bold text-sm hover:bg-surface-container transition-colors disabled:opacity-50">
-                Hủy
+                {tr("Hủy")}
               </button>
               <button onClick={() => deletePendingItem(deletePendingConfirm)} disabled={deletingPending}
                 className="flex-1 py-2.5 rounded-xl bg-error text-on-error font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
                 <span className="material-symbols-outlined text-base">delete</span>
-                {deletingPending ? 'Đang xóa...' : 'Xóa'}
+                {deletingPending ? tr("Đang xóa...") : tr("Xóa")}
               </button>
             </div>
           </div>

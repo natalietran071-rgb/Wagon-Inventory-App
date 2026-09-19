@@ -7,6 +7,7 @@ import { exportToExcelMultiSheet } from '../lib/excelUtils';
 import { useAuth } from '../contexts/AuthContext';
 import ItemManagement from './ItemManagement';
 import ItemHistoryModal from './ItemHistoryModal';
+import { tr } from '../contexts/LanguageContext';
 
 const showToast = (msg: string, isError = false) => {
   try {
@@ -142,7 +143,7 @@ const Inbound = () => {
         newRows[index] = {
           ...newRows[index],
           erpCode: value,
-          unit: item.unit || 'Kiện (Pallet)',
+          unit: item.unit || tr("Kiện (Pallet)"),
           location: item.pos || ''
         };
       } else {
@@ -193,7 +194,7 @@ const Inbound = () => {
             const item = inventoryItems.find(i => i.erp === newRows[currentRowIdx].erpCode);
             if (item) {
               if (currentFieldIdx < fields.indexOf('unit') && (!cols[fields.indexOf('unit') - fieldIdx] || !cols[fields.indexOf('unit') - fieldIdx].trim())) {
-                 newRows[currentRowIdx].unit = item.unit || 'Kiện (Pallet)';
+                 newRows[currentRowIdx].unit = item.unit || tr("Kiện (Pallet)");
               }
               if (currentFieldIdx < fields.indexOf('location') && (!cols[fields.indexOf('location') - fieldIdx] || !cols[fields.indexOf('location') - fieldIdx].trim())) {
                  newRows[currentRowIdx].location = item.pos || '';
@@ -351,7 +352,7 @@ const Inbound = () => {
     const allRows = inboundRows.filter(r => r.orderId || r.erpCode || r.qty);
     
     if (allRows.length === 0) {
-      alert('Vui lòng điền dữ liệu để nhập kho!');
+      alert(tr("Vui lòng điền dữ liệu để nhập kho!"));
       return;
     }
 
@@ -361,18 +362,18 @@ const Inbound = () => {
 
     allRows.forEach((row, idx) => {
       if (!row.erpCode && !row.qty) {
-        errorRows.push({ row: idx + 1, reason: 'Thiếu mã ERP và số lượng', data: JSON.stringify(row) });
+        errorRows.push({ row: idx + 1, reason: tr("Thiếu mã ERP và số lượng"), data: JSON.stringify(row) });
       } else if (!row.erpCode) {
-        errorRows.push({ row: idx + 1, reason: 'Thiếu mã ERP', data: `OrderID: ${row.orderId}, Qty: ${row.qty}` });
+        errorRows.push({ row: idx + 1, reason: tr("Thiếu mã ERP"), data: `OrderID: ${row.orderId}, Qty: ${row.qty}` });
       } else if (!row.qty || Math.round(parseFloat(row.qty)) <= 0) {
-        errorRows.push({ row: idx + 1, reason: 'Số lượng = 0 hoặc không hợp lệ', data: `ERP: ${row.erpCode}, Qty: ${row.qty}` });
+        errorRows.push({ row: idx + 1, reason: tr("Số lượng = 0 hoặc không hợp lệ"), data: `ERP: ${row.erpCode}, Qty: ${row.qty}` });
       } else {
         validRows.push(row);
       }
     });
     
     if (validRows.length === 0) {
-      const errorMsg = `Không có dòng nào hợp lệ!\n\nChi tiết lỗi:\n${errorRows.map(e => `Dòng ${e.row}: ${e.reason} — ${e.data}`).join('\n')}`;
+      const errorMsg = tr("Không có dòng nào hợp lệ!\n\nChi tiết lỗi:\n{0}", [errorRows.map(e => tr("Dòng {0}: {1} — {2}", [e.row, e.reason, e.data])).join('\n')]);
       setErrorLog(errorMsg); return;
       return;
     }
@@ -469,16 +470,14 @@ const Inbound = () => {
       await loadInboundRecords();
       
       if (errorRows.length > 0) {
-        const errorMsg = `Nhập kho thành công ${validRows.length} dòng.\n\n⚠️ ${errorRows.length} dòng bị bỏ qua:\n${errorRows.map(e => `Dòng ${e.row}: ${e.reason} — ${e.data}`).join('\n')}`;
+        const errorMsg = tr("Nhập kho thành công {0} dòng.\n\n⚠️ {1} dòng bị bỏ qua:\n{2}", [validRows.length, errorRows.length, errorRows.map(e => tr("Dòng {0}: {1} — {2}", [e.row, e.reason, e.data])).join('\n')]);
         setErrorLog(errorMsg);
       } else {
-        alert(`Nhập kho hàng loạt thành công ${validRows.length} dòng!`);
+        alert(tr("Nhập kho hàng loạt thành công {0} dòng!", [validRows.length]));
       }
     } catch (err: any) {
       console.error(err);
-      setErrorLog(`Lỗi: ${err.message}
-
-Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng lỗi`);
+      setErrorLog(tr("Lỗi: {0}\n\nDữ liệu: {1} dòng hợp lệ, {2} dòng lỗi", [err.message, validRows.length, errorRows.length]));
     } finally {
       setLoading(false);
     }
@@ -548,11 +547,11 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
         }
       } else {
         // Show row error as requested (using toast)
-        showToast(`Mã ERP "${upperErp}" không tồn tại trong hệ thống`, true);
+        showToast(tr("Mã ERP \"{0}\" không tồn tại trong hệ thống", [upperErp]), true);
       }
     } catch (err: any) {
       if (err.code === 'PGRST116') { // No rows found
-         showToast(`Mã ERP "${upperErp}" không tồn tại trong hệ thống`, true);
+         showToast(tr("Mã ERP \"{0}\" không tồn tại trong hệ thống", [upperErp]), true);
       } else {
         console.error('Error fetching ERP info:', err);
       }
@@ -565,7 +564,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       const item = inventoryItems.find(i => i.erp === value);
       if (item) {
         newRow.erpCode = value;
-        newRow.unit = item.unit || 'Kiện (Pallet)';
+        newRow.unit = item.unit || tr("Kiện (Pallet)");
         newRow.location = item.pos || '';
       } else {
         newRow[field as keyof ReturnType<typeof createEmptyRow>] = value;
@@ -579,7 +578,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
   const handleSubmitSingle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!singleRow.erpCode || !singleRow.qty) {
-      alert('Vui lòng điền mã ERP và số lượng!');
+      alert(tr("Vui lòng điền mã ERP và số lượng!"));
       return;
     }
     setLoading(true);
@@ -626,10 +625,10 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       }
 
       setSingleRow(createEmptyRow());
-      alert('Nhập kho thành công!');
+      alert(tr("Nhập kho thành công!"));
     } catch (err: any) {
       console.error(err);
-      alert('Lỗi nhập kho: ' + err.message);
+      alert(tr("Lỗi nhập kho:") + err.message);
     } finally {
       setLoading(false);
     }
@@ -664,11 +663,11 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
 
     // Validate bắt buộc
     if (!editingInbound.qty || Number(editingInbound.qty) <= 0) {
-      showToast('Số lượng phải lớn hơn 0', true);
+      showToast(tr("Số lượng phải lớn hơn 0"), true);
       return;
     }
     if (!editingInbound.editReason || editingInbound.editReason.trim() === '') {
-      showToast('Vui lòng nhập lý do chỉnh sửa', true);
+      showToast(tr("Vui lòng nhập lý do chỉnh sửa"), true);
       return;
     }
 
@@ -688,17 +687,17 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
         .eq('id', editingInbound.id);
 
       if (error) {
-        showToast('Lỗi lưu: ' + error.message, true);
+        showToast(tr("Lỗi lưu:") + error.message, true);
         return;
       }
 
-      showToast('✅ Đã lưu thay đổi!');
+      showToast(tr("✅ Đã lưu thay đổi!"));
       setEditingInbound(null);    // ← ĐÓNG MODAL
       setEditingInventory(null);
       loadInboundRecords();       // ← RELOAD DANH SÁCH
     } catch (err: any) {
       console.error('Error saving edit:', err);
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -743,7 +742,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
 
   const exportToExcel = async () => {
     setLoading(true);
-    showToast('Đang xuất dữ liệu...');
+    showToast(tr("Đang xuất dữ liệu..."));
     try {
       const today = new Date().toISOString().split('T')[0];
       
@@ -768,15 +767,15 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       const exportData = dataToExport.map(item => {
         const inv = inventoryMap.get(item.erp_code);
         return {
-          'Thời gian': `${item.date} ${item.time || ''}`,
+          [tr("Thời gian")]: `${item.date} ${item.time || ''}`,
           'Order ID': item.order_id,
-          'Mã ERP': item.erp_code,
-          'Tên Vật Tư': inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : '',
-          'Quy Cách': inv?.spec || '',
-          'Số lượng': item.qty,
-          'Đơn vị': item.unit,
-          'Vị trí': item.location || '',
-          'Trạng thái': item.status
+          [tr("Mã ERP")]: item.erp_code,
+          [tr("Tên Vật Tư")]: inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : '',
+          [tr("Quy Cách")]: inv?.spec || '',
+          [tr("Số lượng")]: item.qty,
+          [tr("Đơn vị")]: item.unit,
+          [tr("Vị trí")]: item.location || '',
+          [tr("Trạng thái")]: item.status
         };
       });
 
@@ -784,11 +783,11 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
         ? `nhap-kho_${fromDate}_${toDate || today}.xlsx`
         : `nhap-kho_${today}.xlsx`;
         
-      const sheets = exportToExcelMultiSheet(exportData, fileName, 'Nhập Kho');
-      showToast(`✅ Đã xuất ${exportData.length.toLocaleString()} dòng — ${sheets} sheet!`);
+      const sheets = exportToExcelMultiSheet(exportData, fileName, tr("Nhập Kho"));
+      showToast(tr("✅ Đã xuất {0} dòng — {1} sheet!", [exportData.length.toLocaleString(), sheets]));
     } catch (err: any) {
       console.error('Export error:', err);
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -840,7 +839,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
 
   const handleDeleteFilteredInbound = async () => {
     if (!fromDate && !toDate && !searchQuery) {
-      alert('Vui lòng sử dụng tính năng "Tìm kiếm" hoặc "Lọc theo ngày" để chọn vùng dữ liệu trước khi xóa toàn bộ!');
+      alert(tr("Vui lòng sử dụng tính năng \"Tìm kiếm\" hoặc \"Lọc theo ngày\" để chọn vùng dữ liệu trước khi xóa toàn bộ!"));
       return;
     }
     if (filteredInbound.length === 0) return;
@@ -908,10 +907,10 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
         if (error) throw error;
         deletedCount += chunk.length;
       }
-      alert(`Đã xóa thủ công ${deletedCount} mục nhập kho. Số lượng và thông tin vật tư tương ứng trong kho đã được dọn sạch!`);
+      alert(tr("Đã xóa thủ công {0} mục nhập kho. Số lượng và thông tin vật tư tương ứng trong kho đã được dọn sạch!", [deletedCount]));
     } catch (err: any) {
       console.error(err);
-      alert('Lỗi khi xóa dữ liệu: ' + err.message);
+      alert(tr("Lỗi khi xóa dữ liệu:") + err.message);
     } finally {
       setLoading(false);
     }
@@ -978,11 +977,11 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
         if (error) throw error;
         deletedCount += chunk.length;
       }
-      alert(`Đã xóa ${deletedCount} mục nhập kho đã chọn. Kho đã được đồng bộ!`);
+      alert(tr("Đã xóa {0} mục nhập kho đã chọn. Kho đã được đồng bộ!", [deletedCount]));
       setSelectedRows([]);
     } catch (err: any) {
       console.error(err);
-      alert('Lỗi khi xóa dữ liệu: ' + err.message);
+      alert(tr("Lỗi khi xóa dữ liệu:") + err.message);
     } finally {
       setLoading(false);
     }
@@ -993,7 +992,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl md:text-4xl font-bold font-manrope text-on-surface tracking-tight mb-1 md:mb-2">{t('inbound')}</h2>
-          <p className="text-xs md:text-sm text-on-surface-variant font-medium">Ghi nhận thông tin vật tư nhập kho mới.</p>
+          <p className="text-xs md:text-sm text-on-surface-variant font-medium">{tr("Ghi nhận thông tin vật tư nhập kho mới.")}</p>
         </div>
         <div className="flex gap-2 items-center">
           <div className="flex bg-surface-container-low p-1 rounded-xl w-full md:w-auto">
@@ -1001,13 +1000,13 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               onClick={() => setActiveModuleTab('receipts')}
               className={`flex-1 md:flex-none px-4 md:px-6 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${activeModuleTab === 'receipts' ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-primary'}`}
             >
-              Nhập Kho 
+              {tr("Nhập Kho")} 
             </button>
             <button 
               onClick={() => setActiveModuleTab('items')}
               className={`flex-1 md:flex-none px-4 md:px-6 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${activeModuleTab === 'items' ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-primary'}`}
             >
-              Quản Lý Mã
+              {tr("Quản Lý Mã")}
             </button>
           </div>
         </div>
@@ -1023,23 +1022,23 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               <div>
                 <h3 className="text-2xl font-bold font-manrope flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary">add_box</span>
-                  Phiếu Nhập Kho (Hàng Loạt)
+                  {tr("Phiếu Nhập Kho (Hàng Loạt)")}
                 </h3>
                 <div className="flex items-center gap-3 mt-1 text-sm text-on-surface-variant font-medium">
-                  <p>Hỗ trợ dán (Ctrl+V) dữ liệu từ Excel.</p>
+                  <p>{tr("Hỗ trợ dán (Ctrl+V) dữ liệu từ Excel.")}</p>
                   <button onClick={exportTemplate} className="text-primary hover:underline flex items-center gap-1 font-bold">
-                    <span className="material-symbols-outlined text-sm">download</span> Tải File Mẫu
+                    <span className="material-symbols-outlined text-sm">download</span> {tr("Tải File Mẫu")}
                   </button>
                 </div>
               </div>
               <div className="flex gap-4">
                 <div className="bg-secondary-container/30 px-4 py-2 rounded-xl border border-secondary-container/50">
-                  <span className="text-[10px] font-bold text-secondary uppercase tracking-widest block text-center mb-0.5">Hôm nay</span>
-                  <div className="text-sm font-black font-manrope text-on-secondary-container text-center">{todayInboundCount} <span className="font-medium text-[10px]">Phiếu</span></div>
+                  <span className="text-[10px] font-bold text-secondary uppercase tracking-widest block text-center mb-0.5">{tr("Hôm nay")}</span>
+                  <div className="text-sm font-black font-manrope text-on-secondary-container text-center">{todayInboundCount} <span className="font-medium text-[10px]">{tr("Phiếu")}</span></div>
                 </div>
                 <button type="button" onClick={() => setActiveModuleTab('items')} className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer">
                   <span className="material-symbols-outlined text-[14px]">add_circle</span>
-                  Tạo vật tư
+                  {tr("Tạo vật tư")}
                 </button>
               </div>
             </div>
@@ -1052,15 +1051,15 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">BPM Number</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">PO Number</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[200px]">{t('erpCode')}</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên SP</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Quy cách</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{tr("Tên SP")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">{tr("Quy cách")}</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">QC Check No</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Số lượng</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">{tr("Số lượng")}</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">{t('unit')}</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">Mã BP</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên BP</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">{tr("Mã BP")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{tr("Tên BP")}</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{t('location')}</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Ngày nhập</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{tr("Ngày nhập")}</th>
                       <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Remark</th>
                     </tr>
                   </thead>
@@ -1099,7 +1098,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                               onBlur={(e) => handleErpInput(e.target.value, idx)}
                               onPaste={(e) => handlePaste(e, idx, 'erpCode')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-bold text-primary placeholder:font-normal placeholder:text-outline-variant/40"
-                              placeholder="Nhập/Chọn ERP"
+                              placeholder={tr("Nhập/Chọn ERP")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5 bg-on-surface/5">
@@ -1109,7 +1108,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                                   <div className="font-bold text-on-surface line-clamp-1">{item.name}</div>
                                   {item.name_zh && <div className="text-[9px] opacity-60 line-clamp-1">{item.name_zh}</div>}
                                   <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">Tồn: {item.end_stock.toLocaleString('en-US')}</span>
+                                    <span className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{tr("Tồn:")} {item.end_stock.toLocaleString('en-US')}</span>
                                   </div>
                                 </div>
                               ) : <span className="text-outline-variant/50 italic">-</span>}
@@ -1148,7 +1147,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                               onChange={(e) => handleRowChange(idx, 'unit', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'unit')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="ĐVT"
+                              placeholder={tr("ĐVT")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1158,7 +1157,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                               onChange={(e) => handleRowChange(idx, 'deptCode', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'deptCode')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Mã BP"
+                              placeholder={tr("Mã BP")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1168,7 +1167,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                               onChange={(e) => handleRowChange(idx, 'deptName', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'deptName')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Tên bộ phận"
+                              placeholder={tr("Tên bộ phận")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1178,7 +1177,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                               onChange={(e) => handleRowChange(idx, 'location', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'location')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Vị trí"
+                              placeholder={tr("Vị trí")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1197,7 +1196,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                               onChange={(e) => handleRowChange(idx, 'remark', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'remark')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Ghi chú"
+                              placeholder={tr("Ghi chú")}
                             />
                           </td>
                         </tr>
@@ -1213,7 +1212,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   type="reset" 
                   onClick={() => setInboundRows(Array.from({ length: 5 }, createEmptyRow))}
                 >
-                  Xóa trắng bảng
+                  {tr("Xóa trắng bảng")}
                 </button>
                 <button 
                   className="px-8 py-3.5 bg-primary text-on-primary text-sm font-bold rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2" 
@@ -1221,7 +1220,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   disabled={!canEdit}
                 >
                    <span className="material-symbols-outlined">dataset</span>
-                   Xác nhận nhập kho hàng loạt
+                   {tr("Xác nhận nhập kho hàng loạt")}
                 </button>
               </div>
             </form>
@@ -1232,27 +1231,27 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                <div className="flex justify-between items-center mb-6 relative z-10">
                    <h3 className="text-xl font-bold font-manrope flex items-center gap-2 text-on-surface">
                      <span className="material-symbols-outlined text-primary">add_box</span>
-                     Nhập Kho
+                     {tr("Nhập Kho")}
                    </h3>
                    <div className="bg-secondary-container/30 px-3 py-1.5 rounded-lg border border-secondary-container/50">
-                     <span className="text-[9px] font-bold text-secondary uppercase tracking-widest block text-center">Hôm nay</span>
+                     <span className="text-[9px] font-bold text-secondary uppercase tracking-widest block text-center">{tr("Hôm nay")}</span>
                      <div className="text-sm font-bold text-on-secondary-container text-center">{todayInboundCount}</div>
                    </div>
                </div>
                <form onSubmit={handleSubmitSingle} className="space-y-4 relative z-10 w-full pb-2">
                  <div className="space-y-4">
                    <div className="relative">
-                     <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Tiết mục (Order)</label>
+                     <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Tiết mục (Order)")}</label>
                      <div className="relative">
                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">tag</span>
-                        <input type="text" value={singleRow.orderId} onChange={(e) => handleSingleRowChange('orderId', e.target.value)} className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl pl-10 pr-4 py-3.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none" placeholder="Tùy chọn" />
+                        <input type="text" value={singleRow.orderId} onChange={(e) => handleSingleRowChange('orderId', e.target.value)} className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl pl-10 pr-4 py-3.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none" placeholder={tr("Tùy chọn")} />
                      </div>
                    </div>
                    <div className="relative">
                      <div className="flex justify-between items-end mb-1.5">
-                       <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider">Mã ERP <span className="text-error">*</span></label>
+                       <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider">{tr("Mã ERP")} <span className="text-error">*</span></label>
                        <button type="button" onClick={() => setActiveModuleTab('items')} className="text-[10px] font-bold text-primary hover:underline flex items-center">
-                          Tạo mới
+                          {tr("Tạo mới")}
                        </button>
                      </div>
                      <div className="relative">
@@ -1265,7 +1264,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                           onChange={(e) => handleSingleRowChange('erpCode', e.target.value)} 
                           onBlur={(e) => handleErpInput(e.target.value, 'single')}
                           className="w-full bg-primary/5 border border-primary/30 rounded-xl pl-10 pr-4 py-3.5 text-sm font-bold text-primary focus:ring-2 focus:ring-primary focus:outline-none" 
-                          placeholder="Chọn hoặc nhập mã ERP" 
+                          placeholder={tr("Chọn hoặc nhập mã ERP")} 
                         />
                      </div>
                    </div>
@@ -1274,9 +1273,9 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                       if (item) {
                         return (
                           <div className="px-4 py-3 bg-surface-container rounded-xl flex flex-col items-start border-l-2 border-primary">
-                            <span className="text-[10px] uppercase font-bold text-on-surface-variant/70 mb-1">Vật tư mục tiêu</span>
+                            <span className="text-[10px] uppercase font-bold text-on-surface-variant/70 mb-1">{tr("Vật tư mục tiêu")}</span>
                             <p className="text-sm font-bold text-on-surface mb-0.5">{item.name}</p>
-                            <p className="text-xs text-on-surface-variant truncate w-full">{item.spec || 'Không có quy cách'}</p>
+                            <p className="text-xs text-on-surface-variant truncate w-full">{item.spec || tr("Không có quy cách")}</p>
                           </div>
                         );
                       }
@@ -1284,7 +1283,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                    })()}
                    <div className="grid grid-cols-2 gap-4">
                      <div>
-                       <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Số lượng <span className="text-error">*</span></label>
+                       <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Số lượng")} <span className="text-error">*</span></label>
                        <div className="relative">
                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">123</span>
                            <input type="number" step="any" required value={singleRow.qty} onChange={(e) => handleSingleRowChange('qty', e.target.value)} className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl pl-10 pr-4 py-3.5 text-base font-black text-on-surface focus:ring-2 focus:ring-primary focus:outline-none" placeholder="0" />
@@ -1292,7 +1291,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                      </div>
                      <div>
                        <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{t('unit')}</label>
-                       <input list="inbound-unit-options" type="text" value={singleRow.unit} onChange={(e) => handleSingleRowChange('unit', e.target.value)} className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3.5 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none" placeholder="ĐVT" />
+                       <input list="inbound-unit-options" type="text" value={singleRow.unit} onChange={(e) => handleSingleRowChange('unit', e.target.value)} className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3.5 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none" placeholder={tr("ĐVT")} />
                      </div>
                    </div>
                    <div className="grid grid-cols-2 gap-4">
@@ -1304,7 +1303,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                        </div>
                      </div>
                      <div>
-                       <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Ngày nhập</label>
+                       <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">{tr("Ngày nhập")}</label>
                        <input type="date" value={singleRow.date} onChange={(e) => handleSingleRowChange('date', e.target.value)} className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-3 py-3.5 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none" />
                      </div>
                    </div>
@@ -1316,7 +1315,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   disabled={!canEdit}
                  >
                     <span className="material-symbols-outlined">add_circle</span>
-                    Xác nhận nhập kho
+                    {tr("Xác nhận nhập kho")}
                  </button>
                </form>
             </div>
@@ -1345,20 +1344,20 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       <div className="bg-surface-container-lowest rounded-2xl md:rounded-[2rem] p-4 md:p-6 lg:p-8 shadow-sm">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-4 md:mb-10">
           <div className="flex items-center gap-4">
-            <h3 className="text-lg md:text-xl font-bold font-manrope">Lịch sử nhập kho</h3>
+            <h3 className="text-lg md:text-xl font-bold font-manrope">{tr("Lịch sử nhập kho")}</h3>
             <button 
               onClick={() => setShowEditHistory(true)}
               className="flex items-center gap-2 px-3 py-1.5 bg-secondary/10 text-secondary rounded-lg hover:bg-secondary/20 transition-all text-[10px] md:text-xs font-bold"
             >
               <span className="material-symbols-outlined text-sm">history</span>
-              Lịch sử sửa
+              {tr("Lịch sử sửa")}
             </button>
           </div>
           <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-center w-full xl:w-auto">
             <div className="relative bg-surface-container-low px-3 md:px-4 py-2 md:py-2 rounded-xl border border-outline-variant/10 w-full sm:w-auto">
               <input 
                 type="text"
-                placeholder="Tìm kiếm..."
+                placeholder={tr("Tìm kiếm...")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -1372,14 +1371,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
             </div>
             <div className="flex items-center gap-1.5 md:gap-2 bg-surface-container-low px-3 md:px-4 py-2 md:py-2 rounded-xl border border-outline-variant/10 overflow-x-auto no-scrollbar w-full sm:w-auto">
               <span className="material-symbols-outlined text-sm text-on-surface-variant shrink-0">calendar_today</span>
-              <span className="text-[10px] md:text-xs font-medium text-on-surface-variant whitespace-nowrap">Từ</span>
+              <span className="text-[10px] md:text-xs font-medium text-on-surface-variant whitespace-nowrap">{tr("Từ")}</span>
               <input 
                 type="date" 
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
                 className="bg-transparent border-none text-[10px] md:text-xs font-bold focus:ring-0 cursor-pointer p-0 min-w-[90px]"
               />
-              <span className="text-[10px] md:text-xs font-medium text-on-surface-variant whitespace-nowrap">Hết</span>
+              <span className="text-[10px] md:text-xs font-medium text-on-surface-variant whitespace-nowrap">{tr("Hết")}</span>
               <input 
                 type="date" 
                 value={toDate}
@@ -1393,10 +1392,10 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
             <button
               onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
               className="flex items-center gap-1.5 bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10 text-[10px] md:text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors whitespace-nowrap"
-              title={sortOrder === 'desc' ? 'Đang xem: Mới nhất trước' : 'Đang xem: Cũ nhất trước'}
+              title={sortOrder === 'desc' ? tr("Đang xem: Mới nhất trước") : tr("Đang xem: Cũ nhất trước")}
             >
               <span className="material-symbols-outlined text-sm">{sortOrder === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span>
-              {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
+              {sortOrder === 'desc' ? tr("Mới nhất") : tr("Cũ nhất")}
             </button>
             <div className="flex gap-2 flex-wrap w-full sm:w-auto">
               {selectedRows.length > 0 && canEdit && (
@@ -1405,7 +1404,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-error text-on-error px-3 md:px-4 py-2 rounded-xl hover:opacity-90 transition-colors font-bold text-[10px] md:text-xs shadow-lg shadow-error/20"
                 >
                   <span className="material-symbols-outlined text-sm">delete</span>
-                  Xóa ({selectedRows.length})
+                  {tr("Xóa (")}{selectedRows.length})
                 </button>
               )}
               <button
@@ -1414,7 +1413,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-surface-container-high text-on-surface-variant px-3 md:px-4 py-2 rounded-xl hover:bg-surface-container-highest transition-colors font-bold text-[10px] md:text-xs disabled:opacity-50"
               >
                 <span className={`material-symbols-outlined text-sm ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
-                Đồng bộ
+                {tr("Đồng bộ")}
               </button>
               <button
                 onClick={exportToExcel}
@@ -1422,22 +1421,22 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-surface-container-high px-3 md:px-4 py-2 rounded-xl text-primary hover:bg-primary-container hover:text-on-primary-container transition-colors font-bold text-[10px] md:text-xs disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-sm">{loading ? 'sync' : 'download'}</span>
-                {loading ? 'Đang xuất...' : 'Xuất Excel'}
+                {loading ? tr("Đang xuất...") : tr("Xuất Excel")}
               </button>
             </div>
           </div>
           
           <div className="mb-4 md:mb-6 grid grid-cols-3 gap-2 md:gap-6 p-3 md:p-6 bg-primary-container/20 rounded-xl border border-primary-container/30 text-center md:text-left">
             <div className="flex flex-col">
-               <span className="text-[8px] md:text-xs font-bold text-on-surface-variant uppercase mb-0.5 md:mb-1">Vật tư</span>
+               <span className="text-[8px] md:text-xs font-bold text-on-surface-variant uppercase mb-0.5 md:mb-1">{tr("Vật tư")}</span>
                <span className="text-xs md:text-lg font-black text-primary">{summaryFiltered.uniqueItems.toLocaleString('en-US')} <span className="text-[8px] md:text-sm font-medium">SKU</span></span>
             </div>
             <div className="border-l border-outline-variant/30 flex flex-col pl-2 md:pl-0 md:border-none">
-               <span className="text-[8px] md:text-xs font-bold text-on-surface-variant uppercase mb-0.5 md:mb-1">Số phiếu</span>
-               <span className="text-xs md:text-lg font-black text-primary">{summaryFiltered.totalRows.toLocaleString('en-US')} <span className="text-[8px] md:text-sm font-medium">Phiếu</span></span>
+               <span className="text-[8px] md:text-xs font-bold text-on-surface-variant uppercase mb-0.5 md:mb-1">{tr("Số phiếu")}</span>
+               <span className="text-xs md:text-lg font-black text-primary">{summaryFiltered.totalRows.toLocaleString('en-US')} <span className="text-[8px] md:text-sm font-medium">{tr("Phiếu")}</span></span>
             </div>
             <div className="border-l border-outline-variant/30 flex flex-col pl-2 md:pl-0 md:border-none">
-               <span className="text-[8px] md:text-xs font-bold text-on-surface-variant uppercase mb-0.5 md:mb-1">Tổng SL</span>
+               <span className="text-[8px] md:text-xs font-bold text-on-surface-variant uppercase mb-0.5 md:mb-1">{tr("Tổng SL")}</span>
                <span className="text-xs md:text-lg font-black text-secondary">{summaryFiltered.totalQty.toLocaleString('en-US')} <span className="text-[8px] md:text-sm font-medium">Units</span></span>
             </div>
           </div>
@@ -1454,14 +1453,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     checked={filteredInbound.length > 0 && selectedRows.length === filteredInbound.length}
                   />
                 </th>
-                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden lg:table-cell">Thời gian</th>
-                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden md:table-cell">Mã Đơn</th>
-                <th className="pb-3 md:pb-6 px-1 md:px-4">Vật tư / ERP</th>
-                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden xl:table-cell">Tên Vật Tư</th>
-                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden xl:table-cell">Quy Cách</th>
+                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden lg:table-cell">{tr("Thời gian")}</th>
+                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden md:table-cell">{tr("Mã Đơn")}</th>
+                <th className="pb-3 md:pb-6 px-1 md:px-4">{tr("Vật tư / ERP")}</th>
+                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden xl:table-cell">{tr("Tên Vật Tư")}</th>
+                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden xl:table-cell">{tr("Quy Cách")}</th>
                 <th className="pb-3 md:pb-6 px-1 md:px-4 text-right md:text-left">SL</th>
                 <th className="pb-3 md:pb-6 px-1 md:px-4 hidden lg:table-cell">{t('location')}</th>
-                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden xl:table-cell">Trạng thái</th>
+                <th className="pb-3 md:pb-6 px-1 md:px-4 hidden xl:table-cell">{tr("Trạng thái")}</th>
                 <th className="pb-3 md:pb-6 px-1 md:px-4 text-right">{t('action')}</th>
               </tr>
             </thead>
@@ -1490,14 +1489,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                         setHistoryModal({ isOpen: true, erp: row.erp_code, name: row.item_name || '' });
                       }}
                       className="font-bold text-primary text-[11px] md:text-sm hover:underline cursor-pointer"
-                      title="Xem lịch sử nhập xuất"
+                      title={tr("Xem lịch sử nhập xuất")}
                     >
                       {row.erp_code}
                     </button>
                     <div className="md:hidden flex flex-col gap-0.5 mt-0.5">
                       <span className="text-[9px] text-outline-variant inline-block font-sans"><span className="font-bold">Order:</span> {row.order_id || '-'}</span>
                       <span className="text-[9px] text-outline-variant inline-block font-sans"><span className="font-bold">Loc:</span> {row.location || '-'}</span>
-                      <span className="text-[9px] text-outline-variant inline-block font-sans"><span className="font-bold">Lúc:</span> {row.date} {row.time || '-'}</span>
+                      <span className="text-[9px] text-outline-variant inline-block font-sans"><span className="font-bold">{tr("Lúc:")}</span> {row.date} {row.time || '-'}</span>
                     </div>
                   </td>
                   <td className="py-3 md:py-6 px-1 md:px-4 hidden xl:table-cell">
@@ -1517,7 +1516,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     <button 
                       onClick={() => setHistoryModal({ isOpen: true, erp: row.erp_code, name: row.item_name || '' })}
                       className="material-symbols-outlined text-outline-variant hover:text-primary transition-colors bg-surface-container hover:bg-primary/10 p-1 md:p-2 rounded-lg text-[14px] md:text-base"
-                      title="Lịch sử"
+                      title={tr("Lịch sử")}
                     >
                       history
                     </button>
@@ -1525,7 +1524,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                       <button 
                         onClick={() => handleEditClick(row)}
                         className="material-symbols-outlined text-outline-variant hover:text-primary transition-colors bg-surface-container hover:bg-primary/10 p-1 md:p-2 rounded-lg text-[14px] md:text-base"
-                        title="Sửa thông tin"
+                        title={tr("Sửa thông tin")}
                       >
                         edit
                       </button>
@@ -1536,7 +1535,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               {filteredInbound.length === 0 && (
                 <tr key="empty-inbound">
                   <td colSpan={7} className="py-12 text-center text-on-surface-variant font-medium italic">
-                    Không có dữ liệu nhập kho cho ngày này.
+                    {tr("Không có dữ liệu nhập kho cho ngày này.")}
                   </td>
                 </tr>
               )}
@@ -1555,9 +1554,9 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
             <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
               <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
             </div>
-            <h3 className="text-xl font-black text-on-surface mb-2">Xác nhận xóa {selectedRows.length} mục</h3>
+            <h3 className="text-xl font-black text-on-surface mb-2">{tr("Xác nhận xóa")} {selectedRows.length} {tr("mục")}</h3>
             <p className="text-on-surface-variant text-sm mb-6 leading-relaxed">
-              Bạn có chắc chắn muốn XÓA <strong className="text-error">{selectedRows.length}</strong> dữ liệu nhập kho đã được tick chọn? Số lượng tồn kho của các mặt hàng liên quan sẽ bị GIẢM TỰ ĐỘNG tương ứng.
+              {tr("Bạn có chắc chắn muốn XÓA")} <strong className="text-error">{selectedRows.length}</strong> {tr("dữ liệu nhập kho đã được tick chọn? Số lượng tồn kho của các mặt hàng liên quan sẽ bị GIẢM TỰ ĐỘNG tương ứng.")}
             </p>
             <div className="flex gap-3">
               <button 
@@ -1565,14 +1564,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
                 disabled={loading}
               >
-                Hủy
+                {tr("Hủy")}
               </button>
               <button 
                 onClick={executeDeleteSelected}
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-error text-on-error shadow-lg shadow-error/20 hover:opacity-90 transition-opacity"
                 disabled={loading}
               >
-                {loading ? 'Đang xóa...' : 'Xác nhận xóa'}
+                {loading ? tr("Đang xóa...") : tr("Xác nhận xóa")}
               </button>
             </div>
           </div>
@@ -1585,9 +1584,9 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
             <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error mb-6">
               <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
             </div>
-            <h3 className="text-xl font-black text-on-surface mb-2">CẢNH BÁO NGUY HIỂM</h3>
+            <h3 className="text-xl font-black text-on-surface mb-2">{tr("CẢNH BÁO NGUY HIỂM")}</h3>
             <p className="text-on-surface-variant text-sm mb-6 leading-relaxed">
-              Bạn có chắc chắn muốn XÓA TOÀN BỘ <strong className="text-error">{filteredInbound.length}</strong> dữ liệu nhập kho đang hiển thị trong bộ lọc này? Số lượng tồn kho của các mặt hàng liên quan sẽ bị GIẢM TỰ ĐỘNG tương ứng. Hành động này không thể hoàn tác!
+              {tr("Bạn có chắc chắn muốn XÓA TOÀN BỘ")} <strong className="text-error">{filteredInbound.length}</strong> {tr("dữ liệu nhập kho đang hiển thị trong bộ lọc này? Số lượng tồn kho của các mặt hàng liên quan sẽ bị GIẢM TỰ ĐỘNG tương ứng. Hành động này không thể hoàn tác!")}
             </p>
             <div className="flex gap-3">
               <button 
@@ -1595,14 +1594,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm text-on-surface-variant hover:bg-surface-container-low transition-colors"
                 disabled={loading}
               >
-                Hủy
+                {tr("Hủy")}
               </button>
               <button 
                 onClick={executeDeleteFilteredInbound}
                 className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-error text-on-error shadow-lg shadow-error/20 hover:opacity-90 transition-opacity"
                 disabled={loading}
               >
-                {loading ? 'Đang xóa...' : 'Xác nhận xóa'}
+                {loading ? tr("Đang xóa...") : tr("Xác nhận xóa")}
               </button>
             </div>
           </div>
@@ -1614,8 +1613,8 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
           <div className="bg-surface-container-lowest rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-8 py-6 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-lowest sticky top-0 z-10">
               <div>
-                <h3 className="text-2xl font-bold font-manrope text-on-surface">Chỉnh sửa phiếu nhập kho</h3>
-                <p className="text-on-surface-variant text-sm mt-1 font-medium">Cập nhật thông tin phiếu nhập và quy cách vật tư.</p>
+                <h3 className="text-2xl font-bold font-manrope text-on-surface">{tr("Chỉnh sửa phiếu nhập kho")}</h3>
+                <p className="text-on-surface-variant text-sm mt-1 font-medium">{tr("Cập nhật thông tin phiếu nhập và quy cách vật tư.")}</p>
               </div>
               <button 
                 onClick={() => { setEditingInbound(null); setEditingInventory(null); }}
@@ -1629,11 +1628,11 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               <div className="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/10">
                 <h4 className="text-sm font-bold text-primary uppercase tracking-wider mb-4 flex items-center gap-2">
                   <span className="material-symbols-outlined text-base">receipt_long</span>
-                  Thông tin phiếu nhập
+                  {tr("Thông tin phiếu nhập")}
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Mã đơn hàng</label>
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{tr("Mã đơn hàng")}</label>
                     <input 
                       type="text" 
                       className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20"
@@ -1642,7 +1641,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Mã ERP</label>
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{tr("Mã ERP")}</label>
                     <input 
                       type="text" 
                       className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20"
@@ -1651,7 +1650,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Trạng thái</label>
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{tr("Trạng thái")}</label>
                     <select 
                       className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
                       value={editingInbound.status || 'Stocked'}
@@ -1663,7 +1662,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Số lượng nhập</label>
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{tr("Số lượng nhập")}</label>
                     <input 
                       type="number" 
                       className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20 text-right data-value"
@@ -1672,7 +1671,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Ngày nhập</label>
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{tr("Ngày nhập")}</label>
                     <input 
                       type="date" 
                       className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
@@ -1681,7 +1680,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Đơn vị</label>
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{tr("Đơn vị")}</label>
                     <input 
                       type="text" 
                       className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20"
@@ -1690,7 +1689,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Vị trí (Location)</label>
+                    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{tr("Vị trí (Location)")}</label>
                     <input 
                       type="text" 
                       className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20"
@@ -1702,10 +1701,10 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               </div>
 
               <div className="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/10">
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Lý do chỉnh sửa <span className="text-error">*</span></label>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Lý do chỉnh sửa")} <span className="text-error">*</span></label>
                 <textarea 
                   className="w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 min-h-[80px]"
-                  placeholder="Nhập lý do thay đổi số lượng hoặc thông tin phiếu..."
+                  placeholder={tr("Nhập lý do thay đổi số lượng hoặc thông tin phiếu...")}
                   value={editingInbound.editReason || ''}
                   onChange={e => setEditingInbound({ ...editingInbound, editReason: e.target.value })}
                 />
@@ -1718,11 +1717,11 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   </div>
                   <h4 className="text-sm font-bold text-primary uppercase tracking-wider mb-4 flex items-center gap-2 relative z-10">
                     <span className="material-symbols-outlined text-base">category</span>
-                    Thông tin vật tư
+                    {tr("Thông tin vật tư")}
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-2 gap-4 relative z-10">
                     <div className="col-span-2 space-y-1">
-                      <label className="text-[10px] font-bold text-primary uppercase tracking-wider">Tên vật tư (VN)</label>
+                      <label className="text-[10px] font-bold text-primary uppercase tracking-wider">{tr("Tên vật tư (VN)")}</label>
                       <input 
                         type="text" 
                         className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20"
@@ -1731,7 +1730,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                       />
                     </div>
                     <div className="col-span-2 space-y-1">
-                      <label className="text-[10px] font-bold text-primary uppercase tracking-wider">Quy cách (Specification)</label>
+                      <label className="text-[10px] font-bold text-primary uppercase tracking-wider">{tr("Quy cách (Specification)")}</label>
                       <input 
                         type="text" 
                         className="w-full bg-surface-container-lowest border-none rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary/20"
@@ -1749,14 +1748,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                 onClick={() => { setEditingInbound(null); setEditingInventory(null); }}
                 className="px-6 py-3 font-bold text-on-surface-variant hover:bg-surface-container-low rounded-xl transition-colors text-sm"
               >
-                Hủy
+                {tr("Hủy")}
               </button>
               <button 
                 onClick={handleSaveEdit}
                 className="px-8 py-3 bg-primary text-on-primary font-bold rounded-xl shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all text-sm flex items-center gap-2"
               >
                 <span className="material-symbols-outlined text-[18px]">save</span>
-                Lưu Thay Đổi
+                {tr("Lưu Thay Đổi")}
               </button>
             </div>
           </div>
@@ -1777,8 +1776,8 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                   <span className="material-symbols-outlined text-2xl">history</span>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold font-manrope text-on-surface">Lịch sử sửa phiếu nhập</h3>
-                  <p className="text-on-surface-variant text-xs font-medium">Toàn bộ lịch sử chỉnh sửa phiếu nhập.</p>
+                  <h3 className="text-xl font-bold font-manrope text-on-surface">{tr("Lịch sử sửa phiếu nhập")}</h3>
+                  <p className="text-on-surface-variant text-xs font-medium">{tr("Toàn bộ lịch sử chỉnh sửa phiếu nhập.")}</p>
                 </div>
               </div>
               <button 
@@ -1793,12 +1792,12 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               <table className="w-full text-left border-collapse">
                 <thead className="bg-surface-container-low/50 sticky top-0 z-10 backdrop-blur-md">
                   <tr className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/20">
-                    <th className="py-5 px-6">Thời gian</th>
-                    <th className="py-5 px-6">Phiếu / ERP</th>
-                    <th className="py-5 px-6 text-center">SL Cũ</th>
-                    <th className="py-5 px-6 text-center">Biến động</th>
-                    <th className="py-5 px-6 text-center">SL Mới</th>
-                    <th className="py-5 px-6">Lý do / Người thực hiện</th>
+                    <th className="py-5 px-6">{tr("Thời gian")}</th>
+                    <th className="py-5 px-6">{tr("Phiếu / ERP")}</th>
+                    <th className="py-5 px-6 text-center">{tr("SL Cũ")}</th>
+                    <th className="py-5 px-6 text-center">{tr("Biến động")}</th>
+                    <th className="py-5 px-6 text-center">{tr("SL Mới")}</th>
+                    <th className="py-5 px-6">{tr("Lý do / Người thực hiện")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10 text-sm">
@@ -1840,7 +1839,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                       <td colSpan={6} className="py-24 text-center">
                         <div className="flex flex-col items-center gap-4 opacity-40">
                           <span className="material-symbols-outlined text-6xl">history_toggle_off</span>
-                          <p className="text-sm font-bold italic tracking-wide">Không có dữ liệu chỉnh sửa.</p>
+                          <p className="text-sm font-bold italic tracking-wide">{tr("Không có dữ liệu chỉnh sửa.")}</p>
                         </div>
                       </td>
                     </tr>
@@ -1849,20 +1848,20 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               </table>
             </div>
             <div className="px-8 py-6 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-               <span>Tổng cộng {editHistory.length} lần điều chỉnh</span>
+               <span>{tr("Tổng cộng")} {editHistory.length} {tr("lần điều chỉnh")}</span>
                <div className="flex items-center gap-3">
                  <button
                    onClick={() => {
                      import('xlsx').then(XLSX => {
                        const rows = editHistory.map(item => ({
-                         'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
-                         'Mã phiếu': item.order_id || '',
-                         'Mã ERP': item.erp_code || '',
-                         'SL Cũ': item.old_qty ?? '',
-                         'Biến động': Number(item.new_qty) - Number(item.old_qty || 0),
-                         'SL Mới': item.new_qty ?? '',
-                         'Lý do': item.reason || '',
-                         'Người thực hiện': item.edited_by || '',
+                         [tr("Thời gian")]: new Date(item.edited_at).toLocaleString('vi-VN'),
+                         [tr("Mã phiếu")]: item.order_id || '',
+                         [tr("Mã ERP")]: item.erp_code || '',
+                         [tr("SL Cũ")]: item.old_qty ?? '',
+                         [tr("Biến động")]: Number(item.new_qty) - Number(item.old_qty || 0),
+                         [tr("SL Mới")]: item.new_qty ?? '',
+                         [tr("Lý do")]: item.reason || '',
+                         [tr("Người thực hiện")]: item.edited_by || '',
                        }));
                        const ws = XLSX.utils.json_to_sheet(rows);
                        const wb = XLSX.utils.book_new();
@@ -1873,13 +1872,13 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                    className="flex items-center gap-1.5 px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow hover:bg-emerald-700 transition-colors"
                  >
                    <span className="material-symbols-outlined text-sm">download</span>
-                   Xuất Excel
+                   {tr("Xuất Excel")}
                  </button>
                  <button
                   onClick={() => setShowEditHistory(false)}
                   className="px-8 py-3 bg-primary text-on-primary rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
                  >
-                   Đóng cửa sổ
+                   {tr("Đóng cửa sổ")}
                  </button>
                </div>
             </div>
@@ -1906,7 +1905,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               <div className="px-8 py-5 border-b border-outline-variant/20 flex justify-between items-center bg-error-container/10">
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-error text-2xl">report</span>
-                  <h3 className="text-xl font-black text-on-surface">Chi tiết kết quả</h3>
+                  <h3 className="text-xl font-black text-on-surface">{tr("Chi tiết kết quả")}</h3>
                 </div>
                 <button onClick={() => setErrorLog('')} className="material-symbols-outlined text-on-surface-variant hover:text-error transition-colors">close</button>
               </div>
@@ -1915,14 +1914,14 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               </div>
               <div className="px-8 py-4 border-t border-outline-variant/10 flex gap-3 justify-end">
                 <button
-                  onClick={() => { navigator.clipboard.writeText(errorLog); alert('Đã copy!'); }}
+                  onClick={() => { navigator.clipboard.writeText(errorLog); alert(tr("Đã copy!")); }}
                   className="px-6 py-3 bg-primary text-on-primary rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-lg transition-all"
                 >
                   <span className="material-symbols-outlined text-lg">content_copy</span>
                   Copy
                 </button>
                 <button onClick={() => setErrorLog('')} className="px-6 py-3 bg-surface-container text-on-surface-variant rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors">
-                  Đóng
+                  {tr("Đóng")}
                 </button>
               </div>
             </motion.div>

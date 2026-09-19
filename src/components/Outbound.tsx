@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { exportToExcelMultiSheet } from '../lib/excelUtils';
 import { useAuth } from '../contexts/AuthContext';
 import ItemHistoryModal from './ItemHistoryModal';
+import { tr } from '../contexts/LanguageContext';
 
 const showToast = (msg: string, isError = false) => {
   try {
@@ -90,8 +91,8 @@ const Outbound = () => {
   const bulkApproveSelectedOutbound = async () => {
     const toApprove = pendingOutbound.filter(p => selectedOutboundPendingIds.includes(p.id) && p.erp_code?.trim() && parseInt(p.qty) > 0);
     const skipped = selectedOutboundPendingIds.length - toApprove.length;
-    if (toApprove.length === 0) { showToast('Không có lệnh hợp lệ trong lựa chọn (cần ERP và số lượng > 0).', true); return; }
-    if (!safeConfirm(`Xác nhận tạo ${toApprove.length} lệnh xuất?${skipped > 0 ? `\n(${skipped} mục thiếu thông tin sẽ bỏ qua)` : ''}`)) return;
+    if (toApprove.length === 0) { showToast(tr("Không có lệnh hợp lệ trong lựa chọn (cần ERP và số lượng > 0)."), true); return; }
+    if (!safeConfirm(`Xác nhận tạo ${toApprove.length} lệnh xuất?${skipped > 0 ? tr("({0} mục thiếu thông tin sẽ bỏ qua)", [skipped]) : ''}`)) return;
     setBulkOutboundPendingLoading(true);
     try {
       const CHUNK = 200;
@@ -99,7 +100,7 @@ const Outbound = () => {
         const erpTrim = p.erp_code.trim();
         const qtyNum = parseInt(p.qty);
         const outboundId = p.outbound_id || `OUT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-        const recipientName = p.recipient_name || p.partner || 'Nội bộ';
+        const recipientName = p.recipient_name || p.partner || tr("Nội bộ");
         const partnerDisplay = [recipientName, p.dept_name].filter(Boolean).join(' / ');
         const initials = recipientName.split(' ').map((n: string) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
         return {
@@ -114,18 +115,18 @@ const Outbound = () => {
       });
       for (let i = 0; i < records.length; i += CHUNK) {
         const { error } = await supabase.from('outbound_records').insert(records.slice(i, i + CHUNK));
-        if (error) { showToast('Lỗi: ' + error.message, true); return; }
+        if (error) { showToast(tr("Lỗi:") + error.message, true); return; }
       }
       const ids = toApprove.map(p => p.id);
       for (let i = 0; i < ids.length; i += CHUNK) {
         await supabase.from('outbound_pending').delete().in('id', ids.slice(i, i + CHUNK));
       }
       setSelectedOutboundPendingIds([]);
-      showToast(`✅ Đã tạo ${toApprove.length} lệnh xuất kho!`);
+      showToast(tr("✅ Đã tạo {0} lệnh xuất kho!", [toApprove.length]));
       fetchPendingOutbound();
       loadOutboundRecords();
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setBulkOutboundPendingLoading(false);
     }
@@ -133,7 +134,7 @@ const Outbound = () => {
 
   const bulkDeleteSelectedOutbound = async () => {
     if (selectedOutboundPendingIds.length === 0) return;
-    if (!safeConfirm(`Xóa ${selectedOutboundPendingIds.length} lệnh đã chọn khỏi tab chờ xử lý?`)) return;
+    if (!safeConfirm(tr("Xóa {0} lệnh đã chọn khỏi tab chờ xử lý?", [selectedOutboundPendingIds.length]))) return;
     setBulkOutboundPendingLoading(true);
     try {
       const CHUNK = 200;
@@ -143,7 +144,7 @@ const Outbound = () => {
       setSelectedOutboundPendingIds([]);
       fetchPendingOutbound();
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setBulkOutboundPendingLoading(false);
     }
@@ -152,10 +153,10 @@ const Outbound = () => {
   const approvePendingOutbound = async (p: any) => {
     const erpTrim = p.erp_code?.trim();
     const qtyNum = parseInt(p.qty);
-    if (!erpTrim) { showToast('Cần có Mã ERP trước khi xác nhận.', true); return; }
-    if (!qtyNum || qtyNum <= 0) { showToast('Số lượng không hợp lệ.', true); return; }
+    if (!erpTrim) { showToast(tr("Cần có Mã ERP trước khi xác nhận."), true); return; }
+    if (!qtyNum || qtyNum <= 0) { showToast(tr("Số lượng không hợp lệ."), true); return; }
     const outboundId = p.outbound_id || `OUT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const recipientName = p.recipient_name || p.partner || 'Nội bộ';
+    const recipientName = p.recipient_name || p.partner || tr("Nội bộ");
     const partnerDisplay = [recipientName, p.dept_name].filter(Boolean).join(' / ');
     const initials = recipientName.split(' ').map((n: string) => n?.[0] || '').join('').toUpperCase().slice(0, 2);
     const { error } = await supabase.from('outbound_records').insert([{
@@ -167,9 +168,9 @@ const Outbound = () => {
       date: new Date().toISOString().split('T')[0],
       required_date: p.required_date || new Date().toISOString().split('T')[0],
     }]);
-    if (error) { showToast('Lỗi: ' + error.message, true); return; }
+    if (error) { showToast(tr("Lỗi:") + error.message, true); return; }
     await supabase.from('outbound_pending').delete().eq('id', p.id);
-    showToast(`Đã xác nhận ${erpTrim} vào Xuất Kho`);
+    showToast(tr("Đã xác nhận {0} vào Xuất Kho", [erpTrim]));
     fetchPendingOutbound();
     loadOutboundRecords();
   };
@@ -249,7 +250,7 @@ const Outbound = () => {
           setEditHistory(all);
         } catch (err: any) {
           console.error('Error fetching edit history:', err);
-          showToast('Lỗi khi tải lịch sử: ' + err.message, true);
+          showToast(tr("Lỗi khi tải lịch sử:") + err.message, true);
         }
       };
       fetchEditHistory();
@@ -408,7 +409,7 @@ const Outbound = () => {
     }
     
     if (!cached) {
-      showToast(`Mã ERP "${upperErp}" không tồn tại trong hệ thống`, true);
+      showToast(tr("Mã ERP \"{0}\" không tồn tại trong hệ thống", [upperErp]), true);
     }
   };
 
@@ -564,11 +565,11 @@ const Outbound = () => {
       const erpTrim = row.erpCode.trim();
       const qtyNum = Math.round(parseFloat(row.qty));
       if (!erpTrim && !row.qty.trim()) {
-        errorRows.push({ row: idx + 1, reason: 'Thiếu ERP và số lượng', data: `Partner: ${row.partner}` });
+        errorRows.push({ row: idx + 1, reason: tr("Thiếu ERP và số lượng"), data: `Partner: ${row.partner}` });
       } else if (!erpTrim) {
-        errorRows.push({ row: idx + 1, reason: 'Thiếu mã ERP', data: `Qty: ${row.qty}, Partner: ${row.partner}` });
+        errorRows.push({ row: idx + 1, reason: tr("Thiếu mã ERP"), data: `Qty: ${row.qty}, Partner: ${row.partner}` });
       } else if (!row.qty.trim() || isNaN(qtyNum) || qtyNum <= 0) {
-        errorRows.push({ row: idx + 1, reason: 'Số lượng = 0 hoặc không hợp lệ', data: `ERP: ${erpTrim}, Qty: ${row.qty}` });
+        errorRows.push({ row: idx + 1, reason: tr("Số lượng = 0 hoặc không hợp lệ"), data: `ERP: ${erpTrim}, Qty: ${row.qty}` });
       } else {
         validRows.push(row);
       }
@@ -595,7 +596,7 @@ const Outbound = () => {
       const { error: pErr } = await supabase.from('outbound_pending').insert(pendingPayload);
       if (!pErr) {
         setPendingOutboundCount(c => c + pendingPayload.length);
-        showToast(`⚠️ ${pendingPayload.length} dòng lỗi → chuyển vào tab Chờ xử lý`, true);
+        showToast(tr("⚠️ {0} dòng lỗi → chuyển vào tab Chờ xử lý", [pendingPayload.length]), true);
       }
     }
 
@@ -627,12 +628,12 @@ const Outbound = () => {
         bpm_number:     row.bpm || null,
         qty:            row.qty || '0',
         required_date:  row.requiredDate || null,
-        reason:         'Trùng hoàn toàn trong file',
+        reason:         tr("Trùng hoàn toàn trong file"),
       }));
       const { error: dpErr } = await supabase.from('outbound_pending').insert(dupPendingPayload);
       if (!dpErr) {
         setPendingOutboundCount(c => c + dupPendingPayload.length);
-        showToast(`⚠️ ${dupPendingPayload.length} dòng trùng hoàn toàn → tab Chờ xử lý`, true);
+        showToast(tr("⚠️ {0} dòng trùng hoàn toàn → tab Chờ xử lý", [dupPendingPayload.length]), true);
       }
     }
 
@@ -641,7 +642,7 @@ const Outbound = () => {
     }
 
     const payload = uniqueValidRows.map(row => {
-      const recipientName = (row.recipientName || row.partner || '').trim() || 'Nội bộ';
+      const recipientName = (row.recipientName || row.partner || '').trim() || tr("Nội bộ");
       const recipientId = (row.recipientId || '').trim();
       const deptName = (row.deptName || '').trim();
       const deptCode = (row.deptCode || '').trim();
@@ -692,37 +693,37 @@ const Outbound = () => {
 
     if (errorRows.length > 0 || insertErrors.length > 0) {
       const msg = [
-        `Tạo thành công: ${totalInserted}/${allRows.length} lệnh xuất.`,
-        errorRows.length > 0 ? `\n⚠️ ${errorRows.length} dòng bị bỏ qua:\n${errorRows.map(e => `Dòng ${e.row}: ${e.reason} — ${e.data}`).join('\n')}` : '',
-        insertErrors.length > 0 ? `\n❌ Lỗi DB:\n${insertErrors.join('\n')}` : '',
+        tr("Tạo thành công: {0}/{1} lệnh xuất.", [totalInserted, allRows.length]),
+        errorRows.length > 0 ? tr("\n⚠️ {0} dòng bị bỏ qua:\n{1}", [errorRows.length, errorRows.map(e => tr("Dòng {0}: {1} — {2}", [e.row, e.reason, e.data])).join('\n')]) : '',
+        insertErrors.length > 0 ? tr("\n❌ Lỗi DB:\n{0}", [insertErrors.join('\n')]) : '',
       ].join('');
       setErrorLog(msg);
     } else {
-      showToast(`✅ Tạo thành công ${totalInserted} lệnh xuất kho!`);
+      showToast(tr("✅ Tạo thành công {0} lệnh xuất kho!", [totalInserted]));
     }
     listRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleDeleteOutbound = async (id: string) => {
     if (!canEdit) return;
-    if (!safeConfirm('Bạn có chắc chắn muốn xóa lệnh xuất này? Hành động này không thể hoàn tác.')) return;
+    if (!safeConfirm(tr("Bạn có chắc chắn muốn xóa lệnh xuất này? Hành động này không thể hoàn tác."))) return;
 
     // Check if status is "Chờ xuất", otherwise we might need other logic, but let's just delete
     const { error } = await supabase.from('outbound_records').delete().eq('id', id);
     if (error) {
-      showToast('Lỗi khi xóa lệnh xuất: ' + error.message, true);
+      showToast(tr("Lỗi khi xóa lệnh xuất:") + error.message, true);
     } else {
       setSelectedRows(prev => prev.filter(rowId => rowId !== id));
-      showToast('Xóa thành công!');
+      showToast(tr("Xóa thành công!"));
     }
   };
 
   const handleDeleteSelected = async () => {
     if (!canEdit) return;
     if (selectedRows.length === 0) return;
-    if (!safeConfirm(`Bạn có chắc chắn muốn xóa ${selectedRows.length} lệnh xuất đã chọn?`)) return;
+    if (!safeConfirm(tr("Bạn có chắc chắn muốn xóa {0} lệnh xuất đã chọn?", [selectedRows.length]))) return;
 
-    showToast(`Đang xóa ${selectedRows.length} lệnh xuất...`);
+    showToast(tr("Đang xóa {0} lệnh xuất...", [selectedRows.length]));
     try {
       const chunkSize = 100;
       for (let i = 0; i < selectedRows.length; i += chunkSize) {
@@ -731,10 +732,10 @@ const Outbound = () => {
         if (error) throw error;
       }
       setSelectedRows([]);
-      showToast(`✅ Đã xóa ${selectedRows.length} lệnh xuất!`);
+      showToast(tr("✅ Đã xóa {0} lệnh xuất!", [selectedRows.length]));
       await loadOutboundRecords();
     } catch (error: any) {
-      showToast('Lỗi khi xóa: ' + error.message, true);
+      showToast(tr("Lỗi khi xóa:") + error.message, true);
     }
   };
 
@@ -761,10 +762,10 @@ const Outbound = () => {
   const handleConfirmOutbound = async (record: any) => {
     if (!canEdit) return;
     if (record.status === 'Đã Xuất') {
-      showToast('Lệnh này đã được xuất rồi!', true);
+      showToast(tr("Lệnh này đã được xuất rồi!"), true);
       return;
     }
-    if (!safeConfirm(`Xác nhận xuất kho ${record.qty} ${record.erp_code}?`)) return;
+    if (!safeConfirm(tr("Xác nhận xuất kho {0} {1}?", [record.qty, record.erp_code]))) return;
 
     setLoading(true);
     try {
@@ -788,9 +789,9 @@ const Outbound = () => {
           ? { ...item, end_stock: (item.end_stock || 0) - record.qty, out_qty: (item.out_qty || 0) + record.qty } 
           : item
       ));
-      showToast(`✅ Đã xuất ${record.qty} ${record.erp_code}!`);
+      showToast(tr("✅ Đã xuất {0} {1}!", [record.qty, record.erp_code]));
     } catch (error: any) {
-      showToast('Lỗi xác nhận xuất: ' + error.message, true);
+      showToast(tr("Lỗi xác nhận xuất:") + error.message, true);
     } finally {
       setLoading(false);
     }
@@ -801,7 +802,7 @@ const Outbound = () => {
     if (!editingRecord || !canEdit) return;
 
     if (editingRecord.status === 'Đã Xuất' && (!editingRecord.editReason || !editingRecord.editReason.trim())) {
-      showToast('Vui lòng nhập lý do sửa đổi!', true);
+      showToast(tr("Vui lòng nhập lý do sửa đổi!"), true);
       return;
     }
 
@@ -812,17 +813,17 @@ const Outbound = () => {
     const deptCode = (editingRecord.dept_code || '').trim();
 
     if (!recipientName) {
-      showToast('Vui lòng nhập tên người nhận.', true);
+      showToast(tr("Vui lòng nhập tên người nhận."), true);
       return;
     }
     if (!erpCode) {
-      showToast('Vui lòng nhập mã ERP.', true);
+      showToast(tr("Vui lòng nhập mã ERP."), true);
       return;
     }
 
     const requestedQty = Math.round(parseFloat(editingRecord.qty));
     if (!requestedQty || requestedQty <= 0) {
-      showToast('Số lượng không hợp lệ.', true);
+      showToast(tr("Số lượng không hợp lệ."), true);
       return;
     }
 
@@ -855,7 +856,7 @@ const Outbound = () => {
       .eq('id', editingRecord.id);
 
     if (error) {
-      showToast('Lỗi khi cập nhật phiếu xuất: ' + error.message, true);
+      showToast(tr("Lỗi khi cập nhật phiếu xuất:") + error.message, true);
     } else {
       // Log edit history
       const { error: historyError } = await supabase.from('edit_history_outbound').insert([{
@@ -874,7 +875,7 @@ const Outbound = () => {
 
       setOutboundRecords(prev => prev.map(item => String(item.id) === String(editingRecord.id) ? { ...item, ...updatedFields } : item));
       setEditingRecord(null);
-      showToast('Cập nhật lệnh xuất kho thành công!');
+      showToast(tr("Cập nhật lệnh xuất kho thành công!"));
     }
   };
 
@@ -978,7 +979,7 @@ const Outbound = () => {
 
   const exportOutboundToExcel = async () => {
     setLoading(true);
-    showToast('Đang xuất dữ liệu...');
+    showToast(tr("Đang xuất dữ liệu..."));
     try {
       const today = new Date().toISOString().split('T')[0];
       
@@ -1002,7 +1003,7 @@ const Outbound = () => {
       }
 
       if (dataToExport.length === 0) {
-        showToast('Không có dữ liệu để xuất.', true);
+        showToast(tr("Không có dữ liệu để xuất."), true);
         return;
       }
 
@@ -1013,21 +1014,21 @@ const Outbound = () => {
       const exportData = filteredExport.map(item => {
         const inv = inventoryMap.get(item.erp_code);
         return {
-          'Mã Phiếu': item.outbound_id,
-          'Mã NV': item.recipient_id || '',
-          'Người Nhận': item.recipient_name || item.partner || '',
-          'Mã Bộ Phận': item.dept_code || '',
-          'Bộ Phận Nhận': item.dept_name || '',
-          'Số BPM': item.bpm_number || '',
-          'Mã ERP': item.erp_code,
-          'Tên Vật Tư': inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : (item.item_name || ''),
-          'Quy Cách': inv?.spec || '',
-          'Số Lượng': item.qty,
-          'Ngày Yêu Cầu': item.required_date || item.date,
-          'Ngày Tạo': new Date(item.created_at).toLocaleString(),
-          'Trạng Thái': item.status,
-          'Vị Trí': item.location || '',
-          'Người xử lý': item.initials
+          [tr("Mã Phiếu")]: item.outbound_id,
+          [tr("Mã NV")]: item.recipient_id || '',
+          [tr("Người Nhận")]: item.recipient_name || item.partner || '',
+          [tr("Mã Bộ Phận")]: item.dept_code || '',
+          [tr("Bộ Phận Nhận")]: item.dept_name || '',
+          [tr("Số BPM")]: item.bpm_number || '',
+          [tr("Mã ERP")]: item.erp_code,
+          [tr("Tên Vật Tư")]: inv ? `${inv.name || ''}${inv.name_zh ? ` (${inv.name_zh})` : ''}` : (item.item_name || ''),
+          [tr("Quy Cách")]: inv?.spec || '',
+          [tr("Số Lượng")]: item.qty,
+          [tr("Ngày Yêu Cầu")]: item.required_date || item.date,
+          [tr("Ngày Tạo")]: new Date(item.created_at).toLocaleString(),
+          [tr("Trạng Thái")]: item.status,
+          [tr("Vị Trí")]: item.location || '',
+          [tr("Người xử lý")]: item.initials
         };
       });
 
@@ -1036,11 +1037,11 @@ const Outbound = () => {
         : '';
       const fileName = `xuat-kho${rangeTag || `_${today}`}.xlsx`;
         
-      const sheets = exportToExcelMultiSheet(exportData, fileName, 'Xuất Kho');
-      showToast(`✅ Đã xuất ${exportData.length.toLocaleString()} dòng — ${sheets} sheet!`);
+      const sheets = exportToExcelMultiSheet(exportData, fileName, tr("Xuất Kho"));
+      showToast(tr("✅ Đã xuất {0} dòng — {1} sheet!", [exportData.length.toLocaleString(), sheets]));
     } catch (err: any) {
       console.error('Export error:', err);
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -1067,11 +1068,11 @@ const Outbound = () => {
     const pendingRecords = outboundRecords.filter(r => selectedRows.includes(r.id) && r.status === 'Chờ xuất');
     
     if (pendingRecords.length === 0) {
-      showToast('Không có lệnh nào ở trạng thái "Chờ xuất" trong các mục được chọn!', true);
+      showToast(tr("Không có lệnh nào ở trạng thái \"Chờ xuất\" trong các mục được chọn!"), true);
       return;
     }
 
-    if (!safeConfirm(`Bạn có chắc chắn muốn xác nhận xuất kho cho ${pendingRecords.length} lệnh? Hệ thống sẽ tự động trừ tồn kho tương ứng.`)) return;
+    if (!safeConfirm(tr("Bạn có chắc chắn muốn xác nhận xuất kho cho {0} lệnh? Hệ thống sẽ tự động trừ tồn kho tương ứng.", [pendingRecords.length]))) return;
 
     setLoading(true);
     
@@ -1102,10 +1103,10 @@ const Outbound = () => {
         await supabase.from('movements').insert(chunk);
       }
 
-      showToast(`✅ Đã xác nhận xuất kho ${totalConfirmed} lệnh!`);
+      showToast(tr("✅ Đã xác nhận xuất kho {0} lệnh!", [totalConfirmed]));
     } catch (err: any) {
       console.error('Process error:', err);
-      showToast('Có lỗi xảy ra: ' + (err.message || 'Không rõ nguyên nhân'), true);
+      showToast(tr("Có lỗi xảy ra:") + (err.message || tr("Không rõ nguyên nhân")), true);
     } finally {
       await loadOutboundRecords(); 
       setLoading(false);
@@ -1118,7 +1119,7 @@ const Outbound = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between items-start gap-4 mb-6 md:mb-8">
         <div>
           <h2 className="text-3xl md:text-4xl font-black text-on-surface tracking-tight mb-1 md:mb-2">{t('outbound')}</h2>
-          <p className="text-xs md:text-sm text-on-surface-variant font-medium opacity-70">Tạo phiếu và quản lý luồng hàng hóa xuất kho.</p>
+          <p className="text-xs md:text-sm text-on-surface-variant font-medium opacity-70">{tr("Tạo phiếu và quản lý luồng hàng hóa xuất kho.")}</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <button 
@@ -1126,7 +1127,7 @@ const Outbound = () => {
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-base"
           >
             <span className="material-symbols-outlined text-lg">history</span>
-            <span>Lịch sử</span>
+            <span>{tr("Lịch sử")}</span>
           </button>
           <button
             onClick={handleSync}
@@ -1134,7 +1135,7 @@ const Outbound = () => {
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-outline-variant/10 text-xs md:text-base disabled:opacity-50"
           >
             <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
-            <span>Đồng bộ</span>
+            <span>{tr("Đồng bộ")}</span>
           </button>
           <button 
             onClick={exportOutboundToExcel}
@@ -1142,7 +1143,7 @@ const Outbound = () => {
             className="flex-1 md:flex-none justify-center px-4 md:px-5 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm border border-primary/20 text-xs md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined text-lg">{loading ? 'sync' : 'file_download'}</span>
-            <span>{loading ? 'Đang xuất...' : 'Xuất Excel'}</span>
+            <span>{loading ? tr("Đang xuất...") : tr("Xuất Excel")}</span>
           </button>
         </div>
       </div>
@@ -1150,15 +1151,15 @@ const Outbound = () => {
 
       <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4">
         <div className="bg-surface-container-low p-2 md:p-4 rounded-xl md:rounded-2xl shadow-sm border border-outline-variant/10 text-center">
-          <span className="text-[8px] md:text-[10px] font-black text-on-surface-variant uppercase tracking-widest block mb-0.5 opacity-60">MÃ HÀNG</span>
+          <span className="text-[8px] md:text-[10px] font-black text-on-surface-variant uppercase tracking-widest block mb-0.5 opacity-60">{tr("MÃ HÀNG")}</span>
           <div className="text-sm md:text-xl font-black text-primary leading-none tracking-tight">{filteredOutboundStats.uniqueSKU.toLocaleString()} <span className="text-[8px] md:text-[10px] font-medium opacity-50 font-inter">SKU</span></div>
         </div>
         <div className="bg-surface-container-low p-2 md:p-4 rounded-xl md:rounded-2xl shadow-sm border border-outline-variant/10 text-center">
-          <span className="text-[8px] md:text-[10px] font-black text-on-surface-variant uppercase tracking-widest block mb-0.5 opacity-60">PHIẾU</span>
-          <div className="text-sm md:text-xl font-black text-amber-600 leading-none tracking-tight">{filteredOutboundStats.count.toLocaleString()} <span className="text-[8px] md:text-[10px] font-medium opacity-50 font-inter">Lượt</span></div>
+          <span className="text-[8px] md:text-[10px] font-black text-on-surface-variant uppercase tracking-widest block mb-0.5 opacity-60">{tr("PHIẾU")}</span>
+          <div className="text-sm md:text-xl font-black text-amber-600 leading-none tracking-tight">{filteredOutboundStats.count.toLocaleString()} <span className="text-[8px] md:text-[10px] font-medium opacity-50 font-inter">{tr("Lượt")}</span></div>
         </div>
         <div className="bg-surface-container-low p-2 md:p-4 rounded-xl md:rounded-2xl shadow-sm border border-outline-variant/10 text-center">
-          <span className="text-[8px] md:text-[10px] font-black text-on-surface-variant uppercase tracking-widest block mb-0.5 opacity-60">TỔNG SL</span>
+          <span className="text-[8px] md:text-[10px] font-black text-on-surface-variant uppercase tracking-widest block mb-0.5 opacity-60">{tr("TỔNG SL")}</span>
           <div className="text-sm md:text-xl font-black text-primary leading-none tracking-tight">{filteredOutboundStats.qty.toLocaleString()} <span className="text-[8px] md:text-[10px] font-medium opacity-50 font-inter">Units</span></div>
         </div>
       </div>
@@ -1177,7 +1178,7 @@ const Outbound = () => {
             <input
               autoFocus
               type="text"
-              placeholder="Tìm mã ERP, người nhận, BPM..."
+              placeholder={tr("Tìm mã ERP, người nhận, BPM...")}
               className="flex-1 ml-2 h-10 bg-transparent border-none outline-none text-sm font-semibold text-on-surface placeholder:text-on-surface-variant/50"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -1195,9 +1196,9 @@ const Outbound = () => {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="Chờ xuất">Chờ xuất</option>
-            <option value="Đã Xuất">Đã Xuất</option>
+            <option value="all">{tr("Tất cả trạng thái")}</option>
+            <option value="Chờ xuất">{tr("Chờ xuất")}</option>
+            <option value="Đã Xuất">{tr("Đã Xuất")}</option>
           </select>
         </div>
 
@@ -1211,8 +1212,8 @@ const Outbound = () => {
             value={sortField}
             onChange={(e) => setSortField(e.target.value as any)}
           >
-            <option value="date">Xếp theo Ngày</option>
-            <option value="outbound_id">Xếp theo Mã Xuất</option>
+            <option value="date">{tr("Xếp theo Ngày")}</option>
+            <option value="outbound_id">{tr("Xếp theo Mã Xuất")}</option>
           </select>
           <button
             onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
@@ -1233,7 +1234,7 @@ const Outbound = () => {
             onChange={(e) => setFilterDateType(e.target.value as any)}
           >
             <option value="date">{t('requiredDate')}</option>
-            <option value="created_at">Ngày tạo lệnh</option>
+            <option value="created_at">{tr("Ngày tạo lệnh")}</option>
           </select>
           <input
             type="date"
@@ -1252,7 +1253,7 @@ const Outbound = () => {
             <button
               onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); }}
               className="text-on-surface-variant/50 hover:text-error transition-colors"
-              title="Xoá bộ lọc ngày"
+              title={tr("Xoá bộ lọc ngày")}
             >
               <span className="material-symbols-outlined text-sm">close</span>
             </button>
@@ -1280,16 +1281,16 @@ const Outbound = () => {
               <div>
                 <h3 className="text-xl font-bold flex items-center gap-2">
                   <span className="material-symbols-outlined text-secondary">assignment_add</span>
-                  Tạo Lệnh Xuất Kho
+                  {tr("Tạo Lệnh Xuất Kho")}
                 </h3>
                 <div className="flex items-center gap-3 mt-1 text-sm text-on-surface-variant font-medium">
-                  <p>Hỗ trợ dán (Ctrl+V) hoặc nạp dữ liệu từ Excel.</p>
+                  <p>{tr("Hỗ trợ dán (Ctrl+V) hoặc nạp dữ liệu từ Excel.")}</p>
                   <button onClick={exportTemplate} className="text-primary hover:underline flex items-center gap-1 font-bold">
-                    <span className="material-symbols-outlined text-[14px]">download</span> Tải File Mẫu
+                    <span className="material-symbols-outlined text-[14px]">download</span> {tr("Tải File Mẫu")}
                   </button>
                   <span className="text-outline-variant">|</span>
                   <label className="text-secondary hover:underline flex items-center gap-1 font-bold cursor-pointer">
-                    <span className="material-symbols-outlined text-[14px]">upload_file</span> Nạp File Excel
+                    <span className="material-symbols-outlined text-[14px]">upload_file</span> {tr("Nạp File Excel")}
                     <input
                       type="file"
                       accept=".xlsx, .xls"
@@ -1315,17 +1316,17 @@ const Outbound = () => {
                   <thead className="sticky top-0 bg-surface-container-highest z-20 shadow-sm border-b border-outline-variant/20">
                     <tr>
                       <th className="px-2 py-3 text-xs font-bold text-on-surface-variant uppercase text-center w-10">#</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">Mã Phiếu Xuất</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã NV</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên Người Nhận (*)</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Mã Bộ Phận</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">Tên Bộ Phận</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">Số BPM</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[180px]">Mã ERP (*)</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Tên SP</th>
-                      <th className="px-4 py-3 text-xs font-bold text-primary uppercase min-w-[100px]">Tồn Kho</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">Số lượng (*)</th>
-                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">Ngày cần xuất</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[120px]">{tr("Mã Phiếu Xuất")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">{tr("Mã NV")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">{tr("Tên Người Nhận (*)")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">{tr("Mã Bộ Phận")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[130px]">{tr("Tên Bộ Phận")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[110px]">{tr("Số BPM")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[180px]">{tr("Mã ERP (*)")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{tr("Tên SP")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-primary uppercase min-w-[100px]">{tr("Tồn Kho")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[100px]">{tr("Số lượng (*)")}</th>
+                      <th className="px-4 py-3 text-xs font-bold text-on-surface-variant uppercase min-w-[150px]">{tr("Ngày cần xuất")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/10 text-sm bg-surface-container-lowest">
@@ -1351,7 +1352,7 @@ const Outbound = () => {
                               onChange={(e) => handleRowChange(idx, 'recipientId', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'recipientId')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Mã NV"
+                              placeholder={tr("Mã NV")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1361,7 +1362,7 @@ const Outbound = () => {
                               onChange={(e) => handleRowChange(idx, 'recipientName', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'recipientName')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Tên người nhận..."
+                              placeholder={tr("Tên người nhận...")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1372,7 +1373,7 @@ const Outbound = () => {
                               onChange={(e) => handleRowDeptCodeChange(idx, e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'deptCode')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Chọn mã BP"
+                              placeholder={tr("Chọn mã BP")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1382,7 +1383,7 @@ const Outbound = () => {
                               onChange={(e) => handleRowChange(idx, 'deptName', e.target.value)}
                               onPaste={(e) => handlePaste(e, idx, 'deptName')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-medium"
-                              placeholder="Tên bộ phận..."
+                              placeholder={tr("Tên bộ phận...")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5">
@@ -1404,7 +1405,7 @@ const Outbound = () => {
                               onBlur={(e) => handleErpLookup(e.target.value, idx)}
                               onPaste={(e) => handlePaste(e, idx, 'erpCode')}
                               className="w-full bg-transparent border-none focus:ring-2 focus:ring-primary focus:outline-none px-4 py-3 text-sm font-bold text-primary"
-                              placeholder="Nhập/Chọn ERP"
+                              placeholder={tr("Nhập/Chọn ERP")}
                             />
                           </td>
                           <td className="p-0 border-r border-outline-variant/5 bg-on-surface/5">
@@ -1452,7 +1453,7 @@ const Outbound = () => {
               <div className="flex justify-between items-center bg-surface-container-low p-4 rounded-xl border border-outline-variant/20 mt-4">
                 <div className="text-sm font-medium text-on-surface-variant flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary">info</span>
-                  Sẽ lưu <strong className="text-primary">{outboundRows.filter(r => r.erpCode.trim() !== '' && Math.round(parseFloat(r.qty)) > 0).length}</strong> phiếu xuất hợp lệ.
+                  {tr("Sẽ lưu")} <strong className="text-primary">{outboundRows.filter(r => r.erpCode.trim() !== '' && Math.round(parseFloat(r.qty)) > 0).length}</strong> {tr("phiếu xuất hợp lệ.")}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1460,7 +1461,7 @@ const Outbound = () => {
                     onClick={handleCancelBatch}
                     className="bg-surface-container-highest text-on-surface px-6 py-2.5 rounded-xl font-bold hover:bg-surface-container-high transition-colors"
                   >
-                    Hủy
+                    {tr("Hủy")}
                   </button>
                   <button
                     type="button"
@@ -1468,14 +1469,14 @@ const Outbound = () => {
                     disabled={!canEdit || outboundRows.filter(r => r.erpCode.trim() !== '' && Math.round(parseFloat(r.qty)) > 0).length === 0}
                     className="bg-primary text-on-primary px-8 py-2.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none disabled:hover:shadow-md"
                   >
-                    Tạo Các Phiếu Này
+                    {tr("Tạo Các Phiếu Này")}
                   </button>
                 </div>
               </div>
               <datalist id="outbound-erp-options">
                 {inventoryItems.map((item, idx) => (
                   <option key={item.erp || `bulk-erp-${idx}`} value={item.erp || ''}>
-                    {item.name} {item.name_zh ? `(${item.name_zh})` : ''} - Tồn: {item.end_stock.toLocaleString('en-US')}
+                    {item.name} {item.name_zh ? `(${item.name_zh})` : ''} {tr("- Tồn:")} {item.end_stock.toLocaleString('en-US')}
                   </option>
                 ))}
               </datalist>
@@ -1487,11 +1488,11 @@ const Outbound = () => {
           <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
             <div className="px-4 md:px-8 py-4 md:py-6 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
               <div className="flex items-center gap-2">
-                <h3 className="text-base md:text-lg font-bold">Danh sách lệnh xuất kho</h3>
+                <h3 className="text-base md:text-lg font-bold">{tr("Danh sách lệnh xuất kho")}</h3>
                 <div className="flex gap-1 bg-surface-container rounded-xl p-1 ml-2">
-                  <button onClick={() => setOutboundTab('list')} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${outboundTab === 'list' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>Danh sách</button>
+                  <button onClick={() => setOutboundTab('list')} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${outboundTab === 'list' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>{tr("Danh sách")}</button>
                   <button onClick={() => setOutboundTab('pending')} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 ${outboundTab === 'pending' ? 'bg-amber-500 text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}>
-                    Chờ xử lý
+                    {tr("Chờ xử lý")}
                     {pendingOutboundCount > 0 && <span className={`text-[10px] px-1 py-0.5 rounded-full font-black ${outboundTab === 'pending' ? 'bg-white/20' : 'bg-amber-500 text-white'}`}>{pendingOutboundCount}</span>}
                   </button>
                 </div>
@@ -1500,7 +1501,7 @@ const Outbound = () => {
                 <button 
                   onClick={() => loadOutboundRecords()}
                   className="p-2 hover:bg-surface-container-high rounded-full transition-colors text-on-surface-variant"
-                  title="Tải lại dữ liệu"
+                  title={tr("Tải lại dữ liệu")}
                 >
                   <span className="material-symbols-outlined text-lg">refresh</span>
                 </button>
@@ -1511,37 +1512,37 @@ const Outbound = () => {
               <div className="p-4">
                 <div className="flex items-center gap-3 mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                   <span className="material-symbols-outlined text-amber-500">warning</span>
-                  <p className="text-sm text-on-surface"><span className="font-bold">Lệnh xuất bị lỗi khi tạo hàng loạt</span> — sửa thông tin rồi bấm Xác nhận để tạo lệnh xuất chính thức.</p>
+                  <p className="text-sm text-on-surface"><span className="font-bold">{tr("Lệnh xuất bị lỗi khi tạo hàng loạt")}</span> {tr("— sửa thông tin rồi bấm Xác nhận để tạo lệnh xuất chính thức.")}</p>
                 </div>
 
                 {selectedOutboundPendingIds.length > 0 && (
                   <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-primary/5 border border-primary/20 rounded-xl">
-                    <span className="text-xs font-bold text-primary">Đã chọn {selectedOutboundPendingIds.length} lệnh</span>
+                    <span className="text-xs font-bold text-primary">{tr("Đã chọn")} {selectedOutboundPendingIds.length} {tr("lệnh")}</span>
                     <div className="flex gap-2 ml-auto">
                       <button onClick={bulkApproveSelectedOutbound} disabled={bulkOutboundPendingLoading}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-50">
                         <span className="material-symbols-outlined text-sm">check_circle</span>
-                        Xác nhận ({pendingOutbound.filter(p => selectedOutboundPendingIds.includes(p.id) && p.erp_code?.trim() && parseInt(p.qty) > 0).length})
+                        {tr("Xác nhận (")}{pendingOutbound.filter(p => selectedOutboundPendingIds.includes(p.id) && p.erp_code?.trim() && parseInt(p.qty) > 0).length})
                       </button>
                       <button onClick={bulkDeleteSelectedOutbound} disabled={bulkOutboundPendingLoading}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-error/10 text-error rounded-lg text-xs font-bold hover:bg-error/20 transition-colors disabled:opacity-50 border border-error/20">
                         <span className="material-symbols-outlined text-sm">delete_sweep</span>
-                        Xóa ({selectedOutboundPendingIds.length})
+                        {tr("Xóa (")}{selectedOutboundPendingIds.length})
                       </button>
-                      <button onClick={() => setSelectedOutboundPendingIds([])} className="px-2 py-1.5 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors">Bỏ chọn</button>
+                      <button onClick={() => setSelectedOutboundPendingIds([])} className="px-2 py-1.5 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors">{tr("Bỏ chọn")}</button>
                     </div>
                   </div>
                 )}
                 <div className="flex items-center justify-between mb-3 px-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-on-surface-variant">Tổng SL cần xuất:</span>
+                    <span className="text-xs text-on-surface-variant">{tr("Tổng SL cần xuất:")}</span>
                     <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-black">
                       {pendingOutbound.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}
                     </span>
                   </div>
                   {pendingOutboundSearch.trim() && (
                     <span className="text-xs text-on-surface-variant">
-                      Lọc: <strong className="text-primary">{filteredPendingOutbound.length}</strong> / {pendingOutboundCount} lệnh
+                      {tr("Lọc:")} <strong className="text-primary">{filteredPendingOutbound.length}</strong> / {pendingOutboundCount} {tr("lệnh")}
                       {' · SL: '}<strong className="text-primary">{filteredPendingOutbound.reduce((sum, p) => sum + (Number(p.qty) || 0), 0).toLocaleString('en-US')}</strong>
                     </span>
                   )}
@@ -1551,15 +1552,15 @@ const Outbound = () => {
                   <input
                     value={pendingOutboundSearch}
                     onChange={e => setPendingOutboundSearch(e.target.value)}
-                    placeholder="Tìm mã ERP, người nhận, bộ phận..."
+                    placeholder={tr("Tìm mã ERP, người nhận, bộ phận...")}
                     className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm border border-outline-variant/40 shadow-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all"
                   />
                 </div>
-                {pendingOutboundLoading ? <p className="text-center py-8 text-on-surface-variant/40">Đang tải...</p>
+                {pendingOutboundLoading ? <p className="text-center py-8 text-on-surface-variant/40">{tr("Đang tải...")}</p>
                 : filteredPendingOutbound.length === 0 ? (
                   <div className="text-center py-12">
                     <span className="material-symbols-outlined text-3xl text-on-surface-variant/30 block mb-2">{pendingOutboundSearch ? 'search_off' : 'check_circle'}</span>
-                    <p className="text-sm text-on-surface-variant/50">{pendingOutboundSearch ? `Không tìm thấy kết quả cho "${pendingOutboundSearch}"` : 'Không có lệnh xuất nào đang chờ xử lý'}</p>
+                    <p className="text-sm text-on-surface-variant/50">{pendingOutboundSearch ? `Không tìm thấy kết quả cho "${pendingOutboundSearch}"` : tr("Không có lệnh xuất nào đang chờ xử lý")}</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-outline-variant/10">
@@ -1572,12 +1573,12 @@ const Outbound = () => {
                             onChange={e => setSelectedOutboundPendingIds(e.target.checked ? filteredPendingOutbound.map(p => p.id) : [])}
                           />
                         </th>
-                        <th className="px-3 py-3">Mã ERP</th>
+                        <th className="px-3 py-3">{tr("Mã ERP")}</th>
                         <th className="px-3 py-3">SL</th>
-                        <th className="px-3 py-3 hidden md:table-cell">Người nhận</th>
-                        <th className="px-3 py-3 hidden lg:table-cell">Bộ phận</th>
-                        <th className="px-3 py-3">Lý do</th>
-                        <th className="px-3 py-3 text-right">Thao tác</th>
+                        <th className="px-3 py-3 hidden md:table-cell">{tr("Người nhận")}</th>
+                        <th className="px-3 py-3 hidden lg:table-cell">{tr("Bộ phận")}</th>
+                        <th className="px-3 py-3">{tr("Lý do")}</th>
+                        <th className="px-3 py-3 text-right">{tr("Thao tác")}</th>
                       </tr></thead>
                       <tbody>
                         {filteredPendingOutbound.map(p => (
@@ -1598,24 +1599,24 @@ const Outbound = () => {
                                 <td className="px-2 py-2"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs">{p.reason}</span></td>
                                 <td className="px-2 py-2 text-right">
                                   <div className="flex gap-1 justify-end flex-wrap">
-                                    <button onClick={async () => { await supabase.from('outbound_pending').update(editingOutboundPending).eq('id', p.id); setEditingOutboundPending(null); fetchPendingOutbound(); }} className="px-2 py-1 bg-primary text-on-primary rounded text-xs font-bold">Lưu</button>
-                                    <button onClick={() => approvePendingOutbound(editingOutboundPending)} className="px-2 py-1 bg-amber-500 text-white rounded text-xs font-bold">Xác nhận</button>
-                                    <button onClick={() => setEditingOutboundPending(null)} className="px-2 py-1 bg-surface-container rounded text-xs">Hủy</button>
+                                    <button onClick={async () => { await supabase.from('outbound_pending').update(editingOutboundPending).eq('id', p.id); setEditingOutboundPending(null); fetchPendingOutbound(); }} className="px-2 py-1 bg-primary text-on-primary rounded text-xs font-bold">{tr("Lưu")}</button>
+                                    <button onClick={() => approvePendingOutbound(editingOutboundPending)} className="px-2 py-1 bg-amber-500 text-white rounded text-xs font-bold">{tr("Xác nhận")}</button>
+                                    <button onClick={() => setEditingOutboundPending(null)} className="px-2 py-1 bg-surface-container rounded text-xs">{tr("Hủy")}</button>
                                   </div>
                                 </td>
                               </>
                             ) : (
                               <>
-                                <td className="px-3 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp_code || <span className="italic text-on-surface-variant/40">Trống</span>}</td>
+                                <td className="px-3 py-3 font-mono font-bold text-amber-600 text-xs">{p.erp_code || <span className="italic text-on-surface-variant/40">{tr("Trống")}</span>}</td>
                                 <td className="px-3 py-3 text-xs">{p.qty}</td>
                                 <td className="px-3 py-3 hidden md:table-cell text-xs text-on-surface-variant">{p.recipient_name || '—'}</td>
                                 <td className="px-3 py-3 hidden lg:table-cell text-xs text-on-surface-variant">{p.dept_name || '—'}</td>
                                 <td className="px-3 py-3"><span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 rounded text-xs font-semibold">{p.reason}</span></td>
                                 <td className="px-3 py-3 text-right">
                                   <div className="flex gap-1 justify-end">
-                                    <button onClick={() => setEditingOutboundPending({...p})} className="p-1.5 rounded hover:bg-primary/10 text-outline-variant hover:text-primary transition-colors" title="Sửa"><span className="material-symbols-outlined text-base">edit</span></button>
-                                    <button onClick={() => approvePendingOutbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>Xác nhận</button>
-                                    <button onClick={async () => { if (safeConfirm('Xóa lệnh này khỏi tab chờ xử lý?')) { await supabase.from('outbound_pending').delete().eq('id', p.id); fetchPendingOutbound(); } }} className="p-1.5 rounded hover:bg-error/10 text-outline-variant hover:text-error transition-colors" title="Xóa"><span className="material-symbols-outlined text-base">delete</span></button>
+                                    <button onClick={() => setEditingOutboundPending({...p})} className="p-1.5 rounded hover:bg-primary/10 text-outline-variant hover:text-primary transition-colors" title={tr("Sửa")}><span className="material-symbols-outlined text-base">edit</span></button>
+                                    <button onClick={() => approvePendingOutbound(p)} className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"><span className="material-symbols-outlined text-sm">check</span>{tr("Xác nhận")}</button>
+                                    <button onClick={async () => { if (safeConfirm(tr("Xóa lệnh này khỏi tab chờ xử lý?"))) { await supabase.from('outbound_pending').delete().eq('id', p.id); fetchPendingOutbound(); } }} className="p-1.5 rounded hover:bg-error/10 text-outline-variant hover:text-error transition-colors" title={tr("Xóa")}><span className="material-symbols-outlined text-base">delete</span></button>
                                   </div>
                                 </td>
                               </>
@@ -1638,7 +1639,7 @@ const Outbound = () => {
                     checked={filteredOutbound.length > 0 && filteredOutbound.every(r => selectedRows.includes(r.id))}
                     onChange={handleSelectAll}
                   />
-                  <span className="text-xs font-bold text-on-surface-variant">Chọn tất cả</span>
+                  <span className="text-xs font-bold text-on-surface-variant">{tr("Chọn tất cả")}</span>
                 </div>
                 {selectedRows.length > 0 && (
                   <div className="flex gap-2">
@@ -1648,14 +1649,14 @@ const Outbound = () => {
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${selectedPendingCount > 0 ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-emerald-600/50 text-white/70 cursor-not-allowed'}`}
                     >
                       <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                      Đã Xuất ({selectedPendingCount})
+                      {tr("Đã Xuất (")}{selectedPendingCount})
                     </button>
                     <button 
                       onClick={handleDeleteSelected}
                       className="flex items-center gap-2 px-3 py-1.5 bg-error text-on-error rounded-lg text-xs font-bold hover:bg-error-container hover:text-on-error-container transition-colors shadow-sm"
                     >
                       <span className="material-symbols-outlined text-[14px]">delete</span>
-                      Xóa ({selectedRows.length})
+                      {tr("Xóa (")}{selectedRows.length})
                     </button>
                   </div>
                 )}
@@ -1664,12 +1665,12 @@ const Outbound = () => {
                 <thead>
                   <tr className="text-[9px] md:text-[10px] font-black text-on-surface-variant uppercase tracking-widest border-none">
                     <th className="pb-3 md:pb-6 px-1 md:px-4 w-10 text-center"></th>
-                    <th className="pb-3 md:pb-6 px-1 md:px-4 w-[110px] md:w-[150px]">Lệnh / ERP</th>
-                    <th className="pb-3 md:pb-6 px-1 md:px-4 hidden sm:table-cell">Người Nhận / Bộ Phận</th>
-                    <th className="pb-3 md:pb-6 px-1 md:px-4 hidden lg:table-cell">Số BPM</th>
+                    <th className="pb-3 md:pb-6 px-1 md:px-4 w-[110px] md:w-[150px]">{tr("Lệnh / ERP")}</th>
+                    <th className="pb-3 md:pb-6 px-1 md:px-4 hidden sm:table-cell">{tr("Người Nhận / Bộ Phận")}</th>
+                    <th className="pb-3 md:pb-6 px-1 md:px-4 hidden lg:table-cell">{tr("Số BPM")}</th>
                     <th className="pb-3 md:pb-6 px-1 md:px-4 hidden md:table-cell">{t('requiredDate')}</th>
                     <th className="pb-3 md:pb-6 px-1 md:px-4 text-center">SL</th>
-                    <th className="pb-3 md:pb-6 px-1 md:px-4">Trạng Thái</th>
+                    <th className="pb-3 md:pb-6 px-1 md:px-4">{tr("Trạng Thái")}</th>
                     <th className="pb-3 md:pb-6 px-1 md:px-4 text-right">{t('action')}</th>
                   </tr>
                 </thead>
@@ -1745,16 +1746,16 @@ const Outbound = () => {
                       </td>
                       <td className="px-1 py-3 md:px-4 md:py-6 align-middle hidden md:table-cell">
                         <p className="font-medium text-on-surface text-xs">{order.date}</p>
-                        <p className="text-[10px] text-on-surface-variant mt-0.5"><span className="font-bold text-secondary">Cần xuất:</span> {order.required_date || '-'}</p>
+                        <p className="text-[10px] text-on-surface-variant mt-0.5"><span className="font-bold text-secondary">{tr("Cần xuất:")}</span> {order.required_date || '-'}</p>
                       </td>
                       <td className="px-1 py-3 md:px-4 md:py-6 align-middle text-center font-bold text-on-surface text-xs md:text-sm">{Number(order.qty).toLocaleString('en-US')}</td>
                       <td className="px-1 py-3 md:px-4 md:py-6 align-middle">
                         <span className={`px-2 py-0.5 md:px-3 md:py-1 ${order.status_color} rounded-full text-[9px] md:text-[10px] font-bold flex items-center gap-1 w-fit`}>
                           <span className={`w-1.5 h-1.5 ${order.dot_color} rounded-full hidden md:inline-block`}></span>
-                          {order.status}
+                          {tr(order.status)}
                         </span>
                         {order.status === 'Chờ xuất' && new Date().toISOString().split('T')[0] > (order.required_date || order.date) && (
-                          <span className="text-[9px] font-bold text-error bg-error/10 px-2 py-0.5 rounded-full mt-1 inline-block">Quá hạn</span>
+                          <span className="text-[9px] font-bold text-error bg-error/10 px-2 py-0.5 rounded-full mt-1 inline-block">{tr("Quá hạn")}</span>
                         )}
                       </td>
                       <td className="px-1 py-3 md:px-4 md:py-6 align-middle text-right">
@@ -1765,14 +1766,14 @@ const Outbound = () => {
                               setHistoryModal({ isOpen: true, erp: order.erp_code, name: item?.name || '' });
                             }}
                             className="p-1 md:p-2 text-on-surface-variant hover:text-primary transition-colors bg-surface-container-high rounded-lg hover:bg-primary-container hover:text-on-primary-container"
-                            title="Lịch sử"
+                            title={tr("Lịch sử")}
                           >
                             <span className="material-symbols-outlined text-[16px] md:text-xl">history</span>
                           </button>
                           <button 
                             onClick={() => setViewingRecord(order)}
                             className="p-1 md:p-2 text-on-surface-variant hover:text-primary transition-colors bg-surface-container-high rounded-lg hover:bg-primary-container hover:text-on-primary-container"
-                            title="Xem chi tiết"
+                            title={tr("Xem chi tiết")}
                           >
                             <span className="material-symbols-outlined text-[16px] md:text-xl">visibility</span>
                           </button>
@@ -1781,14 +1782,14 @@ const Outbound = () => {
                               <button 
                                 onClick={() => setEditingRecord({ ...order, editReason: '', noBpm: order.bpm_number === 'No BPM', bpm_number: order.bpm_number === 'No BPM' ? '' : order.bpm_number })}
                                 className="p-1 md:p-2 text-on-surface-variant hover:text-secondary transition-colors bg-surface-container-high rounded-lg hover:bg-secondary-container hover:text-on-secondary-container"
-                                title="Sửa thông tin"
+                                title={tr("Sửa thông tin")}
                               >
                                 <span className="material-symbols-outlined text-[16px] md:text-xl">edit</span>
                               </button>
                               <button 
                                 onClick={() => handleDeleteOutbound(order.id)}
                                 className="p-1 md:p-2 text-on-surface-variant hover:text-error transition-colors bg-surface-container-high rounded-lg hover:bg-error-container hover:text-on-error-container"
-                                title="Xóa lệnh xuất"
+                                title={tr("Xóa lệnh xuất")}
                               >
                                 <span className="material-symbols-outlined text-[16px] md:text-xl">delete</span>
                               </button>
@@ -1796,7 +1797,7 @@ const Outbound = () => {
                                 <button 
                                   onClick={() => handleConfirmOutbound(order)}
                                   className="p-1 md:p-2 text-on-surface-variant hover:text-emerald-600 transition-colors bg-surface-container-high rounded-lg hover:bg-emerald-100"
-                                  title="Xác nhận xuất kho"
+                                  title={tr("Xác nhận xuất kho")}
                                 >
                                   <span className="material-symbols-outlined text-[16px] md:text-xl">check_circle</span>
                                 </button>
@@ -1810,7 +1811,7 @@ const Outbound = () => {
                   {paginatedOutbound.length === 0 && (
                     <tr key="empty-outbound">
                       <td colSpan={7} className="py-12 text-center text-on-surface-variant font-medium italic">
-                        Không có dữ liệu xuất kho.
+                        {tr("Không có dữ liệu xuất kho.")}
                       </td>
                     </tr>
                   )}
@@ -1818,7 +1819,7 @@ const Outbound = () => {
               </table>
             </div>
             <div className="px-4 md:px-8 py-4 md:py-6 bg-surface-container-low/30 border-t border-outline-variant/10 flex justify-between items-center text-[10px] md:text-xs font-medium text-on-surface-variant">
-              <span>Hiển thị {paginatedOutbound.length} / {filteredOutbound.length}</span>
+              <span>{tr("Hiển thị")} {paginatedOutbound.length} / {filteredOutbound.length}</span>
               <div className="flex items-center gap-2 md:gap-4">
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
@@ -1849,7 +1850,7 @@ const Outbound = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
             <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-on-surface">Chi tiết phiếu xuất</h3>
+              <h3 className="text-lg font-bold text-on-surface">{tr("Chi tiết phiếu xuất")}</h3>
               <button onClick={() => setViewingRecord(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
@@ -1857,38 +1858,38 @@ const Outbound = () => {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">Mã Phiếu</p>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">{tr("Mã Phiếu")}</p>
                   <p className="text-sm font-medium text-on-surface">{viewingRecord.outbound_id}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">Trạng Thái</p>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">{tr("Trạng Thái")}</p>
                   <span className={`px-3 py-1 ${viewingRecord.status_color} rounded-full text-[10px] font-bold flex items-center gap-1 w-fit`}>
                     <span className={`w-1.5 h-1.5 ${viewingRecord.dot_color} rounded-full`}></span>
-                    {viewingRecord.status}
+                    {tr(viewingRecord.status)}
                   </span>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">Người Nhận</p>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">{tr("Người Nhận")}</p>
                   <p className="text-sm font-medium text-on-surface">{viewingRecord.partner}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">Ngày Yêu Cầu</p>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">{tr("Ngày Yêu Cầu")}</p>
                   <p className="text-sm font-medium text-on-surface">{viewingRecord.required_date || viewingRecord.date}</p>
                 </div>
                 <div className="col-span-2">
-                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">Mã Vật Tư (ERP)</p>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">{tr("Mã Vật Tư (ERP)")}</p>
                   <p className="text-sm font-medium text-on-surface">{viewingRecord.erp_code}</p>
                 </div>
                 <div className="col-span-2">
-                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">Tên Vật Tư</p>
-                  <p className="text-sm font-medium text-on-surface">{viewItemDetails?.name || viewingRecord.erp_code || 'Không rõ'}</p>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">{tr("Tên Vật Tư")}</p>
+                  <p className="text-sm font-medium text-on-surface">{viewItemDetails?.name || viewingRecord.erp_code || tr("Không rõ")}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">Quy Cách</p>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">{tr("Quy Cách")}</p>
                   <p className="text-sm font-medium text-on-surface">{viewItemDetails?.spec || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">Số Lượng</p>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase mb-1">{tr("Số Lượng")}</p>
                   <p className="text-sm font-bold text-primary">{Number(viewingRecord.qty).toLocaleString('en-US')}</p>
                 </div>
               </div>
@@ -1898,7 +1899,7 @@ const Outbound = () => {
                 onClick={() => setViewingRecord(null)}
                 className="px-6 py-2 bg-surface-container-high text-on-surface font-bold rounded-xl hover:bg-surface-container-highest transition-colors"
               >
-                Đóng
+                {tr("Đóng")}
               </button>
             </div>
           </div>
@@ -1911,7 +1912,7 @@ const Outbound = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center flex-shrink-0">
-              <h3 className="text-lg font-bold text-on-surface">Sửa thông tin phiếu xuất</h3>
+              <h3 className="text-lg font-bold text-on-surface">{tr("Sửa thông tin phiếu xuất")}</h3>
               <button onClick={() => setEditingRecord(null)} className="p-2 text-on-surface-variant hover:text-error transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
@@ -1919,19 +1920,19 @@ const Outbound = () => {
             <form onSubmit={handleUpdateOutbound} className="p-6 space-y-4 overflow-y-auto">
               {/* NGƯỜI NHẬN */}
               <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Người Nhận</label>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Người Nhận")}</label>
                 <div className="grid grid-cols-2 gap-4">
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                     type="text"
-                    placeholder="Mã nhân viên"
+                    placeholder={tr("Mã nhân viên")}
                     value={editingRecord.recipient_id || ''}
                     onChange={(e) => setEditingRecord({ ...editingRecord, recipient_id: e.target.value })}
                   />
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                     type="text"
-                    placeholder="Tên nhân viên *"
+                    placeholder={tr("Tên nhân viên *")}
                     value={editingRecord.recipient_name || ''}
                     onChange={(e) => setEditingRecord({ ...editingRecord, recipient_name: e.target.value })}
                     required
@@ -1940,13 +1941,13 @@ const Outbound = () => {
               </div>
               {/* BỘ PHẬN NHẬN */}
               <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Bộ Phận Nhận</label>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Bộ Phận Nhận")}</label>
                 <div className="grid grid-cols-2 gap-4">
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                     type="text"
                     list="dept-options"
-                    placeholder="Chọn mã bộ phận"
+                    placeholder={tr("Chọn mã bộ phận")}
                     value={editingRecord.dept_code || ''}
                     onChange={(e) => {
                       const code = e.target.value;
@@ -1957,7 +1958,7 @@ const Outbound = () => {
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                     type="text"
-                    placeholder="Tên bộ phận"
+                    placeholder={tr("Tên bộ phận")}
                     value={editingRecord.dept_name || ''}
                     onChange={(e) => setEditingRecord({ ...editingRecord, dept_name: e.target.value })}
                   />
@@ -1965,11 +1966,11 @@ const Outbound = () => {
               </div>
               {/* SỐ BPM */}
               <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số BPM</label>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Số BPM")}</label>
                 <input
                   className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm disabled:opacity-50"
                   type="text"
-                  placeholder="Nhập số BPM..."
+                  placeholder={tr("Nhập số BPM...")}
                   value={editingRecord.noBpm ? '' : (editingRecord.bpm_number || '')}
                   disabled={editingRecord.noBpm}
                   onChange={(e) => setEditingRecord({ ...editingRecord, bpm_number: e.target.value })}
@@ -1986,7 +1987,7 @@ const Outbound = () => {
               </div>
               {/* MÃ ERP */}
               <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Mã ERP <span className="text-error">*</span></label>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Mã ERP")} <span className="text-error">*</span></label>
                 <input
                   list="edit-erp-options"
                   className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
@@ -2004,7 +2005,7 @@ const Outbound = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Số lượng <span className="text-error">*</span></label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Số lượng")} <span className="text-error">*</span></label>
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                     type="number"
@@ -2014,7 +2015,7 @@ const Outbound = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Ngày cần xuất</label>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Ngày cần xuất")}</label>
                   <input
                     className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                     type="date"
@@ -2026,10 +2027,10 @@ const Outbound = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Lý do sửa đổi {editingRecord.status === 'Đã Xuất' && <span className="text-error">*</span>}</label>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">{tr("Lý do sửa đổi")} {editingRecord.status === 'Đã Xuất' && <span className="text-error">*</span>}</label>
                 <textarea
                   className="w-full bg-surface-container-low border border-outline-variant/15 rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm outline-none"
-                  placeholder="Nhập lý do thay đổi..."
+                  placeholder={tr("Nhập lý do thay đổi...")}
                   rows={2}
                   value={editingRecord.editReason || ''}
                   onChange={(e) => setEditingRecord({ ...editingRecord, editReason: e.target.value })}
@@ -2042,13 +2043,13 @@ const Outbound = () => {
                   onClick={() => setEditingRecord(null)}
                   className="px-6 py-2 bg-surface-container-high text-on-surface font-bold rounded-xl hover:bg-surface-container-highest transition-colors"
                 >
-                  Hủy
+                  {tr("Hủy")}
                 </button>
                 <button 
                   type="submit"
                   className="px-6 py-2 bg-primary text-on-primary font-bold rounded-xl shadow-md hover:bg-primary-dim transition-colors"
                 >
-                  Lưu Thay Đổi
+                  {tr("Lưu Thay Đổi")}
                 </button>
               </div>
             </form>
@@ -2065,7 +2066,7 @@ const Outbound = () => {
                  <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
                    <span className="material-symbols-outlined">history</span>
                  </div>
-                 <h3 className="text-xl font-bold font-manrope text-on-surface">Lịch sử sửa phiếu xuất</h3>
+                 <h3 className="text-xl font-bold font-manrope text-on-surface">{tr("Lịch sử sửa phiếu xuất")}</h3>
               </div>
               <button onClick={() => setShowEditHistory(false)} className="p-2 text-on-surface-variant hover:text-error transition-colors">
                 <span className="material-symbols-outlined">close</span>
@@ -2075,11 +2076,11 @@ const Outbound = () => {
               <table className="w-full text-left">
                 <thead className="bg-surface-container-low sticky top-0">
                   <tr className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">
-                    <th className="py-4 px-6 border-b border-outline-variant/20 tracking-tighter">Thời gian</th>
-                    <th className="py-4 px-6 border-b border-outline-variant/20">Phiếu / ERP</th>
-                    <th className="py-4 px-6 border-b border-outline-variant/20 text-center">SL Cũ</th>
-                    <th className="py-4 px-6 border-b border-outline-variant/20 text-center">SL Mới</th>
-                    <th className="py-4 px-6 border-b border-outline-variant/20">Lý do/Người sửa</th>
+                    <th className="py-4 px-6 border-b border-outline-variant/20 tracking-tighter">{tr("Thời gian")}</th>
+                    <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Phiếu / ERP")}</th>
+                    <th className="py-4 px-6 border-b border-outline-variant/20 text-center">{tr("SL Cũ")}</th>
+                    <th className="py-4 px-6 border-b border-outline-variant/20 text-center">{tr("SL Mới")}</th>
+                    <th className="py-4 px-6 border-b border-outline-variant/20">{tr("Lý do/Người sửa")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10 text-[11px] md:text-sm">
@@ -2102,28 +2103,28 @@ const Outbound = () => {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-on-surface-variant italic">Không có dữ liệu chỉnh sửa.</td>
+                      <td colSpan={6} className="py-12 text-center text-on-surface-variant italic">{tr("Không có dữ liệu chỉnh sửa.")}</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
             <div className="px-6 py-4 bg-surface-container-low border-t border-outline-variant/10 flex justify-between items-center text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-              <span>Tổng cộng {editHistory.length} lần điều chỉnh</span>
+              <span>{tr("Tổng cộng")} {editHistory.length} {tr("lần điều chỉnh")}</span>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
                     import('xlsx').then(XLSX => {
                       const rows = editHistory.map(item => ({
-                        'Thời gian': new Date(item.edited_at).toLocaleString('vi-VN'),
-                        'Mã phiếu xuất': item.outbound_id || '',
-                        'Mã ERP': item.erp_code || '',
-                        'Đối tác': item.partner || '',
-                        'SL Cũ': item.old_qty ?? '',
-                        'Biến động': Number(item.new_qty) - Number(item.old_qty || 0),
-                        'SL Mới': item.new_qty ?? '',
-                        'Lý do': item.reason || '',
-                        'Người thực hiện': item.edited_by || '',
+                        [tr("Thời gian")]: new Date(item.edited_at).toLocaleString('vi-VN'),
+                        [tr("Mã phiếu xuất")]: item.outbound_id || '',
+                        [tr("Mã ERP")]: item.erp_code || '',
+                        [tr("Đối tác")]: item.partner || '',
+                        [tr("SL Cũ")]: item.old_qty ?? '',
+                        [tr("Biến động")]: Number(item.new_qty) - Number(item.old_qty || 0),
+                        [tr("SL Mới")]: item.new_qty ?? '',
+                        [tr("Lý do")]: item.reason || '',
+                        [tr("Người thực hiện")]: item.edited_by || '',
                       }));
                       const ws = XLSX.utils.json_to_sheet(rows);
                       const wb = XLSX.utils.book_new();
@@ -2134,13 +2135,13 @@ const Outbound = () => {
                   className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow hover:bg-emerald-700 transition-colors"
                 >
                   <span className="material-symbols-outlined text-sm">download</span>
-                  Xuất Excel
+                  {tr("Xuất Excel")}
                 </button>
                 <button
                   onClick={() => setShowEditHistory(false)}
                   className="px-6 py-2.5 bg-primary text-on-primary rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
                 >
-                  Đóng cửa sổ
+                  {tr("Đóng cửa sổ")}
                 </button>
               </div>
             </div>
@@ -2168,7 +2169,7 @@ const Outbound = () => {
               <div className="px-8 py-5 border-b border-outline-variant/20 flex justify-between items-center bg-error-container/10">
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-error text-2xl">report</span>
-                  <h3 className="text-xl font-black text-on-surface">Chi tiết kết quả</h3>
+                  <h3 className="text-xl font-black text-on-surface">{tr("Chi tiết kết quả")}</h3>
                 </div>
                 <button onClick={() => setErrorLog('')} className="material-symbols-outlined text-on-surface-variant hover:text-error transition-colors">close</button>
               </div>
@@ -2177,14 +2178,14 @@ const Outbound = () => {
               </div>
               <div className="px-8 py-4 border-t border-outline-variant/10 flex gap-3 justify-end">
                 <button
-                  onClick={() => { navigator.clipboard.writeText(errorLog); showToast('Đã copy!'); }}
+                  onClick={() => { navigator.clipboard.writeText(errorLog); showToast(tr("Đã copy!")); }}
                   className="px-6 py-3 bg-primary text-on-primary rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-lg transition-all"
                 >
                   <span className="material-symbols-outlined text-lg">content_copy</span>
                   Copy
                 </button>
                 <button onClick={() => setErrorLog('')} className="px-6 py-3 bg-surface-container text-on-surface-variant rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors">
-                  Đóng
+                  {tr("Đóng")}
                 </button>
               </div>
             </motion.div>

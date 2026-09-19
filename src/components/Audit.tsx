@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { displayLoginCode } from '../lib/loginCode';
+import { tr } from '../contexts/LanguageContext';
 
 const showToast = (msg: string, isError = false) => {
   try {
@@ -195,7 +196,7 @@ const Audit = () => {
       } catch (err: any) {
         console.error("Connectivity error on mount:", err);
         if (err.message === 'Failed to fetch' || err.message?.includes('network')) {
-          alert("Lỗi kết nối Server: Vui lòng kiểm tra đường truyền hoặc cấu hình Supabase.");
+          alert(tr("Lỗi kết nối Server: Vui lòng kiểm tra đường truyền hoặc cấu hình Supabase."));
         }
       } finally {
         setLoading(false);
@@ -238,9 +239,9 @@ const Audit = () => {
           .limit(5);
       setDraftSessions(sessions || []);
 
-      showToast('Đã tạo phiên kiểm kê mới');
+      showToast(tr("Đã tạo phiên kiểm kê mới"));
     } catch (err: any) {
-      showToast('Lỗi tạo phiên: ' + err.message, true);
+      showToast(tr("Lỗi tạo phiên:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -251,7 +252,7 @@ const Audit = () => {
     fetchDraftRecords(session.id);
     fetchPendingRecords(session.id);
     if (hasSearched) fetchPendingAuditItems(session.id);
-    showToast(`Đã chọn phiên: ${session.session_name}`);
+    showToast(tr("Đã chọn phiên: {0}", [session.session_name]));
   };
 
   // Update fetch function to handle all filters
@@ -289,7 +290,7 @@ const Audit = () => {
     setHasSearched(true);
     setPendingPage(0);
     fetchPendingAuditItems();
-    showToast('🔍 Đã cập nhật danh sách cần kiểm');
+    showToast(tr("🔍 Đã cập nhật danh sách cần kiểm"));
   };
 
   const fetchDraftRecords = async (sessionId?: string) => {
@@ -385,13 +386,13 @@ const Audit = () => {
         p_record_id: recordId,
         p_user_email: user.email
       });
-      if (error) showToast('Lỗi: ' + error.message, true);
+      if (error) showToast(tr("Lỗi:") + error.message, true);
       else {
-        showToast('✅ Đã gửi phê duyệt!');
+        showToast(tr("✅ Đã gửi phê duyệt!"));
         await Promise.all([fetchDraftRecords(), fetchPendingRecords()]);
       }
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -404,13 +405,13 @@ const Audit = () => {
       const { data, error } = await supabase.rpc('submit_audit_session', {
         p_session_id: currentSession.id
       });
-      if (error) showToast('Lỗi: ' + error.message, true);
+      if (error) showToast(tr("Lỗi:") + error.message, true);
       else {
-        showToast(`✅ Đã gửi ${data?.submitted || data || 0} mã!`);
+        showToast(tr("✅ Đã gửi {0} mã!", [data?.submitted || data || 0]));
         await Promise.all([fetchDraftRecords(), fetchPendingRecords()]);
       }
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -485,15 +486,15 @@ const Audit = () => {
           .limit(5);
         setDraftSessions(sessions || []);
         
-        showToast('Đã tự động tạo phiên kiểm kê mới');
+        showToast(tr("Đã tự động tạo phiên kiểm kê mới"));
       } catch (err: any) {
-        return showToast('Lỗi tạo phiên: ' + err.message, true);
+        return showToast(tr("Lỗi tạo phiên:") + err.message, true);
       }
     }
     const selectedErp = activeScanItem?.erp || activeScanItem?.erp_code;
-    if (!selectedErp) return showToast('Chưa chọn mã ERP', true);
+    if (!selectedErp) return showToast(tr("Chưa chọn mã ERP"), true);
     if (actualQtyInput === undefined || actualQtyInput === null || actualQtyInput === '') {
-      return showToast('Chưa nhập số lượng', true);
+      return showToast(tr("Chưa nhập số lượng"), true);
     }
 
     setLoading(true);
@@ -508,7 +509,7 @@ const Audit = () => {
         
         if (dupError) throw dupError;
         if (dupData?.duplicate) {
-          if (!window.confirm(`Mã này đang được kiểm bởi ${dupData.auditor}. Bạn có chắc muốn ghi đè?`)) {
+          if (!window.confirm(tr("Mã này đang được kiểm bởi {0}. Bạn có chắc muốn ghi đè?", [dupData.auditor]))) {
              setLoading(false);
              return;
           }
@@ -527,9 +528,9 @@ const Audit = () => {
       });
 
       if (error) {
-        showToast('Lỗi lưu: ' + error.message, true);
+        showToast(tr("Lỗi lưu:") + error.message, true);
       } else {
-        showToast(editingRecord ? '✅ Đã cập nhật!' : '✅ Đã lưu kiểm đếm!');
+        showToast(editingRecord ? tr("✅ Đã cập nhật!") : tr("✅ Đã lưu kiểm đếm!"));
         setActiveScanItem(null);
         setEditingRecord(null);
         setActualQtyInput('');
@@ -540,7 +541,7 @@ const Audit = () => {
         setActiveTab('draft');
       }
     } catch (err: any) {
-      showToast('Lỗi: ' + err.message, true);
+      showToast(tr("Lỗi:") + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -548,7 +549,7 @@ const Audit = () => {
 
   const handleBatchAction = async (action: 'approve' | 'undo') => {
     if (selectedRecords.length === 0) return;
-    if (!window.confirm(`Xác nhận ${action === 'approve' ? 'PHÊ DUYỆT' : 'HỦY'} ${selectedRecords.length} bản ghi đã chọn?`)) return;
+    if (!window.confirm(tr("Xác nhận {0} {1} bản ghi đã chọn?", [action === 'approve' ? tr("PHÊ DUYỆT") : tr("HỦY"), selectedRecords.length]))) return;
 
     setLoading(true);
     try {
@@ -568,14 +569,14 @@ const Audit = () => {
         fetchDraftRecords()
       ]);
     } catch (err: any) {
-      alert("Lỗi: " + err.message);
+      alert(tr("Lỗi:") + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleUndoRecord = async (record: any) => {
-    if (!window.confirm("Bạn có chắc muốn HỦY DUYỆT bản ghi này và đưa nó về trạng thái KIỂM KÊ (DRAFT)?")) return;
+    if (!window.confirm(tr("Bạn có chắc muốn HỦY DUYỆT bản ghi này và đưa nó về trạng thái KIỂM KÊ (DRAFT)?"))) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('undo_audit_records', {
@@ -590,7 +591,7 @@ const Audit = () => {
         fetchDraftRecords()
       ]);
     } catch (err: any) {
-      alert("Lỗi khi hủy duyệt: " + err.message);
+      alert(tr("Lỗi khi hủy duyệt:") + err.message);
     } finally {
       setLoading(false);
     }
@@ -608,17 +609,17 @@ const Audit = () => {
       });
 
       if (error) {
-        showToast('Lỗi: ' + error.message, true);
+        showToast(tr("Lỗi:") + error.message, true);
         return;
       }
       
-      showToast('✅ Đã phê duyệt!');
+      showToast(tr("✅ Đã phê duyệt!"));
       await Promise.all([
         fetchPendingRecords(),
         fetchApprovedHistory()
       ]);
     } catch (err: any) {
-      showToast("Lỗi: " + (err.message || "Không xác định"), true);
+      showToast(tr("Lỗi:") + (err.message || tr("Không xác định")), true);
     } finally {
       setLoading(false);
     }
@@ -635,17 +636,17 @@ const Audit = () => {
       });
 
       if (error) {
-        showToast('Lỗi: ' + error.message, true);
+        showToast(tr("Lỗi:") + error.message, true);
         return;
       }
 
-      showToast('↩️ Đã hoàn tác!');
+      showToast(tr("↩️ Đã hoàn tác!"));
       await Promise.all([
         fetchPendingRecords(),
         fetchDraftRecords()
       ]);
     } catch (err: any) {
-      showToast("Lỗi: " + (err.message || "Không xác định"), true);
+      showToast(tr("Lỗi:") + (err.message || tr("Không xác định")), true);
     } finally {
       setLoading(false);
     }
@@ -653,7 +654,7 @@ const Audit = () => {
 
   const handleApproveAll = async () => {
     if (!currentSession?.id || !user?.email) return;
-    if (!window.confirm("Xác nhận DUYỆT TẤT CẢ các bản ghi đang chờ? Thao tác này sẽ đồng bộ tồn kho.")) return;
+    if (!window.confirm(tr("Xác nhận DUYỆT TẤT CẢ các bản ghi đang chờ? Thao tác này sẽ đồng bộ tồn kho."))) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('approve_all_audit_records', {
@@ -662,23 +663,23 @@ const Audit = () => {
         p_sync_inventory: true
       });
       if (error) {
-        showToast('Lỗi: ' + error.message, true);
+        showToast(tr("Lỗi:") + error.message, true);
         return;
       }
-      showToast(`✅ Đã duyệt ${data?.approved || data || 0} mã!`);
+      showToast(tr("✅ Đã duyệt {0} mã!", [data?.approved || data || 0]));
       await Promise.all([
         fetchPendingRecords(),
         fetchApprovedHistory()
       ]);
     } catch (err: any) {
-      showToast("Lỗi: " + (err.message || "Không xác định"), true);
+      showToast(tr("Lỗi:") + (err.message || tr("Không xác định")), true);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteAuditRecord = async (recordId: string) => {
-    if (!window.confirm("Xóa bản ghi này?")) return;
+    if (!window.confirm(tr("Xóa bản ghi này?"))) return;
     setLoading(true);
     try {
       const { error } = await supabase.rpc('delete_audit_record', {
@@ -686,32 +687,32 @@ const Audit = () => {
         p_session_id: currentSession.id
       });
       if (error) throw error;
-      showToast('Đã xóa bản ghi');
+      showToast(tr("Đã xóa bản ghi"));
       fetchDraftRecords();
     } catch (err: any) {
-      alert("Lỗi: " + err.message);
+      alert(tr("Lỗi:") + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSubmitSession = async () => {
-    if (auditItems.length === 0) return showToast('Không có bản ghi nào để gửi', true);
-    if (!window.confirm(`Gửi ${auditItems.length} bản ghi đi phê duyệt?`)) return;
+    if (auditItems.length === 0) return showToast(tr("Không có bản ghi nào để gửi"), true);
+    if (!window.confirm(tr("Gửi {0} bản ghi đi phê duyệt?", [auditItems.length]))) return;
     setLoading(true);
     try {
       const { error } = await supabase.rpc('submit_audit_session', {
         p_session_id: currentSession.id
       });
       if (error) throw error;
-      showToast('✅ Đã gửi phê duyệt!');
+      showToast(tr("✅ Đã gửi phê duyệt!"));
       await Promise.all([
         fetchDraftRecords(),
         fetchPendingRecords()
       ]);
       setActiveTab('pending');
     } catch (err: any) {
-      alert("Lỗi: " + err.message);
+      alert(tr("Lỗi:") + err.message);
     } finally {
       setLoading(false);
     }
@@ -720,7 +721,7 @@ const Audit = () => {
   const handleUpdateRecord = async () => {
     if (!editingRecord) return;
     if (editQty === '') {
-      alert("Vui lòng nhập số lượng");
+      alert(tr("Vui lòng nhập số lượng"));
       return;
     }
 
@@ -740,9 +741,9 @@ const Audit = () => {
       
       setEditingRecord(null);
       fetchDraftRecords();
-      showToast('✅ Đã cập nhật!');
+      showToast(tr("✅ Đã cập nhật!"));
     } catch (err: any) {
-      alert("Lỗi khi cập nhật: " + err.message);
+      alert(tr("Lỗi khi cập nhật:") + err.message);
     } finally {
       setLoading(false);
     }
@@ -766,28 +767,28 @@ const Audit = () => {
       }
 
       const exportData = dataSource.map((item: any) => ({
-        'Mã ERP': item.erp_code,
-        'Tên Vật Tư': item.item_name || item.name || 'N/A',
-        'Vị Trí': item.location || '',
-        'SL Hệ Thống': item.system_qty || 0,
-        'SL Thực Tế': item.actual_qty || 0,
-        'Chênh Lệch': item.difference || 0,
-        'Người Kiểm': item.auditor || '',
-        'Ngày Kiểm': item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : '',
-        'Trạng Thái': item.status || 'Chưa kiểm',
-        'Ghi Chú': item.note || '',
-        'Người Duyệt': item.approver || '',
-        'Ngày Duyệt': item.approved_at ? new Date(item.approved_at).toLocaleDateString('vi-VN') : '',
-        'Lý do điều chỉnh': item.adjustment_reason || ''
+        [tr("Mã ERP")]: item.erp_code,
+        [tr("Tên Vật Tư")]: item.item_name || item.name || 'N/A',
+        [tr("Vị Trí")]: item.location || '',
+        [tr("SL Hệ Thống")]: item.system_qty || 0,
+        [tr("SL Thực Tế")]: item.actual_qty || 0,
+        [tr("Chênh Lệch")]: item.difference || 0,
+        [tr("Người Kiểm")]: item.auditor || '',
+        [tr("Ngày Kiểm")]: item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : '',
+        [tr("Trạng Thái")]: item.status || tr("Chưa kiểm"),
+        [tr("Ghi Chú")]: item.note || '',
+        [tr("Người Duyệt")]: item.approver || '',
+        [tr("Ngày Duyệt")]: item.approved_at ? new Date(item.approved_at).toLocaleDateString('vi-VN') : '',
+        [tr("Lý do điều chỉnh")]: item.adjustment_reason || ''
       }));
 
       const fileName = `kiem-ke_${today}.xlsx`;
       const { exportToExcelMultiSheet } = await import('../lib/excelUtils');
-      const sheets = exportToExcelMultiSheet(exportData, fileName, 'Kiểm Kê');
-      showToast(`✅ Đã xuất ${exportData.length.toLocaleString()} dòng — ${sheets} sheet!`);
+      const sheets = exportToExcelMultiSheet(exportData, fileName, tr("Kiểm Kê"));
+      showToast(tr("✅ Đã xuất {0} dòng — {1} sheet!", [exportData.length.toLocaleString(), sheets]));
     } catch (err: any) {
       console.error('Export error:', err);
-      alert('Lỗi export: ' + err.message);
+      alert(tr("Lỗi export:") + err.message);
     } finally {
       setIsExporting(false);
     }
@@ -821,14 +822,14 @@ const Audit = () => {
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-scrim/60 backdrop-blur-md">
       <div className="bg-surface-container-lowest rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-outline-variant/10 animate-in fade-in zoom-in-95 duration-300">
         <div className="px-8 py-6 bg-surface-container-low border-b border-outline-variant/20 flex justify-between items-center">
-          <h3 className="text-xl font-black text-on-surface">Chỉnh Sửa Bản Ghi</h3>
+          <h3 className="text-xl font-black text-on-surface">{tr("Chỉnh Sửa Bản Ghi")}</h3>
           <button onClick={() => setEditingRecord(null)} className="w-10 h-10 rounded-full hover:bg-surface-container transition-colors flex items-center justify-center">
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
         <div className="p-8 space-y-6">
           <div>
-            <label className="block text-[10px] font-black text-on-surface-variant uppercase mb-2 ml-1">Số lượng thực tế</label>
+            <label className="block text-[10px] font-black text-on-surface-variant uppercase mb-2 ml-1">{tr("Số lượng thực tế")}</label>
             <input 
               type="number" 
               className="w-full bg-surface-container-low border border-outline-variant/30 rounded-2xl px-5 py-4 text-lg font-black focus:ring-4 focus:ring-primary/10 outline-none transition-all"
@@ -837,7 +838,7 @@ const Audit = () => {
             />
           </div>
           <div>
-            <label className="block text-[10px] font-black text-on-surface-variant uppercase mb-2 ml-1">Vị trí (Location)</label>
+            <label className="block text-[10px] font-black text-on-surface-variant uppercase mb-2 ml-1">{tr("Vị trí (Location)")}</label>
             <input 
               type="text" 
               className="w-full bg-surface-container-low border border-outline-variant/30 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none transition-all"
@@ -846,18 +847,18 @@ const Audit = () => {
             />
           </div>
           <div>
-            <label className="block text-[10px] font-black text-on-surface-variant uppercase mb-2 ml-1">Ghi chú</label>
+            <label className="block text-[10px] font-black text-on-surface-variant uppercase mb-2 ml-1">{tr("Ghi chú")}</label>
             <textarea 
               className="w-full bg-surface-container-low border border-outline-variant/30 rounded-2xl px-5 py-4 text-sm font-medium focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none h-24"
               value={editNote}
               onChange={e => setEditNote(e.target.value)}
-              placeholder="VD: Hàng lỗi, sai quy cách..."
+              placeholder={tr("VD: Hàng lỗi, sai quy cách...")}
             />
           </div>
           <button 
             onClick={handleUpdateRecord}
             className="w-full bg-primary text-on-primary py-4 rounded-2xl font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all text-sm"
-          >CẬP NHẬT THAY ĐỔI</button>
+          >{tr("CẬP NHẬT THAY ĐỔI")}</button>
         </div>
       </div>
     </div>
@@ -878,7 +879,7 @@ const Audit = () => {
                       <span className="material-symbols-outlined text-primary mr-3 flex items-center">search</span>
                       <input 
                         type="text" 
-                        placeholder="Mã ERP hoặc Tên vật tư..."
+                        placeholder={tr("Mã ERP hoặc Tên vật tư...")}
                         className="bg-transparent border-none text-sm font-black focus:ring-0 outline-none w-full"
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
@@ -892,7 +893,7 @@ const Audit = () => {
                       <span className="material-symbols-outlined text-primary mr-3 flex items-center">location_on</span>
                       <input 
                         type="text" 
-                        placeholder="Tìm theo khu vực..."
+                        placeholder={tr("Tìm theo khu vực...")}
                         className="bg-transparent border-none text-sm font-black focus:ring-0 outline-none w-full"
                         value={areaSearch}
                         onChange={e => setAreaSearch(e.target.value)}
@@ -932,7 +933,7 @@ const Audit = () => {
                 className="bg-primary text-on-primary px-10 py-4 rounded-2xl text-sm font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
               >
                 <span className="material-symbols-outlined text-xl">sync</span>
-                LỌC MÃ BIẾN ĐỘNG
+                {tr("LỌC MÃ BIẾN ĐỘNG")}
               </button>
             </div>
           </div>
@@ -945,22 +946,22 @@ const Audit = () => {
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
           <div className="relative z-10">
             <div className="flex justify-between items-start mb-6">
-              <span className="bg-white/20 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10">Thông tin</span>
+              <span className="bg-white/20 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10">{tr("Thông tin")}</span>
               <span className="material-symbols-outlined text-white/50">account_circle</span>
             </div>
             <div className="space-y-4">
               <div className="bg-white/10 p-5 rounded-2xl border border-white/5 backdrop-blur-sm">
-                 <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-1">Tài khoản</p>
-                 <p className="text-lg font-bold">{profile?.full_name || 'Hệ Thống'}</p>
+                 <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-1">{tr("Tài khoản")}</p>
+                 <p className="text-lg font-bold">{profile?.full_name || tr("Hệ Thống")}</p>
                  <p className="text-xs font-medium text-white/70 italic mt-0.5">{profile?.login_code || displayLoginCode(user?.email)}</p>
               </div>
               <div className="bg-white/10 p-5 rounded-2xl border border-white/5 backdrop-blur-sm relative z-20">
-                 <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-2">Phiên Kiểm Kê</p>
+                 <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-2">{tr("Phiên Kiểm Kê")}</p>
                  {currentSession?.id && currentSession.id !== '00000000-0000-0000-0000-000000000000' ? (
                    <div className="flex flex-col gap-2">
                      <p className="text-sm font-bold text-white uppercase">{currentSession.session_name}</p>
-                     <p className="text-xs text-white/70 font-medium">Tạo bởi: {currentSession.auditor_email || currentSession.auditor || 'Ẩn danh'}</p>
-                     <button onClick={() => setCurrentSession(null)} className="text-[10px] text-primary bg-white px-3 py-1.5 rounded-lg mt-2 font-black w-fit shadow-md hover:scale-105 active:scale-95 transition-all">ĐỔI PHIÊN KHÁC</button>
+                     <p className="text-xs text-white/70 font-medium">{tr("Tạo bởi:")} {currentSession.auditor_email || currentSession.auditor || tr("Ẩn danh")}</p>
+                     <button onClick={() => setCurrentSession(null)} className="text-[10px] text-primary bg-white px-3 py-1.5 rounded-lg mt-2 font-black w-fit shadow-md hover:scale-105 active:scale-95 transition-all">{tr("ĐỔI PHIÊN KHÁC")}</button>
                    </div>
                  ) : (
                    <div className="flex flex-col gap-2">
@@ -972,13 +973,13 @@ const Audit = () => {
                        }}
                        value=""
                      >
-                       <option value="" disabled className="text-black">-- Chọn phiên nháp --</option>
+                       <option value="" disabled className="text-black">{tr("-- Chọn phiên nháp --")}</option>
                        {draftSessions.map(s => (
-                         <option key={s.id} value={s.id} className="text-black">{s.session_name} ({s.auditor_email || s.auditor || 'Ẩn danh'})</option>
+                         <option key={s.id} value={s.id} className="text-black">{s.session_name} ({s.auditor_email || s.auditor || tr("Ẩn danh")})</option>
                        ))}
                      </select>
                      <button onClick={handleCreateNewSession} className="bg-white text-primary px-3 py-2 rounded-xl text-xs font-black shadow-lg hover:scale-105 active:scale-95 transition-all mt-2 w-full uppercase">
-                       + Tạo Mới
+                       {tr("+ Tạo Mới")}
                      </button>
                    </div>
                  )}
@@ -994,14 +995,14 @@ const Audit = () => {
           onClick={() => setActiveTab('audit')}
           className={`px-6 py-4 font-black text-sm transition-all relative flex-shrink-0 ${activeTab === 'audit' ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface opacity-60'}`}
         >
-          CẦN KIỂM
+          {tr("CẦN KIỂM")}
           {activeTab === 'audit' && <motion.div layoutId="tab-underline" className="absolute bottom-[-1px] left-0 right-0 h-1 bg-primary rounded-full" />}
         </button>
         <button 
           onClick={() => setActiveTab('draft')}
           className={`px-6 py-4 font-black text-sm transition-all relative flex-shrink-0 ${activeTab === 'draft' ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface opacity-60'}`}
         >
-          ĐÃ LƯU - CHỜ GỬI
+          {tr("ĐÃ LƯU - CHỜ GỬI")}
           {auditItems.length > 0 && <span className="ml-2 bg-primary text-on-primary text-[10px] px-1.5 py-0.5 rounded-full">{auditItems.length}</span>}
           {activeTab === 'draft' && <motion.div layoutId="tab-underline" className="absolute bottom-[-1px] left-0 right-0 h-1 bg-primary rounded-full" />}
         </button>
@@ -1009,7 +1010,7 @@ const Audit = () => {
           onClick={() => setActiveTab('pending')}
           className={`px-6 py-4 font-black text-sm transition-all relative flex-shrink-0 ${activeTab === 'pending' ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface opacity-60'}`}
         >
-          PHÊ DUYỆT
+          {tr("PHÊ DUYỆT")}
           {pendingRecords.length > 0 && <span className="ml-2 bg-primary text-on-primary text-[10px] px-1.5 py-0.5 rounded-full">{pendingRecords.length}</span>}
           {activeTab === 'pending' && <motion.div layoutId="tab-underline" className="absolute bottom-[-1px] left-0 right-0 h-1 bg-primary rounded-full" />}
         </button>
@@ -1017,7 +1018,7 @@ const Audit = () => {
           onClick={() => setActiveTab('history')}
           className={`px-6 py-4 font-black text-sm transition-all relative flex-shrink-0 ${activeTab === 'history' ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface opacity-60'}`}
         >
-          LỊCH SỬ PHÊ DUYỆT
+          {tr("LỊCH SỬ PHÊ DUYỆT")}
           {activeTab === 'history' && <motion.div layoutId="tab-underline" className="absolute bottom-[-1px] left-0 right-0 h-1 bg-primary rounded-full" />}
         </button>
         <div className="ml-auto flex-shrink-0 pb-1">
@@ -1025,10 +1026,10 @@ const Audit = () => {
             onClick={handleSync}
             disabled={isSyncing}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all disabled:opacity-50"
-            title="Đồng bộ dữ liệu"
+            title={tr("Đồng bộ dữ liệu")}
           >
             <span className={`material-symbols-outlined text-sm ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
-            Đồng bộ
+            {tr("Đồng bộ")}
           </button>
         </div>
       </div>
@@ -1039,14 +1040,14 @@ const Audit = () => {
              <div className="flex justify-between items-center mb-6 shrink-0">
                 <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2">
                    <span className="material-symbols-outlined text-xl">list_alt</span>
-                   Danh Sách Cần Kiểm ({totalPendingCount})
+                   {tr("Danh Sách Cần Kiểm (")}{totalPendingCount})
                 </h4>
              </div>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[70vh] overflow-y-auto no-scrollbar pb-10">
                 {!hasSearched ? (
                   <div className="col-span-full py-20 text-center">
                      <span className="material-symbols-outlined text-6xl text-primary opacity-20 mb-4 scale-125">search_insights</span>
-                     <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic tracking-tighter">Nhập mã ERP, tên hoặc vị trí rồi bấm Lọc Mã để tìm kiếm</p>
+                     <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic tracking-tighter">{tr("Nhập mã ERP, tên hoặc vị trí rồi bấm Lọc Mã để tìm kiếm")}</p>
                   </div>
                 ) : (
                   <>
@@ -1060,7 +1061,7 @@ const Audit = () => {
                             <div className="flex-1 pr-4">
                                <div className="flex items-center gap-2 mb-2">
                                   <span className="text-[10px] font-black text-primary font-mono bg-primary/5 px-2 py-0.5 rounded-md">{item.erp}</span>
-                                  {item.movement_qty > 0 && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[8px] font-black uppercase">Biến động</span>}
+                                  {item.movement_qty > 0 && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[8px] font-black uppercase">{tr("Biến động")}</span>}
                                </div>
                                <p className="text-sm font-black text-on-surface mt-2 mb-3 line-clamp-2 leading-tight min-h-[2.5rem]">{item.name}</p>
                                <div className="flex items-center gap-2">
@@ -1068,7 +1069,7 @@ const Audit = () => {
                                      <span className="material-symbols-outlined text-[12px]">location_on</span>
                                      {item.pos || 'MAIN'}
                                   </div>
-                                  <div className="text-[10px] font-black text-on-surface-variant/60">Tồn: <span className="text-on-surface">{item.end_stock}</span></div>
+                                  <div className="text-[10px] font-black text-on-surface-variant/60">{tr("Tồn:")} <span className="text-on-surface">{item.end_stock}</span></div>
                                </div>
                             </div>
                             <div className="bg-primary/10 text-primary p-2 rounded-xl group-hover:bg-primary group-hover:text-on-primary transition-all shadow-sm">
@@ -1080,7 +1081,7 @@ const Audit = () => {
                     {pendingAuditItems.length === 0 && (
                       <div className="col-span-full py-20 text-center">
                          <span className="material-symbols-outlined text-6xl text-outline-variant mb-4">inventory</span>
-                         <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic tracking-tighter">Hệ thống chưa tìm thấy mã có biến động phù hợp.</p>
+                         <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic tracking-tighter">{tr("Hệ thống chưa tìm thấy mã có biến động phù hợp.")}</p>
                       </div>
                     )}
                   </>
@@ -1091,7 +1092,7 @@ const Audit = () => {
              {hasSearched && totalPendingCount > PAGE_SIZE && (
                <div className="flex justify-between items-center mt-6 shrink-0 pt-4 border-t border-outline-variant/10">
                   <div className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
-                     Hiển thị {pendingPage * PAGE_SIZE + 1} - {Math.min((pendingPage + 1) * PAGE_SIZE, totalPendingCount)} / {totalPendingCount}
+                     {tr("Hiển thị")} {pendingPage * PAGE_SIZE + 1} - {Math.min((pendingPage + 1) * PAGE_SIZE, totalPendingCount)} / {totalPendingCount}
                   </div>
                   <div className="flex gap-2">
                      <button 
@@ -1120,7 +1121,7 @@ const Audit = () => {
           {!(currentSession?.id && currentSession.id !== '00000000-0000-0000-0000-000000000000') ? (
             <div className="bg-surface-container-lowest rounded-3xl shadow-sm border border-outline-variant/10 overflow-hidden py-20 text-center flex flex-col items-center">
               <span className="material-symbols-outlined text-6xl text-primary opacity-20 mb-4 scale-125">rule_folder</span>
-              <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic tracking-tighter">Vui lòng chọn hoặc tạo Phiên Kiểm Kê ở khung "Thông tin" phía trên</p>
+              <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic tracking-tighter">{tr("Vui lòng chọn hoặc tạo Phiên Kiểm Kê ở khung \"Thông tin\" phía trên")}</p>
             </div>
           ) : (
            <div className="bg-surface-container-lowest rounded-3xl shadow-sm border border-outline-variant/10 overflow-hidden">
@@ -1128,7 +1129,7 @@ const Audit = () => {
                 <div className="flex items-center gap-4">
                    <h4 className="text-sm font-black text-on-surface uppercase tracking-wider flex items-center gap-2">
                       <span className="material-symbols-outlined text-primary">edit_note</span>
-                      Mã Đang Kiểm ({auditItems.length})
+                      {tr("Mã Đang Kiểm (")}{auditItems.length})
                    </h4>
                    {auditItems.length > 0 && (
                      <button 
@@ -1136,14 +1137,14 @@ const Audit = () => {
                         className="bg-primary text-on-primary px-6 py-2 rounded-2xl text-xs font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
                      >
                         <span className="material-symbols-outlined text-sm">send</span>
-                        GỬI PHÊ DUYỆT TẤT CẢ
+                        {tr("GỬI PHÊ DUYỆT TẤT CẢ")}
                      </button>
                    )}
                 </div>
                 <div className="relative">
                   <input 
                     type="text" 
-                    placeholder="Tìm trong danh sách..." 
+                    placeholder={tr("Tìm trong danh sách...")} 
                     className="bg-white border border-outline-variant/20 rounded-full px-6 py-2.5 text-xs font-bold outline-none w-64 focus:ring-4 focus:ring-primary/10 transition-all font-manrope"
                     value={draftSearchQuery}
                     onChange={e => setDraftSearchQuery(e.target.value)}
@@ -1159,12 +1160,12 @@ const Audit = () => {
                 <table className="w-full text-left">
                    <thead>
                       <tr className="bg-surface-container-high text-on-surface-variant uppercase text-[10px] font-black tracking-widest border-b border-outline-variant/10">
-                         <th className="px-8 py-5">Mã / Vật Tư</th>
-                         <th className="px-8 py-5 text-center">Vị Trí</th>
-                         <th className="px-8 py-5 text-center">Hệ Thống</th>
-                         <th className="px-8 py-5 text-center">Thực Tế</th>
-                         <th className="px-8 py-5 text-center">Chênh Lệch</th>
-                         <th className="px-8 py-5 text-right">Thao Tác</th>
+                         <th className="px-8 py-5">{tr("Mã / Vật Tư")}</th>
+                         <th className="px-8 py-5 text-center">{tr("Vị Trí")}</th>
+                         <th className="px-8 py-5 text-center">{tr("Hệ Thống")}</th>
+                         <th className="px-8 py-5 text-center">{tr("Thực Tế")}</th>
+                         <th className="px-8 py-5 text-center">{tr("Chênh Lệch")}</th>
+                         <th className="px-8 py-5 text-right">{tr("Thao Tác")}</th>
                       </tr>
                    </thead>
                    <tbody className="divide-y divide-outline-variant/10 font-medium">
@@ -1190,7 +1191,7 @@ const Audit = () => {
                                 <button 
                                    onClick={() => handleSendOneForApproval(item.id)}
                                    className="w-10 h-10 flex items-center justify-center hover:bg-emerald-500/10 text-emerald-600 rounded-xl transition-all"
-                                   title="Gửi phê duyệt">
+                                   title={tr("Gửi phê duyệt")}>
                                    <span className="material-symbols-outlined text-[20px]">send</span>
                                 </button>
                                 <button onClick={() => {
@@ -1201,13 +1202,13 @@ const Audit = () => {
                                      setNoteInput(item.note || '');
                                    }} 
                                    className="w-10 h-10 flex items-center justify-center hover:bg-primary/10 text-primary rounded-xl transition-all"
-                                   title="Sửa">
+                                   title={tr("Sửa")}>
                                    <span className="material-symbols-outlined text-[20px]">edit</span>
                                 </button>
                                 <button 
                                    onClick={() => handleDeleteAuditRecord(item.id)}
                                    className="w-10 h-10 flex items-center justify-center hover:bg-error/10 text-error rounded-xl transition-all"
-                                   title="Xóa">
+                                   title={tr("Xóa")}>
                                    <span className="material-symbols-outlined text-[20px]">delete_forever</span>
                                 </button>
                               </div>
@@ -1219,7 +1220,7 @@ const Audit = () => {
                 {auditItems.length === 0 && (
                   <div className="py-20 text-center bg-surface-container-lowest">
                      <span className="material-symbols-outlined text-6xl text-outline-variant mb-4">inventory_2</span>
-                     <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic opacity-60">Chưa có mã nào đang kiểm.</p>
+                     <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic opacity-60">{tr("Chưa có mã nào đang kiểm.")}</p>
                   </div>
                 )}
              </div>
@@ -1233,32 +1234,32 @@ const Audit = () => {
           {!(currentSession?.id && currentSession.id !== '00000000-0000-0000-0000-000000000000') ? (
             <div className="bg-surface-container-lowest rounded-3xl shadow-sm border border-outline-variant/10 overflow-hidden py-20 text-center flex flex-col items-center">
               <span className="material-symbols-outlined text-6xl text-primary opacity-20 mb-4 scale-125">rule_folder</span>
-              <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic tracking-tighter">Vui lòng chọn hoặc tạo Phiên Kiểm Kê ở khung "Thông tin" phía trên</p>
+              <p className="text-on-surface-variant font-black text-sm uppercase tracking-widest italic tracking-tighter">{tr("Vui lòng chọn hoặc tạo Phiên Kiểm Kê ở khung \"Thông tin\" phía trên")}</p>
             </div>
           ) : (
             <div className="bg-surface-container-lowest rounded-3xl shadow-sm border border-outline-variant/10 overflow-hidden">
                <div className="p-6 bg-surface-container-low/50 border-b border-outline-variant/10 space-y-4">
               <div className="flex flex-wrap items-center gap-4">
-                 <h4 className="text-sm font-black text-on-surface uppercase tracking-wider">Danh Sách Chờ Phê Duyệt</h4>
+                 <h4 className="text-sm font-black text-on-surface uppercase tracking-wider">{tr("Danh Sách Chờ Phê Duyệt")}</h4>
                  {isAdmin && (
                    <button
                       onClick={handleApproveAll}
                       className="bg-emerald-600 text-white px-6 py-2 rounded-2xl text-xs font-black shadow-xl shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
                    >
                     <span className="material-symbols-outlined text-sm">done_all</span>
-                    DUYỆT TẤT CẢ ({pendingRecords.length})
+                    {tr("DUYỆT TẤT CẢ (")}{pendingRecords.length})
                    </button>
                  )}
                  {selectedRecords.length > 0 && !isAdmin && (
                    <div className="flex gap-2 animate-in slide-in-from-left-4 duration-300">
-                      <button onClick={() => handleBatchAction('approve')} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-emerald-200 uppercase">Duyệt ({selectedRecords.length})</button>
-                      <button onClick={() => handleBatchAction('undo')} className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-red-200 uppercase">Hủy</button>
+                      <button onClick={() => handleBatchAction('approve')} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-emerald-200 uppercase">{tr("Duyệt (")}{selectedRecords.length})</button>
+                      <button onClick={() => handleBatchAction('undo')} className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-red-200 uppercase">{tr("Hủy")}</button>
                    </div>
                  )}
               </div>
               <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-on-surface-variant">Tổng chờ duyệt:</span>
+                  <span className="text-xs text-on-surface-variant">{tr("Tổng chờ duyệt:")}</span>
                   <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-black">{pendingRecords.length}</span>
                   {/* Filter chip: Có thay đổi */}
                   {pendingRecords.some(r => r.difference !== 0) && (
@@ -1271,7 +1272,7 @@ const Audit = () => {
                       }`}
                     >
                       <span className="material-symbols-outlined text-[13px]">swap_vert</span>
-                      Có thay đổi
+                      {tr("Có thay đổi")}
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${showChangedOnly ? 'bg-white/25 text-white' : 'bg-amber-500/10 text-amber-600'}`}>
                         {pendingRecords.filter(r => r.difference !== 0).length}
                       </span>
@@ -1280,7 +1281,7 @@ const Audit = () => {
                 </div>
                 {(pendingSearch.trim() || showChangedOnly) && (
                   <span className="text-xs text-on-surface-variant">
-                    Đang lọc: <strong className="text-primary">{filteredPendingRecords.length}</strong> / {pendingRecords.length}
+                    {tr("Đang lọc:")} <strong className="text-primary">{filteredPendingRecords.length}</strong> / {pendingRecords.length}
                   </span>
                 )}
               </div>
@@ -1289,7 +1290,7 @@ const Audit = () => {
                 <input
                   value={pendingSearch}
                   onChange={e => setPendingSearch(e.target.value)}
-                  placeholder="Tìm mã ERP, tên vật tư, vị trí, người kiểm..."
+                  placeholder={tr("Tìm mã ERP, tên vật tư, vị trí, người kiểm...")}
                   className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm border border-outline-variant/30 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
                 />
               </div>
@@ -1308,13 +1309,13 @@ const Audit = () => {
                             }}
                           />
                        </th>
-                       <th className="px-6 py-4">Mã / Vật Tư</th>
-                       <th className="px-6 py-4">Vị Trí</th>
-                       <th className="px-6 py-4 text-center">SL Thực Tế</th>
-                       <th className="px-6 py-4 text-center">Chênh Lệch</th>
-                       <th className="px-6 py-4">Người Kiểm</th>
-                       <th className="px-6 py-4">Ngày</th>
-                       <th className="px-6 py-4 text-right">Thao Tác</th>
+                       <th className="px-6 py-4">{tr("Mã / Vật Tư")}</th>
+                       <th className="px-6 py-4">{tr("Vị Trí")}</th>
+                       <th className="px-6 py-4 text-center">{tr("SL Thực Tế")}</th>
+                       <th className="px-6 py-4 text-center">{tr("Chênh Lệch")}</th>
+                       <th className="px-6 py-4">{tr("Người Kiểm")}</th>
+                       <th className="px-6 py-4">{tr("Ngày")}</th>
+                       <th className="px-6 py-4 text-right">{tr("Thao Tác")}</th>
                     </tr>
                  </thead>
                  <tbody className="divide-y divide-outline-variant/10">
@@ -1352,14 +1353,14 @@ const Audit = () => {
                               <button
                                 onClick={() => setPreviewRecord(item)}
                                 className="p-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:scale-105 transition-transform"
-                                title="Xem trước & Phê duyệt"
+                                title={tr("Xem trước & Phê duyệt")}
                               >
                                  <span className="material-symbols-outlined text-sm">check_circle</span>
                               </button>
                               <button
                                 onClick={() => handleUndo(item.id)}
                                 className="p-2 bg-red-600 text-white rounded-lg shadow-sm hover:scale-105 transition-transform"
-                                title="Hủy/Hoàn tác"
+                                title={tr("Hủy/Hoàn tác")}
                               >
                                  <span className="material-symbols-outlined text-sm">undo</span>
                               </button>
@@ -1369,7 +1370,7 @@ const Audit = () => {
                     ))}
                     {filteredPendingRecords.length === 0 && (
                       <tr><td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant italic text-xs">
-                        {pendingSearch ? `Không tìm thấy kết quả cho "${pendingSearch}"` : 'Không có bản ghi nào đang chờ duyệt.'}
+                        {pendingSearch ? `Không tìm thấy kết quả cho "${pendingSearch}"` : tr("Không có bản ghi nào đang chờ duyệt.")}
                       </td></tr>
                     )}
                  </tbody>
@@ -1385,7 +1386,7 @@ const Audit = () => {
            {/* FILTER HISTORY */}
            <div className="bg-surface-container-low p-6 rounded-3xl border border-outline-variant/10 flex flex-wrap gap-6 items-end">
               <div className="flex-1 min-w-[200px]">
-                <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">Tìm theo Mã ERP</label>
+                <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">{tr("Tìm theo Mã ERP")}</label>
                 <div className="flex bg-white rounded-2xl px-5 py-3.5 border border-outline-variant/20 focus-within:border-primary shadow-sm transition-all">
                   <span className="material-symbols-outlined text-on-surface-variant mr-3">search</span>
                   <input 
@@ -1403,7 +1404,7 @@ const Audit = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">Từ ngày</label>
+                <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">{tr("Từ ngày")}</label>
                 <input 
                   type="date"
                   className="bg-white border border-outline-variant/20 rounded-2xl px-5 py-3.5 text-sm font-black focus:ring-4 focus:ring-primary/10 outline-none shadow-sm"
@@ -1412,7 +1413,7 @@ const Audit = () => {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">Đến ngày</label>
+                <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">{tr("Đến ngày")}</label>
                 <input 
                   type="date"
                   className="bg-white border border-outline-variant/20 rounded-2xl px-5 py-3.5 text-sm font-black focus:ring-4 focus:ring-primary/10 outline-none shadow-sm"
@@ -1426,25 +1427,25 @@ const Audit = () => {
                 className="bg-surface-container-highest text-on-surface px-6 py-3.5 rounded-2xl text-xs font-black hover:bg-surface-container-high transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-sm">{isExporting ? 'sync' : 'download'}</span>
-                {isExporting ? 'ĐANG XUẤT...' : 'XUẤT EXCEL'}
+                {isExporting ? tr("ĐANG XUẤT...") : tr("XUẤT EXCEL")}
               </button>
            </div>
 
            <div className="bg-surface-container-lowest rounded-3xl shadow-sm border border-outline-variant/10 overflow-hidden">
               <div className="p-8 bg-surface-container-low/50 flex justify-between items-center border-b border-outline-variant/10">
-                 <h4 className="text-sm font-black text-on-surface uppercase tracking-wider">Lịch Sử Kiểm Kê Đã Duyệt</h4>
+                 <h4 className="text-sm font-black text-on-surface uppercase tracking-wider">{tr("Lịch Sử Kiểm Kê Đã Duyệt")}</h4>
               </div>
               <div className="overflow-x-auto font-manrope">
                  <table className="w-full text-left">
                     <thead>
                        <tr className="bg-surface-container-high text-on-surface-variant uppercase text-[10px] font-black tracking-widest border-b border-outline-variant/10">
-                          <th className="px-8 py-5">Mã / Vật Tư</th>
-                          <th className="px-8 py-5 text-center">Vị Trí</th>
-                          <th className="px-8 py-5 text-center">Thực Tế</th>
-                          <th className="px-8 py-5 text-center">Chênh Lệch</th>
-                          <th className="px-8 py-5">Người Kiểm</th>
-                          <th className="px-8 py-5">Trạng Thái</th>
-                          <th className="px-8 py-5">Người Duyệt / Ngày</th>
+                          <th className="px-8 py-5">{tr("Mã / Vật Tư")}</th>
+                          <th className="px-8 py-5 text-center">{tr("Vị Trí")}</th>
+                          <th className="px-8 py-5 text-center">{tr("Thực Tế")}</th>
+                          <th className="px-8 py-5 text-center">{tr("Chênh Lệch")}</th>
+                          <th className="px-8 py-5">{tr("Người Kiểm")}</th>
+                          <th className="px-8 py-5">{tr("Trạng Thái")}</th>
+                          <th className="px-8 py-5">{tr("Người Duyệt / Ngày")}</th>
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-variant/10 font-medium">
@@ -1466,7 +1467,7 @@ const Audit = () => {
                            <td className="px-8 py-5 text-[10px] font-bold text-on-surface-variant italic">{item.auditor}</td>
                            <td className="px-8 py-5">
                               <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${item.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-error/10 text-error'}`}>
-                                 {item.status === 'Approved' ? 'ĐÃ DUYỆT' : 'TỪ CHỐI'}
+                                 {item.status === 'Approved' ? tr("ĐÃ DUYỆT") : tr("TỪ CHỐI")}
                               </span>
                            </td>
                            <td className="px-8 py-5 text-[10px] font-bold text-on-surface-variant italic">
@@ -1478,7 +1479,7 @@ const Audit = () => {
                                 <button 
                                   onClick={() => handleUndoRecord(item)}
                                   className="w-10 h-10 flex items-center justify-center hover:bg-error/10 text-error rounded-xl transition-all"
-                                  title="Hủy Duyệt"
+                                  title={tr("Hủy Duyệt")}
                                 >
                                    <span className="material-symbols-outlined text-[20px]">undo</span>
                                 </button>
@@ -1487,7 +1488,7 @@ const Audit = () => {
                          </tr>
                        ))}
                        {historyItems.length === 0 && (
-                         <tr><td colSpan={7} className="px-8 py-20 text-center text-on-surface-variant italic text-xs opacity-60">Không tìm thấy lịch sử phù hợp.</td></tr>
+                         <tr><td colSpan={7} className="px-8 py-20 text-center text-on-surface-variant italic text-xs opacity-60">{tr("Không tìm thấy lịch sử phù hợp.")}</td></tr>
                        )}
                     </tbody>
                  </table>
@@ -1505,7 +1506,7 @@ const Audit = () => {
                 <div className="bg-primary/10 text-primary p-2 rounded-xl">
                   <span className="material-symbols-outlined">qr_code_scanner</span>
                 </div>
-                Khai Báo Kiểm Đếm
+                {tr("Khai Báo Kiểm Đếm")}
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -1515,7 +1516,7 @@ const Audit = () => {
                 </div>
                 
                 <div className="bg-primary/5 p-5 rounded-2xl border border-primary/10">
-                   <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-3">Tồn kho theo vị trí (Hệ thống)</p>
+                   <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-3">{tr("Tồn kho theo vị trí (Hệ thống)")}</p>
                    <div className="space-y-2 max-h-[120px] overflow-y-auto pr-2 no-scrollbar">
                       {itemLocations.map((loc, idx) => (
                         <div key={idx} className="flex justify-between items-center bg-white/50 p-2 rounded-lg border border-primary/5">
@@ -1524,7 +1525,7 @@ const Audit = () => {
                         </div>
                       ))}
                       {itemLocations.length === 0 && (
-                        <div className="text-[10px] font-bold text-on-surface-variant italic text-center py-2">Không tìm thấy dữ liệu vị trí</div>
+                        <div className="text-[10px] font-bold text-on-surface-variant italic text-center py-2">{tr("Không tìm thấy dữ liệu vị trí")}</div>
                       )}
                    </div>
                 </div>
@@ -1534,7 +1535,7 @@ const Audit = () => {
             <div className="p-8 pt-0 space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                   <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">Vị trí kiểm đếm (Location) *</label>
+                   <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">{tr("Vị trí kiểm đếm (Location) *")}</label>
                    <div className="flex gap-2">
                      <div className="relative flex-1">
                        <input 
@@ -1542,7 +1543,7 @@ const Audit = () => {
                           className="w-full bg-surface-container-low border-2 border-outline-variant/20 rounded-2xl px-5 py-4 text-sm font-black focus:border-primary/50 focus:ring-0 outline-none transition-all uppercase"
                           value={locationInput}
                           onChange={e => setLocationInput(e.target.value)}
-                          placeholder="Chọn/Nhập vị trí..."
+                          placeholder={tr("Chọn/Nhập vị trí...")}
                        />
                        <datalist id="location-list">
                          {itemLocations.map((loc, idx) => (
@@ -1557,14 +1558,14 @@ const Audit = () => {
                 </div>
 
                 <div>
-                   <label className="block text-[10px] font-black text-primary uppercase tracking-widest mb-2 ml-1">Số lượng thực tế *</label>
+                   <label className="block text-[10px] font-black text-primary uppercase tracking-widest mb-2 ml-1">{tr("Số lượng thực tế *")}</label>
                    <input 
                       autoFocus
                       type="number"
                       className="w-full bg-surface-container-lowest border-2 border-primary/40 rounded-2xl px-5 py-4 text-2xl font-black text-primary focus:border-primary focus:ring-[12px] focus:ring-primary/10 outline-none shadow-xl shadow-primary/10 transition-all text-center"
                       value={actualQtyInput}
                       onChange={e => setActualQtyInput(e.target.value === '' ? '' : Number(e.target.value))}
-                      placeholder="Số lượng..."
+                      placeholder={tr("Số lượng...")}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && actualQtyInput !== '' && locationInput.trim()) {
                           handleSaveAuditRecord();
@@ -1575,23 +1576,23 @@ const Audit = () => {
                </div>
 
                 <div>
-                   <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">Ghi chú kiểm đếm</label>
+                   <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-2 ml-1">{tr("Ghi chú kiểm đếm")}</label>
                    <input 
                       className="w-full bg-surface-container-low border border-outline-variant/30 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
                       value={noteInput}
                       onChange={e => setNoteInput(e.target.value)}
-                      placeholder="Ghi chú nếu có..."
+                      placeholder={tr("Ghi chú nếu có...")}
                    />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 pb-4">
-                  <button onClick={() => setActiveScanItem(null)} className="py-4 rounded-2xl text-sm font-black bg-surface-container hover:bg-surface-container-high transition-colors">HỦY BỎ</button>
+                  <button onClick={() => setActiveScanItem(null)} className="py-4 rounded-2xl text-sm font-black bg-surface-container hover:bg-surface-container-high transition-colors">{tr("HỦY BỎ")}</button>
                   <button 
                     onClick={handleSaveAuditRecord} 
                     disabled={loading}
                     className="py-4 rounded-2xl text-sm font-black bg-primary text-on-primary shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:scale-100"
                   >
-                    {loading ? 'ĐANG LƯU...' : 'XÁC NHẬN LƯU'}
+                    {loading ? tr("ĐANG LƯU...") : tr("XÁC NHẬN LƯU")}
                   </button>
                 </div>
             </div>
@@ -1614,7 +1615,7 @@ const Audit = () => {
               <div className="px-8 pt-8 pb-5 border-b border-outline-variant/10">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">Xác nhận phê duyệt</p>
+                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">{tr("Xác nhận phê duyệt")}</p>
                     <div className="font-black text-primary font-mono text-lg">{previewRecord.erp_code}</div>
                     <div className="text-sm font-bold text-on-surface mt-0.5">{previewRecord.item_name || previewRecord.name}</div>
                     {previewRecord.spec && <div className="text-xs text-on-surface-variant mt-0.5 line-clamp-2">{previewRecord.spec}</div>}
@@ -1627,33 +1628,33 @@ const Audit = () => {
               <div className="px-8 py-6 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-surface-container-low rounded-2xl p-4 text-center">
-                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">Hệ Thống</p>
+                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">{tr("Hệ Thống")}</p>
                     <p className="text-2xl font-black text-on-surface">{(previewRecord.system_qty ?? 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-surface-container-low rounded-2xl p-4 text-center">
-                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">Thực Tế</p>
+                    <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest mb-1">{tr("Thực Tế")}</p>
                     <p className="text-2xl font-black text-on-surface">{(previewRecord.actual_qty ?? 0).toLocaleString()}</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between bg-surface-container-low rounded-2xl px-5 py-4">
-                  <span className="text-xs font-black text-on-surface-variant uppercase tracking-wider">Chênh lệch</span>
+                  <span className="text-xs font-black text-on-surface-variant uppercase tracking-wider">{tr("Chênh lệch")}</span>
                   <span className={`text-xl font-black px-3 py-1 rounded-full ${previewRecord.difference === 0 ? 'bg-surface-container text-on-surface-variant' : previewRecord.difference > 0 ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error'}`}>
                     {previewRecord.difference > 0 ? `+${previewRecord.difference}` : previewRecord.difference}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs text-on-surface-variant">
-                  <div><span className="font-black">Vị trí:</span> {previewRecord.location || '—'}</div>
-                  <div><span className="font-black">Người kiểm:</span> {previewRecord.auditor || '—'}</div>
-                  {previewRecord.note && <div className="col-span-2"><span className="font-black">Ghi chú:</span> {previewRecord.note}</div>}
+                  <div><span className="font-black">{tr("Vị trí:")}</span> {previewRecord.location || '—'}</div>
+                  <div><span className="font-black">{tr("Người kiểm:")}</span> {previewRecord.auditor || '—'}</div>
+                  {previewRecord.note && <div className="col-span-2"><span className="font-black">{tr("Ghi chú:")}</span> {previewRecord.note}</div>}
                 </div>
               </div>
               <div className="px-8 pb-8 grid grid-cols-2 gap-3">
-                <button onClick={() => setPreviewRecord(null)} className="py-3.5 rounded-2xl text-sm font-black bg-surface-container hover:bg-surface-container-high transition-colors">Hủy</button>
+                <button onClick={() => setPreviewRecord(null)} className="py-3.5 rounded-2xl text-sm font-black bg-surface-container hover:bg-surface-container-high transition-colors">{tr("Hủy")}</button>
                 <button onClick={() => { handleApprove(previewRecord.id); setPreviewRecord(null); }}
                   className="py-3.5 rounded-2xl text-sm font-black bg-emerald-600 text-white shadow-lg shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all">
                   <span className="flex items-center justify-center gap-2">
                     <span className="material-symbols-outlined text-base">check_circle</span>
-                    Xác nhận duyệt
+                    {tr("Xác nhận duyệt")}
                   </span>
                 </button>
               </div>

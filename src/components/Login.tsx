@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { loginCodeToEmail } from '../lib/loginCode';
+import { tr } from '../contexts/LanguageContext';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -36,13 +37,13 @@ const Login = () => {
       });
       if (error) {
         if (/invalid login credentials/i.test(error.message)) {
-          throw new Error('Mã đăng nhập hoặc mật khẩu không đúng.');
+          throw new Error(tr("Mã đăng nhập hoặc mật khẩu không đúng."));
         }
         throw error;
       }
       if (session) navigate('/inventory');
     } catch (err: any) {
-      setError(err.message || 'Đã có lỗi xảy ra.');
+      setError(err.message || tr("Đã có lỗi xảy ra."));
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,7 @@ const Login = () => {
             <span className="material-symbols-outlined text-primary" style={{ ...iconStyle, fontSize: '2rem', width: '2rem', height: '2rem', fontVariationSettings: "'FILL' 1" }}>warehouse</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-on-surface font-manrope tracking-tight">Wagon Inventory Hub</h1>
-          <p className="text-on-surface-variant font-medium mt-2 text-sm sm:text-base">Hệ thống quản lý kho vận thông minh</p>
+          <p className="text-on-surface-variant font-medium mt-2 text-sm sm:text-base">{tr("Hệ thống quản lý kho vận thông minh")}</p>
         </div>
 
         {error && (
@@ -80,7 +81,7 @@ const Login = () => {
 
         <form onSubmit={handleLogin} className="space-y-4 sm:space-y-6">
           <div className="space-y-2">
-            <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider px-1">Mã đăng nhập</label>
+            <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider px-1">{tr("Mã đăng nhập")}</label>
             <div className="relative">
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant" style={iconStyle}>badge</span>
               <input
@@ -99,7 +100,7 @@ const Login = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider px-1">Mật khẩu</label>
+            <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider px-1">{tr("Mật khẩu")}</label>
             <div className="relative">
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant" style={iconStyle}>lock</span>
               <input
@@ -119,12 +120,12 @@ const Login = () => {
             disabled={loading}
             className="w-full py-3.5 sm:py-4 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-70 disabled:hover:scale-100 text-sm sm:text-base"
           >
-            {loading ? 'Đang xử lý...' : 'Đăng Nhập'}
+            {loading ? tr("Đang xử lý...") : tr("Đăng Nhập")}
           </button>
         </form>
 
         <p className="mt-6 sm:mt-8 text-center text-xs sm:text-sm font-medium text-on-surface-variant">
-          Chưa có tài khoản hoặc quên mật khẩu? Liên hệ quản trị viên để được cấp mã đăng nhập mới.
+          {tr("Chưa có tài khoản hoặc quên mật khẩu? Liên hệ quản trị viên để được cấp mã đăng nhập mới.")}
         </p>
       </div>
     </div>

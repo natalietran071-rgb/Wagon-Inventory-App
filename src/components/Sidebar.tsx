@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useLanguage } from '../contexts/LanguageContext';
+import { useLanguage, tr } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -30,7 +30,7 @@ const Sidebar = ({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }
     { name: t('outbound'), icon: 'output', path: '/outbound', badge: !isDeptUser && (shipmentCounts.pending + shipmentCounts.rejected) > 0 ? shipmentCounts.pending + shipmentCounts.rejected : 0, badgeColor: 'bg-amber-500' },
     { name: t('audit'), icon: 'fact_check', path: '/audit' },
     {
-      name: 'Giao Hàng',
+      name: tr("Giao Hàng"),
       icon: 'local_shipping',
       path: '/shipment',
       badge: isDeptUser ? shipmentCounts.pending : 0,

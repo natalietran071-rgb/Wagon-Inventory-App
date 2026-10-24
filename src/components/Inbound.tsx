@@ -331,7 +331,7 @@ const Inbound = () => {
         qty: Math.round(parseFloat(row.qty)) || 0,
         unit: row.unit,
         location: row.location,
-        status: 'Stocked',
+        status: 'Chờ nhận',   // 24/10/2026: chờ bấm "Xác nhận nhận hàng" → 'Stocked' → DB mới cộng tồn
         date: row.date || new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString()
       }));
@@ -369,7 +369,7 @@ const Inbound = () => {
         const errorMsg = `Nhập kho thành công ${validRows.length} dòng.\n\n⚠️ ${errorRows.length} dòng bị bỏ qua:\n${errorRows.map(e => `Dòng ${e.row}: ${e.reason} — ${e.data}`).join('\n')}`;
         setErrorLog(errorMsg);
       } else {
-        alert(`Nhập kho hàng loạt thành công ${validRows.length} dòng!`);
+        alert(`Đã ghi ${validRows.length} phiếu nhập ở trạng thái CHỜ NHẬN. Bấm "Xác nhận nhận" ở danh sách bên dưới khi hàng về thì tồn kho mới được cộng.`);
       }
     } catch (err: any) {
       console.error(err);
@@ -487,7 +487,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
         qty: Math.round(parseFloat(singleRow.qty)) || 0,
         unit: singleRow.unit,
         location: singleRow.location,
-        status: 'Stocked',
+        status: 'Chờ nhận',   // 24/10/2026: chờ bấm "Xác nhận nhận hàng" → 'Stocked' → DB mới cộng tồn
         date: singleRow.date || new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString()
       };
@@ -508,7 +508,7 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       // giao diện không tự cộng nữa để khỏi tính 2 lần.
 
       setSingleRow(createEmptyRow());
-      alert('Nhập kho thành công!');
+      alert('Đã ghi phiếu nhập ở trạng thái CHỜ NHẬN. Bấm "Xác nhận nhận" ở danh sách bên dưới khi hàng về thì tồn kho mới được cộng.');
     } catch (err: any) {
       console.error(err);
       alert('Lỗi nhập kho: ' + err.message);
@@ -523,6 +523,44 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
   const [editingInventory, setEditingInventory] = useState<any | null>(null);
   const [historyModal, setHistoryModal] = useState<{ isOpen: boolean, erp: string, name: string }>({ isOpen: false, erp: '', name: '' });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // 24/10/2026: phiếu nhập được ghi ở trạng thái 'Chờ nhận'. Bấm xác nhận → 'Stocked' →
+  // trigger trg_inv_inbound trong DB cộng tồn ĐÚNG MỘT LẦN. Chưa xác nhận thì chưa cộng.
+  const handleConfirmInbound = async (record: any) => {
+    if (!canEdit || !record || record.status === 'Stocked') return;
+    if (!window.confirm(`Xác nhận ĐÃ NHẬN ${Number(record.qty).toLocaleString('en-US')} ${record.unit || ''} mã ${record.erp_code}?\nTồn kho sẽ được cộng sau khi xác nhận.`)) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.from('inbound_records').update({ status: 'Stocked' }).eq('id', record.id);
+      if (error) throw error;
+      await loadInboundRecords();
+    } catch (err: any) {
+      alert('Lỗi khi xác nhận nhận hàng: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmSelectedInbound = async () => {
+    const pending = inboundRecords.filter(r => selectedRows.includes(r.id) && r.status !== 'Stocked');
+    if (pending.length === 0) { alert('Các mục đã chọn đều đã được nhận rồi.'); return; }
+    if (!window.confirm(`Xác nhận ĐÃ NHẬN ${pending.length} phiếu?\nTồn kho của các mã tương ứng sẽ được cộng.`)) return;
+    setLoading(true);
+    try {
+      const ids = pending.map(r => r.id);
+      for (let i = 0; i < ids.length; i += 200) {
+        const { error } = await supabase.from('inbound_records').update({ status: 'Stocked' }).in('id', ids.slice(i, i + 200));
+        if (error) throw error;
+      }
+      setSelectedRows([]);
+      await loadInboundRecords();
+      alert(`Đã xác nhận nhận ${pending.length} phiếu.`);
+    } catch (err: any) {
+      alert('Lỗi khi xác nhận nhận hàng: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleEditClick = async (record: any) => {
     setEditingInbound({ ...record });
@@ -1091,8 +1129,19 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
               )}
             </div>
             <div className="flex gap-2 flex-wrap w-full sm:w-auto">
+              {selectedRows.length > 0 && canEdit && inboundRecords.some(r => selectedRows.includes(r.id) && r.status !== 'Stocked') && (
+                <button
+                  onClick={handleConfirmSelectedInbound}
+                  disabled={loading}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-primary text-on-primary px-3 md:px-4 py-2 rounded-xl hover:opacity-90 transition-colors font-bold text-[10px] md:text-xs shadow-lg shadow-primary/20 disabled:opacity-50"
+                  title="Xác nhận đã nhận hàng — tồn kho chỉ được cộng sau khi xác nhận"
+                >
+                  <span className="material-symbols-outlined text-sm">check_circle</span>
+                  Xác nhận nhận ({inboundRecords.filter(r => selectedRows.includes(r.id) && r.status !== 'Stocked').length})
+                </button>
+              )}
               {selectedRows.length > 0 && canEdit && (
-                <button 
+                <button
                   onClick={() => setShowDeleteSelectedConfirm(true)}
                   className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-error text-on-error px-3 md:px-4 py-2 rounded-xl hover:opacity-90 transition-colors font-bold text-[10px] md:text-xs shadow-lg shadow-error/20"
                 >
@@ -1197,8 +1246,18 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                     >
                       history
                     </button>
+                    {canEdit && row.status !== 'Stocked' && (
+                      <button
+                        onClick={() => handleConfirmInbound(row)}
+                        disabled={loading}
+                        className="material-symbols-outlined text-primary hover:text-on-primary transition-colors bg-primary/10 hover:bg-primary p-1 md:p-2 rounded-lg text-[14px] md:text-base disabled:opacity-50"
+                        title="Xác nhận ĐÃ NHẬN hàng — tồn kho chỉ cộng sau khi xác nhận"
+                      >
+                        check_circle
+                      </button>
+                    )}
                     {canEdit && (
-                      <button 
+                      <button
                         onClick={() => handleEditClick(row)}
                         className="material-symbols-outlined text-outline-variant hover:text-primary transition-colors bg-surface-container hover:bg-primary/10 p-1 md:p-2 rounded-lg text-[14px] md:text-base"
                         title="Sửa thông tin"
@@ -1333,7 +1392,8 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
                       value={editingInbound.status || 'Stocked'}
                       onChange={e => setEditingInbound({ ...editingInbound, status: e.target.value })}
                     >
-                      <option value="Stocked">Stocked</option>
+                      <option value="Chờ nhận">Chờ nhận (chưa cộng tồn)</option>
+                      <option value="Stocked">Stocked — Đã nhận (đã cộng tồn)</option>
                       <option value="Pending">Pending</option>
                       <option value="Cancelled">Cancelled</option>
                     </select>

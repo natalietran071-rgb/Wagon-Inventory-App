@@ -569,38 +569,11 @@ const Outbound = () => {
     if (!canEdit) return;
     
     const selectedItem = inventoryItems.find(i => i.erp === record.erp_code);
-    
-    let inventoryError = null;
 
-    if (selectedItem) {
-      const newEndStock = (selectedItem.end_stock || 0) - record.qty;
-      const newOutQty = (selectedItem.out_qty || 0) + record.qty;
-      const { error } = await supabase
-        .from('inventory')
-        .update({ end_stock: newEndStock, out_qty: newOutQty })
-        .eq('erp', record.erp_code);
-      inventoryError = error;
-    } else {
-      const newEndStock = -record.qty;
-      const { error } = await supabase
-        .from('inventory')
-        .insert([{
-          erp: record.erp_code,
-          name: '',
-          name_zh: '',
-          spec: '',
-          unit: '',
-          out_qty: record.qty,
-          end_stock: newEndStock
-        }]);
-      inventoryError = error;
-    }
-
-    if (inventoryError) {
-      showToast('Lỗi khi cập nhật tồn kho: ' + inventoryError.message, true);
-      return;
-    }
-
+    // 24/10/2026: KHÔNG trừ tồn ở giao diện nữa. Khi phiếu chuyển sang 'Đã Xuất', trigger
+    // trg_inv_outbound trong DB (sql/2026-10-24_ton_kho_mot_nguon_su_that.sql) trừ out_qty/end_stock
+    // ĐÚNG MỘT LẦN và tự tạo dòng inventory nếu mã chưa có.
+    // (Trước đây giao diện trừ 7.000 + trigger trừ 7.000 → tồn bị trừ 14.000.)
     const { error } = await supabase
       .from('outbound_records')
       .update({
@@ -862,36 +835,8 @@ const Outbound = () => {
     setLoading(true);
     
     try {
-      // 1. Group quantities by ERP code for efficient inventory updates
-      const erpQuantities: Record<string, number> = {};
-      pendingRecords.forEach(record => {
-        erpQuantities[record.erp_code] = (erpQuantities[record.erp_code] || 0) + record.qty;
-      });
-
-      // 2. Process inventory updates
-      const inventoryUpdatePromises = Object.entries(erpQuantities).map(async ([erp, totalQty]) => {
-        const item = inventoryItems.find(i => i.erp === erp);
-        if (item) {
-          const newEndStock = (item.end_stock || 0) - totalQty;
-          const newOutQty = (item.out_qty || 0) + totalQty;
-          return supabase
-            .from('inventory')
-            .update({ end_stock: newEndStock, out_qty: newOutQty })
-            .eq('erp', erp);
-        } else {
-          return supabase.from('inventory').insert([{
-            erp: erp,
-            name: '',
-            name_zh: '',
-            spec: '',
-            unit: '',
-            out_qty: totalQty,
-            end_stock: -totalQty
-          }]);
-        }
-      });
-
-      await Promise.all(inventoryUpdatePromises);
+      // 24/10/2026: KHÔNG trừ tồn ở giao diện. Đổi status sang 'Đã Xuất' là trigger
+      // trg_inv_outbound trong DB trừ đúng một lần cho từng phiếu (trước đây bị trừ 2 lần).
 
       // 3. Batch update outbound records status
       const { error: outboundError } = await supabase

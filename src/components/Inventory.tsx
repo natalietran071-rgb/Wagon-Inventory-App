@@ -172,6 +172,25 @@ const Inventory = () => {
       
       setItems(data);
       setTotalFilteredCount(count);
+
+      // 24/10/2026: số ĐANG CHỜ XÁC NHẬN (chưa cộng/trừ vào tồn) từ view inventory_pending
+      // (sql/2026-10-24_ton_kho_mot_nguon_su_that.sql). Chưa chạy SQL thì bỏ qua, không lỗi.
+      try {
+        const erps = (data || []).map((d: any) => d.erp).filter(Boolean);
+        if (erps.length > 0) {
+          const { data: pend } = await supabase.from('inventory_pending').select('erp, cho_nhan, cho_xuat').in('erp', erps);
+          if (pend && pend.length > 0) {
+            const pm = new Map<string, any>(pend.map((p: any) => [p.erp, p]));
+            setItems((data || []).map((d: any) => ({
+              ...d,
+              cho_nhan: Number(pm.get(d.erp)?.cho_nhan || 0),
+              cho_xuat: Number(pm.get(d.erp)?.cho_xuat || 0)
+            })));
+          }
+        }
+      } catch (e) {
+        console.warn('inventory_pending chưa có (chưa chạy SQL 24/10/2026)', e);
+      }
     } catch (err: any) {
       console.error('Error fetching inventory:', err);
       // alert('Lỗi khi tải dữ liệu tồn kho: ' + err.message); // removed alert to avoid multiple alerts on load
@@ -1029,6 +1048,13 @@ const Inventory = () => {
                       ) : (
                         (itemData.end || 0).toLocaleString('en-US')
                       )}
+                      {((item.cho_nhan || 0) > 0 || (item.cho_xuat || 0) > 0) && (
+                        <div className="text-[9px] font-medium text-on-surface-variant group-hover:text-surface/60 whitespace-nowrap" title="Đang chờ xác nhận — CHƯA cộng/trừ vào tồn. Xác nhận xong mới tính.">
+                          ({(item.cho_nhan || 0) > 0 ? `+${Number(item.cho_nhan).toLocaleString('en-US')} chờ nhận` : ''}
+                          {(item.cho_nhan || 0) > 0 && (item.cho_xuat || 0) > 0 ? ' · ' : ''}
+                          {(item.cho_xuat || 0) > 0 ? `−${Number(item.cho_xuat).toLocaleString('en-US')} chờ xuất` : ''})
+                        </div>
+                      )}
                     </td>
                     {canAdmin && (
                       <td className="px-3 py-3 text-right hidden lg:table-cell">
@@ -1286,6 +1312,14 @@ const Inventory = () => {
                   <div className="bg-surface-container-low p-4 rounded-xl">
                     <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Tồn Cuối (End Stock)</p>
                     <p className="text-2xl font-black text-primary data-value">{(selectedItemDetail.end_stock || 0).toLocaleString()}</p>
+                    {((selectedItemDetail.cho_nhan || 0) > 0 || (selectedItemDetail.cho_xuat || 0) > 0) && (
+                      <p className="text-[11px] text-on-surface-variant mt-1" title="Đang chờ xác nhận — chưa cộng/trừ vào tồn">
+                        (chờ xác nhận: {(selectedItemDetail.cho_nhan || 0) > 0 ? `+${Number(selectedItemDetail.cho_nhan).toLocaleString()} nhận` : ''}
+                        {(selectedItemDetail.cho_nhan || 0) > 0 && (selectedItemDetail.cho_xuat || 0) > 0 ? ' · ' : ''}
+                        {(selectedItemDetail.cho_xuat || 0) > 0 ? `−${Number(selectedItemDetail.cho_xuat).toLocaleString()} xuất` : ''}
+                        {' → sau xác nhận: '}{((selectedItemDetail.end_stock || 0) + Number(selectedItemDetail.cho_nhan || 0) - Number(selectedItemDetail.cho_xuat || 0)).toLocaleString()})
+                      </p>
+                    )}
                   </div>
                   <div className="bg-surface-container-low p-4 rounded-xl">
                     <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Nhập Kho (In)</p>

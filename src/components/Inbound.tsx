@@ -357,57 +357,10 @@ const Inbound = () => {
         await supabase.from('movements').insert(chunk);
       }
 
-      // 2. Update inventory table — group qty by ERP, update in_qty + end_stock
-      const erpList = Array.from(new Set(validRows.map(r => r.erpCode)));
-      
-      // Fetch in chunks to avoid .in() limit
-      let existingMap = new Map<string, any>();
-      for (let i = 0; i < erpList.length; i += 200) {
-        const chunk = erpList.slice(i, i + 200);
-        const { data: existingData } = await supabase.from('inventory').select('*').in('erp', chunk);
-        if (existingData) {
-          existingData.forEach((item: any) => existingMap.set(item.erp, item));
-        }
-      }
-      
-      const qtyByErp: Record<string, number> = {};
-      for (const row of validRows) {
-         qtyByErp[row.erpCode] = (qtyByErp[row.erpCode] || 0) + (Math.round(parseFloat(row.qty)) || 0);
-      }
-
-      const invUpdates = [];
-      for (const erp of Object.keys(qtyByErp)) {
-         const qty = qtyByErp[erp];
-         const existingItem = existingMap.get(erp);
-         const rowEx = validRows.find(r => r.erpCode === erp);
-         
-         if (existingItem) {
-           invUpdates.push({
-             ...existingItem,
-             in_qty: (existingItem.in_qty || 0) + qty,
-             end_stock: (existingItem.end_stock || 0) + qty
-           });
-         } else if (rowEx) {
-            invUpdates.push({
-             erp: erp,
-             name: '',
-             unit: rowEx.unit,
-             pos: rowEx.location,
-             start_stock: 0,
-             in_qty: qty,
-             out_qty: 0,
-             end_stock: qty,
-             critical: false
-           });
-         }
-      }
-
-      if (invUpdates.length > 0) {
-        for (let i = 0; i < invUpdates.length; i += chunkSize) {
-          const chunk = invUpdates.slice(i, i + chunkSize);
-          await supabase.from('inventory').upsert(chunk, { onConflict: 'erp' });
-        }
-      }
+      // 2. 24/10/2026: KHÔNG cộng tồn ở giao diện nữa. Trigger trg_inv_inbound trong DB
+      //    (sql/2026-10-24_ton_kho_mot_nguon_su_that.sql) cộng in_qty/end_stock ĐÚNG MỘT LẦN
+      //    khi phiếu có status 'Stocked', và tự tạo dòng inventory nếu mã chưa có.
+      //    (Trước đây giao diện cộng + trigger cộng → nhập bị tính 2 lần.)
 
       setInboundRows(Array.from({ length: 5 }, createEmptyRow));
       await loadInboundRecords();
@@ -551,19 +504,8 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
       };
       await supabase.from('movements').insert([movementToInsert]);
 
-      const { data: existingData } = await supabase.from('inventory').select('*').eq('erp', singleRow.erpCode).single();
-      
-      const invUpdate = {
-        erp: singleRow.erpCode,
-        in_qty: (existingData?.in_qty || 0) + (Math.round(parseFloat(singleRow.qty)) || 0),
-        end_stock: (existingData?.end_stock || 0) + (Math.round(parseFloat(singleRow.qty)) || 0),
-        pos: singleRow.location || existingData?.pos || '',
-        name: existingData?.name || '',
-        unit: singleRow.unit || existingData?.unit || '',
-        updated_at: new Date().toISOString()
-      };
-      
-      await supabase.from('inventory').upsert([invUpdate], { onConflict: 'erp' });
+      // 24/10/2026: tồn do trigger trg_inv_inbound trong DB cộng (một lần, khi status 'Stocked');
+      // giao diện không tự cộng nữa để khỏi tính 2 lần.
 
       setSingleRow(createEmptyRow());
       alert('Nhập kho thành công!');
@@ -753,52 +695,8 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
     setShowDeleteConfirm(false);
     setLoading(true);
     try {
-      // 1. Nhóm số lượng nhập theo ERP để trừ vào inventory
-      const qtyToSubtractByErp: Record<string, number> = {};
-      for (const record of filteredInbound) {
-        if (record.erp_code && record.qty) {
-          qtyToSubtractByErp[record.erp_code] = (qtyToSubtractByErp[record.erp_code] || 0) + Number(record.qty);
-        }
-      }
-      
-      // 2. Fetch existing inventory to decrease or delete
-      const erpsToUpdate = Object.keys(qtyToSubtractByErp);
-      if (erpsToUpdate.length > 0) {
-         const invChunkSize = 100;
-         for (let i = 0; i < erpsToUpdate.length; i += invChunkSize) {
-           const chunk = erpsToUpdate.slice(i, i + invChunkSize);
-           const { data: invData } = await supabase.from('inventory').select('*').in('erp', chunk);
-           
-           if (invData && invData.length > 0) {
-              const invUpdates: any[] = [];
-              const erpsToRemove: string[] = [];
-              
-              invData.forEach(item => {
-                 const subQty = qtyToSubtractByErp[item.erp] || 0;
-                 const newInQty = Math.max(0, (item.in_qty || 0) - subQty);
-                 const newEndStock = Math.max(0, (item.end_stock || 0) - subQty);
-                 
-                 // Nếu không còn tồn đầu, không còn nhập, không còn xuất -> Xóa vĩnh viễn khỏi DB Tồn Kho
-                 if (newInQty === 0 && (item.start_stock || 0) === 0 && (item.out_qty || 0) === 0) {
-                   erpsToRemove.push(item.erp);
-                 } else {
-                   invUpdates.push({
-                      ...item,
-                      in_qty: newInQty,
-                      end_stock: newEndStock
-                   });
-                 }
-              });
-
-              if (invUpdates.length > 0) {
-                await supabase.from('inventory').upsert(invUpdates, { onConflict: 'erp' });
-              }
-              if (erpsToRemove.length > 0) {
-                await supabase.from('inventory').delete().in('erp', erpsToRemove);
-              }
-           }
-         }
-      }
+      // 24/10/2026: xoá phiếu nhập → trigger trg_inv_inbound trong DB tự trừ lại tồn (nếu phiếu đã 'Stocked').
+      // Giao diện không tự trừ nữa để khỏi tính 2 lần.
 
       // 3. Delete inbound records
       const idsToDelete = filteredInbound.map(r => r.id);
@@ -823,53 +721,8 @@ Dữ liệu: ${validRows.length} dòng hợp lệ, ${errorRows.length} dòng l�
     setShowDeleteSelectedConfirm(false);
     setLoading(true);
     try {
-      const recordsToDelete = inboundRecords.filter(r => selectedRows.includes(r.id));
-      
-      // 1. Nhóm số lượng nhập theo ERP để trừ vào inventory
-      const qtyToSubtractByErp: Record<string, number> = {};
-      for (const record of recordsToDelete) {
-        if (record.erp_code && record.qty) {
-          qtyToSubtractByErp[record.erp_code] = (qtyToSubtractByErp[record.erp_code] || 0) + Number(record.qty);
-        }
-      }
-      
-      // 2. Fetch existing inventory to decrease or delete
-      const erpsToUpdate = Object.keys(qtyToSubtractByErp);
-      if (erpsToUpdate.length > 0) {
-         const invChunkSize = 100;
-         for (let i = 0; i < erpsToUpdate.length; i += invChunkSize) {
-           const chunk = erpsToUpdate.slice(i, i + invChunkSize);
-           const { data: invData } = await supabase.from('inventory').select('*').in('erp', chunk);
-           
-           if (invData && invData.length > 0) {
-              const invUpdates: any[] = [];
-              const erpsToRemove: string[] = [];
-              
-              invData.forEach(item => {
-                 const subQty = qtyToSubtractByErp[item.erp] || 0;
-                 const newInQty = Math.max(0, (item.in_qty || 0) - subQty);
-                 const newEndStock = Math.max(0, (item.end_stock || 0) - subQty);
-                 
-                 if (newInQty === 0 && (item.start_stock || 0) === 0 && (item.out_qty || 0) === 0) {
-                   erpsToRemove.push(item.erp);
-                 } else {
-                   invUpdates.push({
-                      ...item,
-                      in_qty: newInQty,
-                      end_stock: newEndStock
-                   });
-                 }
-              });
-
-              if (invUpdates.length > 0) {
-                await supabase.from('inventory').upsert(invUpdates, { onConflict: 'erp' });
-              }
-              if (erpsToRemove.length > 0) {
-                await supabase.from('inventory').delete().in('erp', erpsToRemove);
-              }
-           }
-         }
-      }
+      // 24/10/2026: xoá phiếu nhập → trigger trg_inv_inbound trong DB tự trừ lại tồn (nếu phiếu đã 'Stocked').
+      // Giao diện không tự trừ nữa để khỏi tính 2 lần.
 
       // 3. Delete inbound records
       const chunkSize = 200;
